@@ -18,6 +18,7 @@ val majorVersion = 3
 val minorVersion = 4
 val patchVersion = 0
 android {
+    buildToolsVersion = "34.0.0"
     namespace = "nz.org.cacophony.sidekick"
     compileSdk = sdk
     if (performSigning) {

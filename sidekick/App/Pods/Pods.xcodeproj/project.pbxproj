@@ -20,10 +20,9 @@
 		};
 		8777C9F6889E59EFFD631D80AEE9048B /* shared */ = {
 			isa = PBXAggregateTarget;
-			buildConfigurationList = C72DB945A95A06E90A193080F47615D5 /* Build configuration list for PBXAggregateTarget "shared" */;
+			buildConfigurationList = 8349D8E2EC974421A14EF8ABFF6AD6DC /* Build configuration list for PBXAggregateTarget "shared" */;
 			buildPhases = (
-				EF051B291C4DF6415D82A7A62C242946 /* [CP-User] Build shared */,
-				6FC4C11B22E225F84EF7E9D47BD3BF66 /* [CP] Copy dSYMs */,
+				BEA8885189D408D600647BDC228A6A20 /* [CP-User] Build shared */,
 			);
 			dependencies = (
 			);
@@ -1267,6 +1266,7 @@
 		18185240418341BAAD658E607DD78B0A /* FIRHeartbeatInfo.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = FIRHeartbeatInfo.m; path = FirebaseCore/Sources/FIRHeartbeatInfo.m; sourceTree = "<group>"; };
 		1882C5DF7980A95DAE2281B41D2BB246 /* CapacitorSQLitePlugin.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = CapacitorSQLitePlugin.m; path = ios/Plugin/CapacitorSQLitePlugin.m; sourceTree = "<group>"; };
 		18F90BFDA35C4ABC7A25B06C8CAE46CE /* Entry.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Entry.swift; path = Sources/ZIPFoundation/Entry.swift; sourceTree = "<group>"; };
+		194EA7E5A49158044B1C3086214D5719 /* shared.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = shared.framework; path = build/cocoapods/framework/shared.framework; sourceTree = "<group>"; };
 		1A1E25140C2604807FBE00D4EB91374D /* FirebaseCrashlytics.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = FirebaseCrashlytics.release.xcconfig; sourceTree = "<group>"; };
 		1ABFDA3391AEBA42EFB0FEBF824A6E34 /* CapacitorCordova */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = CapacitorCordova; path = Cordova.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		1ADC83C51D8D36E4DEFB93A1E4DA5C5D /* Array+Capacitor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "Array+Capacitor.swift"; path = "Capacitor/Capacitor/Array+Capacitor.swift"; sourceTree = "<group>"; };
@@ -1326,7 +1326,6 @@
 		2A015C745724D4F4A1E6DA985627ABF4 /* CapacitorCommunityFirebaseCrashlytics.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = CapacitorCommunityFirebaseCrashlytics.modulemap; sourceTree = "<group>"; };
 		2A5670353E9872C04FC2BA30B5912F4F /* FIRCLSUnwind.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = FIRCLSUnwind.h; path = Crashlytics/Crashlytics/Unwind/FIRCLSUnwind.h; sourceTree = "<group>"; };
 		2AB150D2E024D75AFF4857A98100998F /* GULSecureCoding.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = GULSecureCoding.h; path = GoogleUtilities/Environment/Public/GoogleUtilities/GULSecureCoding.h; sourceTree = "<group>"; };
-		2B2165AC77749AEE843B8686F82F87EA /* shared.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = shared.release.xcconfig; sourceTree = "<group>"; };
 		2B4B600185F8D2995652DD923F9CF3B0 /* GDTCORStorageProtocol.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = GDTCORStorageProtocol.h; path = GoogleDataTransport/GDTCORLibrary/Internal/GDTCORStorageProtocol.h; sourceTree = "<group>"; };
 		2B62052856A4B7FCE5393C22B2082FBC /* CapacitorPreferences.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = CapacitorPreferences.modulemap; sourceTree = "<group>"; };
 		2B82454573B7D7767EF3CE98C3C3E232 /* CapacitorGeolocation.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = CapacitorGeolocation.debug.xcconfig; sourceTree = "<group>"; };
@@ -1599,6 +1598,7 @@
 		805FD4093D0BD5650589DB55AD33C40B /* FBLPromise+Race.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "FBLPromise+Race.m"; path = "Sources/FBLPromises/FBLPromise+Race.m"; sourceTree = "<group>"; };
 		80C1C0FFF48042EF721D0397CD76266B /* CapacitorSQLitePlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CapacitorSQLitePlugin.swift; path = ios/Plugin/CapacitorSQLitePlugin.swift; sourceTree = "<group>"; };
 		80F603E421E5CF7AA1F76FA57F5CE884 /* cct.nanopb.c */ = {isa = PBXFileReference; includeInIndex = 1; name = cct.nanopb.c; path = GoogleDataTransport/GDTCCTLibrary/Protogen/nanopb/cct.nanopb.c; sourceTree = "<group>"; };
+		8138B4891D6116CCB028619D5FD25946 /* shared.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = shared.release.xcconfig; sourceTree = "<group>"; };
 		817B4236ECD1E80B9D48DC7B6FA754A6 /* GoogleUtilities.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = GoogleUtilities.debug.xcconfig; sourceTree = "<group>"; };
 		819C544CB5A3F3D0ABBEB7F691748C64 /* FBLPromise+Then.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "FBLPromise+Then.m"; path = "Sources/FBLPromises/FBLPromise+Then.m"; sourceTree = "<group>"; };
 		8219AE37961CDED4F1E61AA5A56FEE1F /* FirebaseInstallations-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "FirebaseInstallations-dummy.m"; sourceTree = "<group>"; };
@@ -1619,6 +1619,7 @@
 		85BB57DF0115C449350D29EC9FF7832E /* GDTCOREvent_Private.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = GDTCOREvent_Private.h; path = GoogleDataTransport/GDTCORLibrary/Private/GDTCOREvent_Private.h; sourceTree = "<group>"; };
 		86010034657C75BA2EA19AC3B36A8125 /* FIRCLSBinaryImage.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = FIRCLSBinaryImage.m; path = Crashlytics/Crashlytics/Components/FIRCLSBinaryImage.m; sourceTree = "<group>"; };
 		86375444C196BA272DDBB8165BF64A15 /* FirebaseCrashlytics */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = FirebaseCrashlytics; path = FirebaseCrashlytics.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		86568AC4588EE5FCAA709EFA8C1D70CF /* shared.podspec */ = {isa = PBXFileReference; explicitFileType = text.script.ruby; includeInIndex = 1; indentWidth = 2; lastKnownFileType = text; path = shared.podspec; sourceTree = "<group>"; tabWidth = 2; xcLanguageSpecificationIdentifier = xcode.lang.ruby; };
 		86EC8D36C7E7E10DE140695870B253BA /* Clipboard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Clipboard.swift; path = ios/Plugin/Clipboard.swift; sourceTree = "<group>"; };
 		8716CEF57045473A28AF3CA9D76242CF /* NSURLSession+GULPromises.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = "NSURLSession+GULPromises.m"; path = "GoogleUtilities/Environment/URLSessionPromiseWrapper/NSURLSession+GULPromises.m"; sourceTree = "<group>"; };
 		8773B2E5D7F8A99B50F36D80B9AF21E1 /* Pods-App.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = "Pods-App.modulemap"; sourceTree = "<group>"; };
@@ -1886,7 +1887,6 @@
 		D22A38FE4B2979CE4D78746818EA367C /* Router.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Router.swift; path = Capacitor/Capacitor/Router.swift; sourceTree = "<group>"; };
 		D2A0556418464C1491CC9DE218274949 /* PromisesObjC-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "PromisesObjC-umbrella.h"; sourceTree = "<group>"; };
 		D3149E8CABD84B75CE3DD996B84A28D7 /* CapacitorCordova.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; name = CapacitorCordova.modulemap; path = CapacitorCordova/CapacitorCordova/CapacitorCordova.modulemap; sourceTree = "<group>"; };
-		D32D9865C9B6102A2E9A3D19AD4D4D99 /* shared.podspec */ = {isa = PBXFileReference; explicitFileType = text.script.ruby; includeInIndex = 1; indentWidth = 2; lastKnownFileType = text; path = shared.podspec; sourceTree = "<group>"; tabWidth = 2; xcLanguageSpecificationIdentifier = xcode.lang.ruby; };
 		D3477BC66D3E4B5A4F57670EC2278252 /* FIRCrashlytics.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = FIRCrashlytics.m; path = Crashlytics/Crashlytics/FIRCrashlytics.m; sourceTree = "<group>"; };
 		D3873EFEEB3A84B2DA6F13561B57AC59 /* CapacitorFilesystem-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "CapacitorFilesystem-Info.plist"; sourceTree = "<group>"; };
 		D39B80E103F40A3F02BFEA8CE6975623 /* SQLCipher.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = SQLCipher.modulemap; sourceTree = "<group>"; };
@@ -1905,7 +1905,6 @@
 		D776979595D1D3043BACA0424EFCEC70 /* FIRCLSThreadState.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = FIRCLSThreadState.h; path = Crashlytics/Crashlytics/Helpers/FIRCLSThreadState.h; sourceTree = "<group>"; };
 		D780A20C4B10992C61FC043FB3A7E2C0 /* FIRInteropParameterNames.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = FIRInteropParameterNames.h; path = Interop/Analytics/Public/FIRInteropParameterNames.h; sourceTree = "<group>"; };
 		D7A5D58F3D58FFE29E05632EC581EE41 /* GoogleDataTransport-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "GoogleDataTransport-dummy.m"; sourceTree = "<group>"; };
-		D7D631596E6864F78DC87B5D9FF81EAA /* shared.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = shared.framework; path = build/cocoapods/framework/shared.framework; sourceTree = "<group>"; };
 		D822C01D969B166A6B093B5236820696 /* CapacitorCordova.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = CapacitorCordova.h; path = CapacitorCordova/CapacitorCordova/CapacitorCordova.h; sourceTree = "<group>"; };
 		D830C318E96A194E9A9152BCBD454129 /* FIRCLSExistingReportManager_Private.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = FIRCLSExistingReportManager_Private.h; path = Crashlytics/Crashlytics/Private/FIRCLSExistingReportManager_Private.h; sourceTree = "<group>"; };
 		D86004842F16E6ECD69CF3FCB972F987 /* FIRCLSCompoundOperation.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = FIRCLSCompoundOperation.h; path = Crashlytics/Shared/FIRCLSOperation/FIRCLSCompoundOperation.h; sourceTree = "<group>"; };
@@ -1933,7 +1932,6 @@
 		DFA64C40D53B84A6E3D18279F9D391ED /* FIRCoreDiagnosticsData.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = FIRCoreDiagnosticsData.h; path = Interop/CoreDiagnostics/Public/FIRCoreDiagnosticsData.h; sourceTree = "<group>"; };
 		DFB9D403CC31C060ED9C71B5D98ED2F1 /* UtilsJson.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UtilsJson.swift; sourceTree = "<group>"; };
 		E0C036873ACFE20399167EBED877E374 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/Security.framework; sourceTree = DEVELOPER_DIR; };
-		E0DB2AB4F7A28C51D2D58CCA1902FD05 /* shared-copy-dsyms.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "shared-copy-dsyms.sh"; sourceTree = "<group>"; };
 		E1519C1DF0E0A69A07F5E308273D3F66 /* FIRInstallationsIDController.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = FIRInstallationsIDController.m; path = FirebaseInstallations/Source/Library/InstallationsIDController/FIRInstallationsIDController.m; sourceTree = "<group>"; };
 		E164A6C32C66C473B953D6298A58FE31 /* UtilsFile.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UtilsFile.swift; sourceTree = "<group>"; };
 		E16E8BF17CB2D8B255E486EE93034D26 /* FIRInstallationsHTTPError.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = FIRInstallationsHTTPError.m; path = FirebaseInstallations/Source/Library/Errors/FIRInstallationsHTTPError.m; sourceTree = "<group>"; };
@@ -1983,7 +1981,6 @@
 		ECEE0F7D63048AA0B9C62ED8475897D1 /* CapacitorCommunityFirebaseCrashlytics-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "CapacitorCommunityFirebaseCrashlytics-dummy.m"; sourceTree = "<group>"; };
 		ED505052ACED9EAB4162549889FADDF1 /* FIRCLSSettingsManager.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = FIRCLSSettingsManager.m; path = Crashlytics/Crashlytics/Settings/FIRCLSSettingsManager.m; sourceTree = "<group>"; };
 		ED7131FA10DC36BF818F9BF46E9D492F /* FIRCLSRecordApplication.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = FIRCLSRecordApplication.h; path = Crashlytics/Crashlytics/Models/Record/FIRCLSRecordApplication.h; sourceTree = "<group>"; };
-		EE0D364AB1826E6D11F596F56CA04C7B /* shared.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = shared.debug.xcconfig; sourceTree = "<group>"; };
 		EE3EADE742B240E0F7DA08E35FCB967C /* CapacitorCommunityFirebaseCrashlytics-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "CapacitorCommunityFirebaseCrashlytics-umbrella.h"; sourceTree = "<group>"; };
 		EE4720EBC0D1D279E1808A43AF1DD65D /* FIRCLSMultipartMimeStreamEncoder.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = FIRCLSMultipartMimeStreamEncoder.m; path = Crashlytics/Shared/FIRCLSNetworking/FIRCLSMultipartMimeStreamEncoder.m; sourceTree = "<group>"; };
 		EE4755982431877CBBE8F8D0C8FC9BBC /* CAPWebView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CAPWebView.swift; path = Capacitor/Capacitor/CAPWebView.swift; sourceTree = "<group>"; };
@@ -2021,6 +2018,7 @@
 		F5869B5CCD9A217BA1C66D0C65A11FDB /* CapacitorBrowser.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = CapacitorBrowser.modulemap; sourceTree = "<group>"; };
 		F5C446BA1A8468E9A235F2DAC3B2693A /* FIRCLSRecordBase.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = FIRCLSRecordBase.m; path = Crashlytics/Crashlytics/Models/Record/FIRCLSRecordBase.m; sourceTree = "<group>"; };
 		F5C7A4D382331201BA5766783560A6B7 /* FilesystemPlugin.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = FilesystemPlugin.h; path = ios/Plugin/FilesystemPlugin.h; sourceTree = "<group>"; };
+		F5C914CA9CF91684C1286D305DD8D5AB /* shared.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = shared.debug.xcconfig; sourceTree = "<group>"; };
 		F657ABB070D8C036B3224C24C78ED4AC /* FIRCLSUserLogging.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = FIRCLSUserLogging.m; path = Crashlytics/Crashlytics/Components/FIRCLSUserLogging.m; sourceTree = "<group>"; };
 		F662EAE580DC9E8A7608CFBE5B031F81 /* FIRCLSMultipartMimeStreamEncoder.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = FIRCLSMultipartMimeStreamEncoder.h; path = Crashlytics/Shared/FIRCLSNetworking/FIRCLSMultipartMimeStreamEncoder.h; sourceTree = "<group>"; };
 		F6768559893DAC078FDF1C668584E3CB /* CapacitorBrowser.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = CapacitorBrowser.release.xcconfig; sourceTree = "<group>"; };
@@ -2289,14 +2287,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		01EDD094843A476D2C8A0C281710BA38 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				D7D631596E6864F78DC87B5D9FF81EAA /* shared.framework */,
-			);
-			name = Frameworks;
-			sourceTree = "<group>";
-		};
 		024B5FBECD52FA2D1775848AD7C55712 /* CapacitorNativeSettings */ = {
 			isa = PBXGroup;
 			children = (
@@ -3122,17 +3112,6 @@
 			name = CoreOnly;
 			sourceTree = "<group>";
 		};
-		729DC19F0ECE92F41938A0334B1B312C /* shared */ = {
-			isa = PBXGroup;
-			children = (
-				01EDD094843A476D2C8A0C281710BA38 /* Frameworks */,
-				8A4614EE259E8BC31D87FD4AEB2E873F /* Pod */,
-				8937157FA49CA6B1934015D10D038227 /* Support Files */,
-			);
-			name = shared;
-			path = ../../shared;
-			sourceTree = "<group>";
-		};
 		7577B5D571D4CC570A87369788709215 /* Support Files */ = {
 			isa = PBXGroup;
 			children = (
@@ -3202,25 +3181,6 @@
 			);
 			name = "Support Files";
 			path = "../../../../../../sidekick/App/Pods/Target Support Files/CapacitorCordova";
-			sourceTree = "<group>";
-		};
-		8937157FA49CA6B1934015D10D038227 /* Support Files */ = {
-			isa = PBXGroup;
-			children = (
-				E0DB2AB4F7A28C51D2D58CCA1902FD05 /* shared-copy-dsyms.sh */,
-				EE0D364AB1826E6D11F596F56CA04C7B /* shared.debug.xcconfig */,
-				2B2165AC77749AEE843B8686F82F87EA /* shared.release.xcconfig */,
-			);
-			name = "Support Files";
-			path = "../App/Pods/Target Support Files/shared";
-			sourceTree = "<group>";
-		};
-		8A4614EE259E8BC31D87FD4AEB2E873F /* Pod */ = {
-			isa = PBXGroup;
-			children = (
-				D32D9865C9B6102A2E9A3D19AD4D4D99 /* shared.podspec */,
-			);
-			name = Pod;
 			sourceTree = "<group>";
 		};
 		8DFF3BF30E0F19C90EF933F55F847F69 /* FirebaseCoreDiagnostics */ = {
@@ -3441,6 +3401,17 @@
 			name = Environment;
 			sourceTree = "<group>";
 		};
+		AD3C7AE50ED3F04850A0867E5B1A6A2E /* shared */ = {
+			isa = PBXGroup;
+			children = (
+				EA9C6FA047DFF5AAF5C2B544E75255A3 /* Frameworks */,
+				F4D45587C9941BD310E196FA867B7F73 /* Pod */,
+				E973A8BB13EEBD2543528AC0E120B462 /* Support Files */,
+			);
+			name = shared;
+			path = ../../shared;
+			sourceTree = "<group>";
+		};
 		B17FD56810AD03BC09B18DC11A0F259A /* Support Files */ = {
 			isa = PBXGroup;
 			children = (
@@ -3488,7 +3459,7 @@
 				024B5FBECD52FA2D1775848AD7C55712 /* CapacitorNativeSettings */,
 				F87F8710D4D5054A2112917BCC6DE388 /* CapacitorNetwork */,
 				0DFFA4B8C4B548E6E2C11037B909D1F0 /* CapacitorPreferences */,
-				729DC19F0ECE92F41938A0334B1B312C /* shared */,
+				AD3C7AE50ED3F04850A0867E5B1A6A2E /* shared */,
 			);
 			name = "Development Pods";
 			sourceTree = "<group>";
@@ -3903,6 +3874,24 @@
 			path = "../../../node_modules/.pnpm/@capacitor-community+keep-awake@4.0.0_@capacitor+core@5.5.1/node_modules/@capacitor-community/keep-awake";
 			sourceTree = "<group>";
 		};
+		E973A8BB13EEBD2543528AC0E120B462 /* Support Files */ = {
+			isa = PBXGroup;
+			children = (
+				F5C914CA9CF91684C1286D305DD8D5AB /* shared.debug.xcconfig */,
+				8138B4891D6116CCB028619D5FD25946 /* shared.release.xcconfig */,
+			);
+			name = "Support Files";
+			path = "../App/Pods/Target Support Files/shared";
+			sourceTree = "<group>";
+		};
+		EA9C6FA047DFF5AAF5C2B544E75255A3 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				194EA7E5A49158044B1C3086214D5719 /* shared.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		EB5E377E0707F5A84DEE42212DB7D566 /* Support Files */ = {
 			isa = PBXGroup;
 			children = (
@@ -3934,6 +3923,14 @@
 				C4096BE102A0E8E5D114DEBC79AB2DD8 /* ZIPFoundation */,
 			);
 			name = Pods;
+			sourceTree = "<group>";
+		};
+		F4D45587C9941BD310E196FA867B7F73 /* Pod */ = {
+			isa = PBXGroup;
+			children = (
+				86568AC4588EE5FCAA709EFA8C1D70CF /* shared.podspec */,
+			);
+			name = Pod;
 			sourceTree = "<group>";
 		};
 		F577F78A866A6417197AAF9B4F0BA152 /* Classes */ = {
@@ -5252,22 +5249,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		6FC4C11B22E225F84EF7E9D47BD3BF66 /* [CP] Copy dSYMs */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "[CP] Copy dSYMs";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/shared/shared-copy-dsyms.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		EF051B291C4DF6415D82A7A62C242946 /* [CP-User] Build shared */ = {
+		BEA8885189D408D600647BDC228A6A20 /* [CP-User] Build shared */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -7328,6 +7310,21 @@
 			};
 			name = Debug;
 		};
+		A28C3919D650FA2114E35958C0AA004D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5C914CA9CF91684C1286D305DD8D5AB /* shared.debug.xcconfig */;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		A890EE7D8D43249E4FAF9D6B23708B0A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 23FB0B2174EE926ADCA42D81DDC36FC9 /* GoogleDataTransport.debug.xcconfig */;
@@ -7549,6 +7546,22 @@
 				VALIDATE_PRODUCT = YES;
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";
+			};
+			name = Release;
+		};
+		C655A8021438B23498796D9027FB8067 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 8138B4891D6116CCB028619D5FD25946 /* shared.release.xcconfig */;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -7936,21 +7949,6 @@
 			};
 			name = Debug;
 		};
-		F3BF56737BC72D08D2B5F47E1B4A50DE /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = EE0D364AB1826E6D11F596F56CA04C7B /* shared.debug.xcconfig */;
-			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
 		F45365DABA740F664251CBAD4A444F00 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 767BEEA3F119E408CA0A9295F4A9CB65 /* PromisesObjC.debug.xcconfig */;
@@ -7987,22 +7985,6 @@
 				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		FA301FD9C25651B9EC606072424D5D99 /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 2B2165AC77749AEE843B8686F82F87EA /* shared.release.xcconfig */;
-			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_OBJC_WEAK = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				SDKROOT = iphoneos;
@@ -8175,6 +8157,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		8349D8E2EC974421A14EF8ABFF6AD6DC /* Build configuration list for PBXAggregateTarget "shared" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A28C3919D650FA2114E35958C0AA004D /* Debug */,
+				C655A8021438B23498796D9027FB8067 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		902CF106B15DFD9773C15FC1895BEFF2 /* Build configuration list for PBXNativeTarget "GoogleUtilities" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -8225,15 +8216,6 @@
 			buildConfigurations = (
 				EA25A1E8C1826959E243163C1584A308 /* Debug */,
 				2BDDADB57811EFDBC22143309F84002A /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		C72DB945A95A06E90A193080F47615D5 /* Build configuration list for PBXAggregateTarget "shared" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				F3BF56737BC72D08D2B5F47E1B4A50DE /* Debug */,
-				FA301FD9C25651B9EC606072424D5D99 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
