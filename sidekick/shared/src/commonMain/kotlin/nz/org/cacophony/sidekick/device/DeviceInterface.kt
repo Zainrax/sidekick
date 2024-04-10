@@ -31,7 +31,8 @@ class DeviceInterface(private val filePath: String): CapacitorInterface {
             })
         }
         install(HttpTimeout) {
-            socketTimeoutMillis = 3000
+            socketTimeoutMillis = 30000
+            connectTimeoutMillis = 20000
         }
     }
     private fun getDeviceFromCall(call: PluginCall) = call.validateCall<Device>("url").map { device ->
@@ -59,6 +60,36 @@ class DeviceInterface(private val filePath: String): CapacitorInterface {
                     { error -> call.failure(error.toString()) },
                     { config -> call.success(config) }
                 )
+        }
+    }
+
+    @Serializable
+    data class DeviceConfig(val config: String, val section: String)
+    fun setDeviceConfig(call: PluginCall) = runCatch(call) {
+        getDeviceFromCall(call).map { deviceApi ->
+            call.validateCall<DeviceConfig>("section","config")
+                .map { deviceConfig ->
+                    deviceApi.setConfig(deviceConfig.section, deviceConfig.config)
+                        .fold(
+                            { error -> call.failure(error.toString()) },
+                            { call.success(it) }
+                        )
+                }
+        }
+    }
+
+    @Serializable
+    data class LowPowerMode(val enabled: String)
+    fun setLowPowerMode(call: PluginCall) = runCatch(call) {
+        getDeviceFromCall(call).map { deviceApi ->
+            call.validateCall<LowPowerMode>("enabled")
+                .map { lowPowerMode ->
+                    deviceApi.setLowPowerMode(lowPowerMode.enabled)
+                        .fold(
+                            { error -> call.failure(error.toString()) },
+                            { call.success() }
+                        )
+                }
         }
     }
 

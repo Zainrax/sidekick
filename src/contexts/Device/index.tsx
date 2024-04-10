@@ -57,6 +57,7 @@ export type DeviceDetails = {
   locationSet: boolean;
   url: URL;
   type: "pi" | "tc2";
+  lastUpdated?: Date;
 };
 
 type DeviceCoords<T extends string | number> = {
@@ -87,6 +88,13 @@ export interface DevicePlugin {
   checkDeviceConnection(options: DeviceUrl): Result;
   getDeviceInfo(options: DeviceUrl): Result<string>;
   getDeviceConfig(options: DeviceUrl): Result<string>;
+  setDeviceConfig(options: {
+    url: URL;
+    section: string;
+    // JSON string
+    config: string;
+  }): Result<string>;
+  setLowPowerMode(options: DeviceUrl & { enabled: string }): Result;
   updateRecordingWindow(
     options: DeviceUrl & { on: string; off: string }
   ): Result;
@@ -138,7 +146,8 @@ const DeviceInfoSchema = z.object({
   devicename: z.string(),
   deviceID: z.number(),
   saltID: z.string().optional(),
-  type: z.literal("pi").or(z.literal("tc2")).optional(),
+  type: z.literal("pi").or(z.literal("tc2")).or(z.literal("")).nullish(),
+  lastUpdated: z.string().optional(),
 });
 
 const [DeviceProvider, useDevice] = createContextProvider(() => {
@@ -188,13 +197,13 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       }
       const info = DeviceInfoSchema.parse(JSON.parse(infoRes.data));
       const id: DeviceId = info.deviceID.toString();
-      const type = info.type ?? "pi";
+      const type = info.type ? info.type : "pi";
 
       return {
         id,
         saltId: info.saltID,
         host: deviceName,
-        name: info.devicename,
+        name: info.devicename ? info.devicename : "New Device",
         group: info.groupname,
         type,
         endpoint,
@@ -203,6 +212,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         timeFound: new Date(),
         url,
         isConnected: true,
+        lastUpdated: info.lastUpdated ? new Date(info.lastUpdated) : undefined,
       };
     } catch (error) {
       console.log("error", error);
@@ -773,11 +783,18 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const withinRange = (
     loc: Coords,
     deviceCoords: DeviceCoords<number>,
+    accuracy: number,
     range = MAX_DISTANCE_FROM_STATION_FOR_RECORDING
   ) => {
     const { latitude, longitude } = deviceCoords;
     const { lat, lng } = loc;
-    const inRange = isWithinRadius(lat, lng, latitude, longitude, range);
+    const inRange = isWithinRadius(
+      lat,
+      lng,
+      latitude,
+      longitude,
+      range + accuracy
+    );
     return inRange;
   };
 
@@ -795,7 +812,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
               loc.groupName === device.group && loc.isProd === device.isProd
           );
           const location = sameGroupLocations.filter((loc) =>
-            withinRange(loc.coords, deviceLocation.data)
+            isWithinRange(
+              [loc.coords.lat, loc.coords.lng],
+              [deviceLocation.data.latitude, deviceLocation.data.longitude],
+              deviceLocation.data.accuracy
+            )
           );
           if (!location.length) return null;
           return location.sort(
@@ -873,7 +894,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
           const withinRange = isWithinRange(
             [loc.latitude, loc.longitude],
-            newLoc
+            newLoc,
+            pos.coords.accuracy
           );
           if (!withinRange) {
             devicesToUpdate.push(device.id);
@@ -1446,36 +1468,86 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     return DeviceCamera(url.split("http://")[1]);
   };
 
-  const changeGroup = async (deviceId: DeviceId, group: string) => {
+  const changeGroup = async (
+    deviceId: DeviceId,
+    group: string,
+    token: string
+  ) => {
     const device = devices.get(deviceId);
     if (!device || !device.isConnected) return false;
     const { url } = device;
-    const res = await DevicePlugin.reregisterDevice({
-      url,
-      group,
-      device: device.name,
+    const res = await CapacitorHttp.post({
+      url: `${url}/api/reregister-authorized`,
+      headers: { ...headers, "Content-Type": "application/json" },
+      webFetchExtra: {
+        credentials: "include",
+      },
+      data: {
+        newGroup: group,
+        newName: "",
+        authorizedUser: token,
+      },
     });
-    if (!res.success) {
-      throw new Error("Could not change group");
+    if (res.status === 200) {
+      devices.set(deviceId, {
+        ...device,
+        group,
+      });
+    } else if (res.status === 404) {
+      const res = await DevicePlugin.reregisterDevice({
+        url,
+        group,
+        device: deviceId,
+      });
+      if (res.success) {
+        devices.set(deviceId, {
+          ...device,
+          group,
+        });
+        return true;
+      }
     }
-    devices.set(deviceId, {
-      ...device,
-      group,
-    });
     return true;
   };
 
+  // print current devices
+  createEffect(() => {
+    console.log("DEVICES", devices.values());
+  });
+
   const configDefaultsSchema = z.object({
     // Config is much larger, but only these fields are used
-    windows: z.object({
-      StartRecording: z.string(),
-      StopRecording: z.string(),
-      PowerOn: z.string(),
-      PowerOff: z.string(),
-    }),
+    windows: z
+      .object({
+        StartRecording: z.string(),
+        StopRecording: z.string(),
+        PowerOn: z.string(),
+        PowerOff: z.string(),
+      })
+      .partial(),
+    "thermal-recorder": z
+      .object({
+        UseLowPowerMode: z.boolean(),
+      })
+      .partial(),
   });
+
   // Make optional version of configDefaultsSchema
-  const configValueSchema = configDefaultsSchema.partial();
+  const configValueSchema = z
+    .object({
+      windows: z.object({
+        StartRecording: z.string(),
+        StopRecording: z.string(),
+        PowerOn: z.string(),
+        PowerOff: z.string(),
+      }),
+      thermalRecorder: z
+        .object({
+          UseLowPowerMode: z.boolean(),
+        })
+        .partial(),
+    })
+    .partial();
 
   const configSchema = z.object({
     defaults: configDefaultsSchema,
@@ -1491,7 +1563,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       if (!res.success) return null;
       return configSchema.parse(JSON.parse(res.data));
     } catch (error) {
-      console.log(error);
       return null;
     }
   };
@@ -1629,6 +1700,25 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     return updatingDevice.find((d) => d.id === deviceId)?.success ?? null;
   };
 
+  const setLowPowerMode = async (deviceId: DeviceId, enabled: boolean) => {
+    try {
+      const device = devices.get(deviceId);
+      if (!device || !device.isConnected) return null;
+      const { url } = device;
+      const res = await DevicePlugin.setDeviceConfig({
+        url,
+        section: "thermal-recorder",
+        config: JSON.stringify({ "use-low-power-mode": enabled }),
+      });
+      console.log("LOW POWER", res);
+
+      return res.success ? enabled : !enabled;
+    } catch (error) {
+      console.log(error);
+      return null;
+    }
+  };
+
   return {
     devices,
     isDiscovering,
@@ -1676,6 +1766,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     // Camera
     takeTestRecording,
     getDeviceCamera,
+    setLowPowerMode,
     //Audio
     takeAudioRecording,
     getAudioFiles,

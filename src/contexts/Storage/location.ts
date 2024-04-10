@@ -63,11 +63,18 @@ function isWithinRadius(
 export const isWithinRange = (
   prevLoc: [number, number],
   newLoc: [number, number],
+  accuracy: number,
   range = MAX_DISTANCE_FROM_STATION_FOR_RECORDING
 ) => {
   const [lat, lng] = prevLoc;
   const [latitude, longitude] = newLoc;
-  const inRange = isWithinRadius(lat, lng, latitude, longitude, range);
+  const inRange = isWithinRadius(
+    lat,
+    lng,
+    latitude,
+    longitude,
+    range + accuracy
+  );
   return inRange;
 };
 
@@ -145,7 +152,8 @@ export function useLocationStorage() {
             l.groupName === loc.groupName &&
             isWithinRange(
               [loc.coords.lat, loc.coords.lng],
-              [l.coords.lat, l.coords.lng]
+              [l.coords.lat, l.coords.lng],
+              0
             )
         );
         // remove the location that needs creation, but keep the new name and photos

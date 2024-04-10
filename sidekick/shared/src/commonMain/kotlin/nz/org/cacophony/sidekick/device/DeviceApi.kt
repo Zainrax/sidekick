@@ -6,6 +6,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 import nz.org.cacophony.sidekick.*
 
@@ -46,6 +47,18 @@ class DeviceApi(override val client: HttpClient, val device: Device): Api {
     suspend fun getConfig(): Either<ApiError, String> =
         getRequest("config")
             .flatMap {validateResponse(it)}
+
+    suspend fun setConfig(section: String, config: String): Either<ApiError, String> =
+        submitForm("config", Parameters.build {
+            append("section", section)
+            append("config", config)
+        }).map { return validateResponse(it) }
+
+    suspend fun setLowPowerMode(enabled: String): Either<ApiError, String> =
+        submitForm("config", Parameters.build {
+            append("section", "thermal-recorder")
+            append("config", "{\"use-low-power-mode\":$enabled}")
+        }).map { return validateResponse(it) }
 
     suspend fun getLocation(): Either<ApiError, String> =
         getRequest("location", token)

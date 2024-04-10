@@ -36,6 +36,7 @@ class DevicePlugin: Plugin() {
 
 
     override fun load() {
+        super.load()
         device = DeviceInterface(context.applicationContext.filesDir.absolutePath)
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         multicastLock = wifi.createMulticastLock("multicastLock")
@@ -259,6 +260,14 @@ class DevicePlugin: Plugin() {
     @PluginMethod
     fun getDeviceConfig(call: PluginCall) {
         device.getDeviceConfig(pluginCall(call))
+    }
+    @PluginMethod
+    fun setDeviceConfig(call: PluginCall) {
+        device.setDeviceConfig(pluginCall(call))
+    }
+    @PluginMethod
+    fun setLowPowerMode(call: PluginCall) {
+        device.setLowPowerMode(pluginCall(call))
     }
     @PluginMethod
     fun setDeviceLocation(call: PluginCall) {

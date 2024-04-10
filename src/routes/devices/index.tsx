@@ -62,13 +62,15 @@ import CircleButton from "~/components/CircleButton";
 import FieldWrapper from "~/components/Field";
 import { GoToPermissions } from "~/components/GoToPermissions";
 import { headerMap } from "~/components/Header";
-import { WifiNetwork, useDevice } from "~/contexts/Device";
+import { Device, WifiNetwork, useDevice } from "~/contexts/Device";
 import { logError, logWarning } from "~/contexts/Notification";
 import { useStorage } from "~/contexts/Storage";
 import { BsWifi1, BsWifi2, BsWifi } from "solid-icons/bs";
 import { useUserContext } from "~/contexts/User";
 import { Frame, Region, Track } from "~/contexts/Device/Camera";
 import { VsArrowSwap } from "solid-icons/vs";
+import { undefined } from "zod";
+import { IoCaretDown } from "solid-icons/io";
 type CameraCanvas = HTMLCanvasElement | undefined;
 const colours = ["#ff0000", "#00ff00", "#ffff00", "#80ffff"];
 
@@ -857,8 +859,8 @@ function LocationSettingsTab() {
       return null;
     }
   );
-  const lat = () => locCoords()?.latitude ?? 0;
-  const lng = () => locCoords()?.longitude ?? 0;
+  const lat = () => locCoords()?.latitude ?? "...";
+  const lng = () => locCoords()?.longitude ?? "...";
 
   return (
     <section class="px-4 py-4">
@@ -1808,11 +1810,29 @@ function GeneralSettingsTab() {
         throw new Error(res.messages.join("\n"));
       }
     }
-    const res = await context.changeGroup(id(), v);
+    const token = user.data()?.token;
+    if (token) {
+      const res = await context.changeGroup(id(), v, token);
+    }
   };
   const [canUpdate, { refetch }] = createResource(async () => {
     const res = await context.canUpdateDevice(id());
     return res;
+  });
+
+  const [lowPowerMode, setLowPowerMode] = createSignal<boolean | null>(null);
+
+  onMount(async () => {
+    const res = await context.getDeviceConfig(id());
+    if (!res) {
+      setLowPowerMode(null);
+      return;
+    }
+    setLowPowerMode(
+      res.values.thermalRecorder?.UseLowPowerMode ??
+        res.defaults["thermal-recorder"]?.UseLowPowerMode ??
+        null
+    );
   });
 
   onMount(() => {
@@ -1871,11 +1891,27 @@ function GeneralSettingsTab() {
     user.refetchGroups();
     return true;
   };
+
   const displayId = () => {
     const currId = saltId();
     if (!currId) return id();
     return currId;
   };
+
+  const turnOnLowPowerMode = async (v: boolean) => {
+    try {
+      setLowPowerMode(v);
+      const res = await context.setLowPowerMode(id(), v);
+      if (res !== null) {
+        setLowPowerMode(v);
+      } else {
+        console.error("Failed to set low power mode");
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
   return (
     <div class="flex w-full flex-col space-y-2 px-2 py-4">
       <FieldWrapper type="text" value={name()} title="Name" />
@@ -1886,10 +1922,55 @@ function GeneralSettingsTab() {
         onChange={setGroup}
         shouldOpen={onOpenGroups}
         options={user.groups()?.map(({ groupName }) => groupName) ?? []}
-        disabled={canChangeGroup.loading || !canChangeGroup()}
+        disabled={!canChangeGroup.loading && !canChangeGroup()}
         message={message()}
       />
       <FieldWrapper type="text" value={displayId()} title="ID" />
+      <Show when={lowPowerMode() !== null}>
+        <FieldWrapper type="custom" title={"Power Mode"}>
+          <div class="flex w-full items-center bg-gray-100 px-1">
+            <button
+              onClick={() => turnOnLowPowerMode(false)}
+              classList={{
+                "bg-white": lowPowerMode() === false,
+                "bg-gray-100": lowPowerMode() !== false,
+              }}
+              class="flex w-full appearance-none items-center justify-center rounded-lg bg-white p-1"
+            >
+              High
+            </button>
+            <button
+              classList={{
+                "bg-white": lowPowerMode() === true,
+                "bg-gray-100": lowPowerMode() !== true,
+              }}
+              onClick={() => turnOnLowPowerMode(true)}
+              class="flex w-full appearance-none items-center justify-center rounded-lg bg-white p-1"
+            >
+              Low
+            </button>
+          </div>
+        </FieldWrapper>
+        <div class="flex items-center space-x-2 px-2 text-sm text-gray-500">
+          <AiOutlineInfoCircle size={18} />
+          <Switch>
+            <Match when={lowPowerMode() === true}>
+              <p>Low power mode only uploads once per day.</p>
+            </Match>
+            <Match when={lowPowerMode() === false}>
+              <p>High power mode uploads after every recording.</p>
+            </Match>
+          </Switch>
+        </div>
+      </Show>
+      <Show when={device()?.lastUpdated}>
+        {(lastUpdated) => (
+          <p class="flex gap-x-2 px-2">
+            <span class="text-gray-500">Last Updated:</span>
+            <span>{lastUpdated().toLocaleString()}</span>
+          </p>
+        )}
+      </Show>
       <button
         classList={{
           "bg-blue-500 py-2 px-4 text-white rounded-md": Boolean(canUpdate?.()),
@@ -1927,22 +2008,26 @@ function DeviceSettingsModal() {
   };
   const isConnected = () =>
     context.devices.get(params.deviceSettings)?.isConnected;
-  const show = () => Boolean(params.deviceSettings);
+
+  const deviceName = () => {
+    const device = context.devices.get(params.deviceSettings);
+    const deviceName = device?.name ?? device?.id;
+    console.log("Device Name");
+    console.log(deviceName);
+    console.log(device);
+    return deviceName;
+  };
+
+  const show = () => Boolean(params.deviceSettings) && deviceName();
 
   const clearParams = () => {
-    setParams({ deviceSettings: undefined, tab: undefined });
+    setParams({ deviceSettings: null, tab: null });
   };
 
   const setCurrNav = (nav: ReturnType<typeof navItems>[number]) => {
     console.log(nav);
     setParams({ tab: nav });
   };
-
-  const deviceName = () => {
-    const deviceName = context.devices.get(params.deviceSettings)?.name;
-    return deviceName;
-  };
-
   return (
     <Show when={show()}>
       <div class="fixed left-1/2 top-24 z-40 h-auto w-11/12 -translate-x-1/2 transform rounded-xl border bg-white shadow-lg">
@@ -2344,7 +2429,7 @@ function Devices() {
             <DeviceDetails
               id={device.id}
               name={device.name}
-              url={device.isConnected ? device.url : undefined}
+              url={device.isConnected ? device.url : ""}
               isProd={device.isProd}
               isConnected={device.isConnected}
               groupName={device.group}

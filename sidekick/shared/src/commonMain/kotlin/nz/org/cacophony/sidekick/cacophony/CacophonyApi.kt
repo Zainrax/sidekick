@@ -31,7 +31,7 @@ class CacophonyApi: Api {
             }
         }
         install(HttpTimeout) {
-            socketTimeoutMillis = 3000
+            socketTimeoutMillis = 30000
         }
     }
     fun setToTest() {
