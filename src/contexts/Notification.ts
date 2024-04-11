@@ -16,6 +16,7 @@ export type Notification = {
   type: NotifcationType;
   timeout?: number;
   action?: JSX.Element;
+  warn?: boolean;
 };
 
 type TimeoutID = ReturnType<typeof setTimeout>;
@@ -41,6 +42,7 @@ type LogDetails = {
   details?: string;
   timeout?: number;
   action?: JSX.Element;
+  warn?: boolean;
 };
 
 type LogBase = {
@@ -73,22 +75,23 @@ const logAction = async (log: AnyLog) => {
   }`;
   console.debug(`[${log.type}] ${log.message} ${details}`);
   console.trace();
-  setNotifications([
-    ...notifications(),
-    {
-      id,
-      message: log.message,
-      details,
-      type: log.type,
-      timeout: log.timeout,
-      action: log.action,
-    },
-  ]);
-
-  if (log.type === "success" || log.type === "loading" || log.timeout) {
-    hideNotification(id, log.timeout ?? defaultDuration);
+  const shouldWarn = log.warn ?? true;
+  if (shouldWarn) {
+    setNotifications([
+      ...notifications(),
+      {
+        id,
+        message: log.message,
+        details,
+        type: log.type,
+        timeout: log.timeout,
+        action: log.action,
+      },
+    ]);
+    if (log.type === "success" || log.type === "loading" || log.timeout) {
+      hideNotification(id, log.timeout ?? defaultDuration);
+    }
   }
-
   if (isErrorLog(log)) {
     const message = `message: ${log.message} details: ${log.details}`;
     if (log.error && log.error instanceof Error) {

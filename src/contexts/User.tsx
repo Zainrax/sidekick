@@ -336,7 +336,6 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       if (!res) return [];
       const result = GroupsResSchema.safeParse(res.data);
       if (!result.success || result.data.success === false) {
-        console.error("Error getting groups:", result);
         return [];
       }
       await Preferences.set({

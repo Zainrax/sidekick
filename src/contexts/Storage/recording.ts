@@ -176,6 +176,7 @@ export function useRecordingStorage() {
           message: "Failed to save recording",
           details: e.message,
           error: e,
+          warn: false,
         });
       }
     }
