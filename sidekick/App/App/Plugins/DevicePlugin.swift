@@ -192,6 +192,10 @@ public class DevicePlugin: CAPPlugin {
         device.getDeviceInfo(call: pluginCall(call: call))
     }
     
+    @objc func setDeviceConfig(_ call: CAPPluginCall) {
+        device.setDeviceConfig(call: pluginCall(call: call))
+    }
+    
     @objc func getDeviceConfig(_ call: CAPPluginCall) {
         device.getDeviceConfig(call: pluginCall(call: call))
     }
@@ -232,6 +236,10 @@ public class DevicePlugin: CAPPlugin {
 
     @objc func updateRecordingWindow(_ call: CAPPluginCall) {
         device.updateRecordingWindow(call: pluginCall(call: call))
+    }
+    
+    @objc func setLowPowerMode(_ call: CAPPluginCall) {
+        device.setLowPowerMode(call: pluginCall(call: call))
     }
     
     @objc func unbindConnection(_ call: CAPPluginCall) {

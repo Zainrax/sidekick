@@ -46,6 +46,7 @@ inline fun <reified T> PluginCall.validateCall(vararg keys: String): Either<Capa
                return try {
                    Json.decodeFromString<T>(Json.encodeToString(it)).right()
                } catch (e: Exception) {
+                   println("$e")
                    CapacitorInterfaceError.EmptyKey("Error decoding json").left()
                }
         }.mapLeft { CapacitorInterfaceError.EmptyKey(it) }

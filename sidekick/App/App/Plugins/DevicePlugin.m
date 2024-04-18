@@ -12,7 +12,9 @@ CAP_PLUGIN(DevicePlugin, "Device",
            CAP_PLUGIN_METHOD(stopDiscoverDevices, CAPPluginReturnPromise);
            CAP_PLUGIN_METHOD(checkDeviceConnection, CAPPluginReturnPromise);
            CAP_PLUGIN_METHOD(getDeviceInfo, CAPPluginReturnPromise);
+           CAP_PLUGIN_METHOD(setDeviceConfig, CAPPluginReturnPromise);
            CAP_PLUGIN_METHOD(getDeviceConfig, CAPPluginReturnPromise);
+           CAP_PLUGIN_METHOD(setLowPowerMode, CAPPluginReturnPromise);
            CAP_PLUGIN_METHOD(connectToDeviceAP, CAPPluginReturnCallback);
            CAP_PLUGIN_METHOD(getDeviceLocation, CAPPluginReturnPromise);
            CAP_PLUGIN_METHOD(setDeviceLocation, CAPPluginReturnPromise);

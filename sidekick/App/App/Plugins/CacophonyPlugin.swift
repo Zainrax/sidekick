@@ -53,10 +53,12 @@ public class CacophonyPlugin: CAPPlugin {
         cacophony.createStation(call: pluginCall(call: call))
     }
     @objc func getAppVersion(_ call: CAPPluginCall) {
-        if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
-            call.resolve(["data": version, "success" : true])
+        if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+           let patchVersion = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
+            let fullVersion = "\(version).\(patchVersion)"
+            call.resolve(["data": fullVersion, "success": true])
         } else {
-            call.resolve(["data": "1.0", "success" : true])
+            call.resolve(["data": "1.0.0", "success": true])
         }
     }
 }
