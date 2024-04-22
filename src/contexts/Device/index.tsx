@@ -1130,10 +1130,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
-      console.log("INTERNET", res);
       const connection =
         res.status === 200
           ? ConnectionRes.parse(JSON.parse(res.data)).connected
+          : res.status === 404
+          ? true
           : false;
       return connection;
     } catch (error) {
