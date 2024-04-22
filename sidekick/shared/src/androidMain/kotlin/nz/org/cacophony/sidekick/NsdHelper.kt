@@ -115,12 +115,27 @@ abstract class NsdHelper(val context: Context) {
                 resolveNextInQueue()
             }
 
+            @RequiresApi(Build.VERSION_CODES.N)
             override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                // Called when the resolve fails. Use the error code to debug.
                 println("Resolve failed: $serviceInfo - Error code: $errorCode")
 
-                // Process the next service waiting to be resolved
-                resolveNextInQueue()
+                when (errorCode) {
+                    NsdManager.FAILURE_ALREADY_ACTIVE -> {
+                        // A resolve request for the same service is already in progress
+                        // Do not add the service to the pending queue and process the next service
+                        resolveNextInQueue()
+                    }
+                    else -> {
+                        // Remove the failed service from the pending services queue
+                        pendingNsdServices.removeIf { it.serviceName == serviceInfo.serviceName }
+
+                        // Trigger a new discovery request to refresh the list of services
+                        discoverServices()
+
+                        // Process the next service waiting to be resolved
+                        resolveNextInQueue()
+                    }
+                }
             }
         }
     }
