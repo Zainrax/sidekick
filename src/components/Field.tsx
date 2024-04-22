@@ -14,6 +14,7 @@ import {
   on,
 } from "solid-js";
 import { Portal } from "solid-js/web";
+import { useDevice } from "~/contexts/Device";
 type DropdownOption = string | { value: string; element: JSX.Element };
 type DropdownInputProps = {
   value: string;
@@ -26,6 +27,7 @@ type DropdownInputProps = {
 
 // Note: This is not generic, recommend changing it to be generic props (title etc.) if it's used more than once.
 const DropdownInput: Component<DropdownInputProps> = (props) => {
+  const context = useDevice();
   const [open, setOpen] = createSignal(false);
   const [search, setSearch] = createSignal("");
   let options: HTMLDivElement | undefined;
@@ -128,7 +130,7 @@ const DropdownInput: Component<DropdownInputProps> = (props) => {
               </div>
               <Show when={saving() === "saved"}>
                 <p class="pb-1 text-sm text-green-500">
-                  Please reset the device to take effect.
+                  The device will be rebooted to apply the changes.
                 </p>
               </Show>
               <Show when={error()}>

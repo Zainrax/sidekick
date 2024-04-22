@@ -2,6 +2,8 @@ package nz.org.cacophony.sidekick
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Build
+import androidx.annotation.RequiresApi
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
@@ -62,24 +64,18 @@ abstract class NsdHelper(val context: Context) {
                 }
             }
 
+            @RequiresApi(Build.VERSION_CODES.N)
             override fun onServiceLost(service: NsdServiceInfo) {
                 println("Service lost: $service")
 
-                // If the lost service was in the queue of pending services, remove it
-                var iterator = pendingNsdServices.iterator()
-                while (iterator.hasNext()) {
-                    if (iterator.next().serviceName == service.serviceName)
-                        iterator.remove()
-                }
+                // Remove the lost service from the pending services queue
+                pendingNsdServices.removeIf { it.serviceName == service.serviceName }
 
-                // If the lost service was in the list of resolved services, remove it
-                synchronized(resolvedNsdServices) {
-                    iterator = resolvedNsdServices.iterator()
-                    while (iterator.hasNext()) {
-                        if (iterator.next().serviceName == service.serviceName)
-                            iterator.remove()
-                    }
-                }
+                // Remove the lost service from the resolved services list
+                resolvedNsdServices.removeIf { it.serviceName == service.serviceName }
+
+                // Trigger a new discovery request to refresh the list of services
+                discoverServices()
 
                 // Do the rest of the processing for the lost service
                 onNsdServiceLost(service)

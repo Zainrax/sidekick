@@ -1484,7 +1484,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       },
       data: {
         newGroup: group,
-        newName: "",
         authorizedUser: token,
       },
     });
@@ -1493,7 +1492,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         ...device,
         group,
       });
-    } else if (res.status === 404) {
+      return true;
+    } else if (res.status === 404 || res.status === 400) {
       const res = await DevicePlugin.reregisterDevice({
         url,
         group,
@@ -1507,7 +1507,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         return true;
       }
     }
-    return true;
+    throw new Error("Could not change group");
   };
 
   // print current devices
@@ -1719,6 +1719,25 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
   };
 
+  const rebootDevice = async (deviceId: DeviceId) => {
+    try {
+      const device = devices.get(deviceId);
+      if (!device || !device.isConnected) return null;
+      const { url } = device;
+      const res = await CapacitorHttp.post({
+        url: `${url}/api/reboot`,
+        headers,
+        webFetchExtra: {
+          credentials: "include",
+        },
+      });
+      return res.status === 200;
+    } catch (error) {
+      console.log(error);
+      return null;
+    }
+  };
+
   return {
     devices,
     isDiscovering,
@@ -1735,6 +1754,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     getEvents,
     saveItems,
     changeGroup,
+    rebootDevice,
     // Location
     setDeviceToCurrLocation,
     locationBeingSet,

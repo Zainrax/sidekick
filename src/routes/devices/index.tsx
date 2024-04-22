@@ -1813,6 +1813,9 @@ function GeneralSettingsTab() {
     const token = user.data()?.token;
     if (token) {
       const res = await context.changeGroup(id(), v, token);
+      if (res) {
+        await context.rebootDevice(id());
+      }
     }
   };
   const [canUpdate, { refetch }] = createResource(async () => {
@@ -1874,15 +1877,18 @@ function GeneralSettingsTab() {
   };
 
   const onOpenGroups = async () => {
-    if (!user.isLoggedIn()) {
+    const sameProd = device()?.isProd === user.isProd();
+    if (!user.isLoggedIn() || !sameProd) {
       // Prompt to login
+      const message = sameProd
+        ? "You must be logged in to change group. Would you like to login?"
+        : "You must be logged in the same server. Would you like to login?";
       const res = await Prompt.confirm({
         title: "Login Required",
-        message:
-          "To modify the group, you must be logged in. Would you like to login?",
+        message,
       });
       if (res.value) {
-        user.logout();
+        await user.logout();
         return false;
       } else {
         return false;
@@ -2114,7 +2120,7 @@ function DeviceDetails(props: DeviceDetailsProps) {
       eventKeys().length > 0 && savedEvents().length !== eventKeys().length;
     return !hasRecsToDownload && !hasEventsToDownload;
   };
-  const [params, setParams] = useSearchParams();
+  const [, setParams] = useSearchParams();
 
   const openDeviceInterface = leading(
     debounce,

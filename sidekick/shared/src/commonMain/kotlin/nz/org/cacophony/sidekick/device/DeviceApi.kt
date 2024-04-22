@@ -125,7 +125,6 @@ class DeviceApi(override val client: HttpClient, val device: Device): Api {
 
     suspend fun reregister(group: String, device: String): Either<ApiError, String> =
         submitForm("reregister",Parameters.build {
-            append("name", device)
             append("group", group)
         }).flatMap { validateResponse(it) }
 
