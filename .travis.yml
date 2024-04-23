@@ -1,6 +1,6 @@
 language: android
 
-dist: trusty
+dist: bionic
 
 cache:
   npm: false
