@@ -94,6 +94,7 @@ export function useEventStorage() {
             logWarning({
               message: "Your account does not have access to upload events",
               details: res.message,
+              warn: false,
             });
             events = events.filter((e) => e.device !== event.device);
           } else {

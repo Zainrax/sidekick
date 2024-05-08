@@ -173,6 +173,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     deviceEventKeys.set(device.id, await getEventKeys(device));
 
   const clearUploaded = async (device: ConnectedDevice) => {
+    if (devicesDownloading.has(device.id)) return;
     await Promise.all([
       deleteUploadedRecordings(device),
       deleteUploadedEvents(device),
@@ -227,18 +228,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     try {
       const [deviceName] = endpoint.split(".");
       const url = `http://${deviceName}.local`;
-      const device = await createDevice(deviceName, endpoint, url);
-      if (device) {
-        return device;
-      }
-      const ipDevice = await createDevice(
-        deviceName,
-        endpoint,
-        `http://${host}`
-      );
-      if (ipDevice) {
-        return ipDevice;
-      }
+      const device = await Promise.race([
+        createDevice(deviceName, endpoint, url),
+        createDevice(deviceName, endpoint, `http://${host}`),
+      ]);
+      return device;
     } catch (error) {
       console.log("error", error);
     }
@@ -464,6 +458,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     for (const rec of recs.filter(
       (r) => !savedRecs.find((s) => s.name === r)
     )) {
+      // Added to allow for pause functionality
       if (!devicesDownloading.has(device.id)) return;
       const res = await DevicePlugin.downloadRecording({
         url: device.url,
@@ -473,6 +468,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         logWarning({
           message: "Could not download recording",
           details: res.message,
+          warn: false,
         });
         continue;
       }
