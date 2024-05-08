@@ -2,8 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>We use the location for setting the locations of the camera.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We use the photos to upload images of the area the camera is within.</string>
 	<key>NSCameraUsageDescription</key>
@@ -55,8 +53,6 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>We use your current network to discover devices. This helps us download recordings/events, and set the location of devices.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>We use your location to set the location of cameras in the app. This helps us provide you with the most accurate camera locations and directions.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>We use your location to set the location of cameras in the app. This helps us provide you with the most accurate camera locations and directions.</string>
 	<key>UILaunchStoryboardName</key>

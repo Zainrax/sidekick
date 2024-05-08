@@ -10,7 +10,6 @@
 #endif
 #endif
 
-#import "DialogPlugin.h"
 
 FOUNDATION_EXPORT double CapacitorDialogVersionNumber;
 FOUNDATION_EXPORT const unsigned char CapacitorDialogVersionString[];

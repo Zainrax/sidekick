@@ -15,7 +15,36 @@ let type = "_cacophonator-management._tcp"
 let domain = "local."
 
 @objc(DevicePlugin)
-public class DevicePlugin: CAPPlugin {
+public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
+    public var identifier: String = "DevicePlugin"
+    public var jsName: String = "Device"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "discoverDevices",returnType: CAPPluginReturnCallback),
+        CAPPluginMethod(name: "stopDiscoverDevices",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "checkDeviceConnection",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getDeviceInfo",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setDeviceConfig",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getDeviceConfig",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setLowPowerMode",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "connectToDeviceAP",returnType: CAPPluginReturnCallback),
+        CAPPluginMethod(name: "getDeviceLocation",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setDeviceLocation",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getRecordings",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getEvents",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "deleteEvents",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getEventKeys",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "deleteRecording",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "deleteRecordings",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "downloadRecording",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "updateRecordingWindow",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "unbindConnection",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "rebindConnection",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "hasConnection",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "disconnectFromDeviceAP",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "turnOnModem",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "reregisterDevice",returnType: CAPPluginReturnPromise),
+        ]
+    
     enum CallType {
             case permissions
             case singleUpdate
@@ -25,6 +54,7 @@ public class DevicePlugin: CAPPlugin {
         case success
         case failed
     }
+    
     @objc let device = DeviceInterface(filePath: documentPath)
     let configuration = NEHotspotConfiguration(ssid: "bushnet", passphrase: "feathers", isWEP: false)
     var isConnected = false;
@@ -61,7 +91,6 @@ public class DevicePlugin: CAPPlugin {
     @objc func checkDeviceConnection(_ call: CAPPluginCall) {
         device.checkDeviceConnection(call: pluginCall(call: call))
     }
-
     
     @objc func connectToDeviceAP(_ call: CAPPluginCall) {
         guard let bridge = self.bridge else { return call.reject("Could not access bridge") }
@@ -180,66 +209,98 @@ public class DevicePlugin: CAPPlugin {
 
 
     @objc func turnOnModem(_ call: CAPPluginCall) {
-        device.turnOnModem(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.turnOnModem(call: pluginCall(call: call))
+        }
     }
     
     @objc func reregisterDevice(_ call: CAPPluginCall) {
-        device.reregister(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.reregister(call: pluginCall(call: call))
+        }
     }
     
     
     @objc func getDeviceInfo(_ call: CAPPluginCall) {
-        device.getDeviceInfo(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.getDeviceInfo(call: pluginCall(call: call))
+        }
     }
     
     @objc func setDeviceConfig(_ call: CAPPluginCall) {
-        device.setDeviceConfig(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.setDeviceConfig(call: pluginCall(call: call))
+        }
     }
     
     @objc func getDeviceConfig(_ call: CAPPluginCall) {
-        device.getDeviceConfig(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.getDeviceConfig(call: pluginCall(call: call))
+        }
     }
     
     @objc func getDeviceLocation(_ call: CAPPluginCall) {
-        device.getDeviceLocation(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.getDeviceLocation(call: pluginCall(call: call))
+        }
     }
     
     @objc func setDeviceLocation(_ call: CAPPluginCall) {
-        device.setDeviceLocation(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.setDeviceLocation(call: pluginCall(call: call))
+        }
     }
 
     @objc func getRecordings(_ call: CAPPluginCall) {
-        device.getRecordings(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.getRecordings(call: pluginCall(call: call))
+        }
     }
     
     @objc func getEvents(_ call: CAPPluginCall) {
-        device.getEvents(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.getEvents(call: pluginCall(call: call))
+        }
     }
     @objc func deleteEvents(_ call: CAPPluginCall) {
-        device.deleteEvents(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.deleteEvents(call: pluginCall(call: call))
+        }
     }
     @objc func getEventKeys(_ call: CAPPluginCall) {
-        device.getEventKeys(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.getEventKeys(call: pluginCall(call: call))
+        }
     }
     
     @objc func downloadRecording(_ call: CAPPluginCall) {
-        device.downloadRecording(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.downloadRecording(call: pluginCall(call: call))
+        }
     }
     
     @objc func deleteRecording(_ call: CAPPluginCall) {
-        device.deleteRecording(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.deleteRecording(call: pluginCall(call: call))
+        }
     }
     
     @objc func deleteRecordings(_ call: CAPPluginCall) {
-        device.deleteRecordings(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.deleteRecordings(call: pluginCall(call: call))
+        }
     }
 
     @objc func updateRecordingWindow(_ call: CAPPluginCall) {
-        device.updateRecordingWindow(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.updateRecordingWindow(call: pluginCall(call: call))
+        }
     }
     
     @objc func setLowPowerMode(_ call: CAPPluginCall) {
-        device.setLowPowerMode(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.setLowPowerMode(call: pluginCall(call: call))
+        }
     }
     
     @objc func unbindConnection(_ call: CAPPluginCall) {

@@ -27,5 +27,24 @@
 				"biometricSubTitle": "Log in using your biometric"
 			}
 		}
-	}
+	},
+	"packageClassList": [
+		"FirebaseCrashlyticsPlugin",
+		"FirebaseCrashlyticsPlugin",
+		"KeepAwakePlugin",
+		"KeepAwakePlugin",
+		"CapacitorSQLitePlugin",
+		"CapacitorSQLitePlugin",
+		"AppPlugin",
+		"CAPBrowserPlugin",
+		"CAPCameraPlugin",
+		"ClipboardPlugin",
+		"DialogPlugin",
+		"FilesystemPlugin",
+		"GeolocationPlugin",
+		"CAPNetworkPlugin",
+		"PreferencesPlugin",
+		"NativeSettingsPlugin",
+		"NativeSettingsPlugin"
+	]
 }

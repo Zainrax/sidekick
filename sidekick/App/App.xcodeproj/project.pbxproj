@@ -16,11 +16,10 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		784681D329AF0EF1000124AB /* CacophonyPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 784681D129AF0EF1000124AB /* CacophonyPlugin.swift */; };
-		784681D429AF0EF1000124AB /* CacophonyPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = 784681D229AF0EF1000124AB /* CacophonyPlugin.m */; };
 		784F1A8D2AEF4BFE007CB84E /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 784F1A8C2AEF4BFE007CB84E /* GoogleService-Info.plist */; };
+		787D287B2BE34BEC00CFAD50 /* CustomViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 787D287A2BE34BEC00CFAD50 /* CustomViewController.swift */; };
 		788E42CC2946CDA2005A5ED6 /* PluginCall.swift in Sources */ = {isa = PBXBuildFile; fileRef = 788E42CB2946CDA2005A5ED6 /* PluginCall.swift */; };
 		788E42D22947FC70005A5ED6 /* DevicePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 788E42D12947FC6F005A5ED6 /* DevicePlugin.swift */; };
-		788E42D529496F3D005A5ED6 /* DevicePlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = 788E42D429496F3D005A5ED6 /* DevicePlugin.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -48,12 +47,11 @@
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		78297C4829A2DA170089245A /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		784681D129AF0EF1000124AB /* CacophonyPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CacophonyPlugin.swift; sourceTree = "<group>"; };
-		784681D229AF0EF1000124AB /* CacophonyPlugin.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CacophonyPlugin.m; sourceTree = "<group>"; };
 		784F1A8C2AEF4BFE007CB84E /* GoogleService-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		785898B6293574A200E59EB3 /* App-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "App-Bridging-Header.h"; sourceTree = "<group>"; };
+		787D287A2BE34BEC00CFAD50 /* CustomViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomViewController.swift; sourceTree = "<group>"; };
 		788E42CB2946CDA2005A5ED6 /* PluginCall.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginCall.swift; sourceTree = "<group>"; };
 		788E42D12947FC6F005A5ED6 /* DevicePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePlugin.swift; sourceTree = "<group>"; };
-		788E42D429496F3D005A5ED6 /* DevicePlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = DevicePlugin.m; sourceTree = "<group>"; };
 		83CC066EFD79E80C1E608668 /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
 		D4739D02A7016E59052DF7EA /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 		F2E962D15E592835E5DC24FB /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -103,6 +101,7 @@
 				504EC3131FED79650016851F /* Info.plist */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
+				787D287A2BE34BEC00CFAD50 /* CustomViewController.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -110,12 +109,10 @@
 		785898AC2935728A00E59EB3 /* Plugins */ = {
 			isa = PBXGroup;
 			children = (
-				784681D229AF0EF1000124AB /* CacophonyPlugin.m */,
 				784681D129AF0EF1000124AB /* CacophonyPlugin.swift */,
 				785898B6293574A200E59EB3 /* App-Bridging-Header.h */,
 				788E42CB2946CDA2005A5ED6 /* PluginCall.swift */,
 				788E42D12947FC6F005A5ED6 /* DevicePlugin.swift */,
-				788E42D429496F3D005A5ED6 /* DevicePlugin.m */,
 			);
 			path = Plugins;
 			sourceTree = "<group>";
@@ -285,11 +282,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				788E42D22947FC70005A5ED6 /* DevicePlugin.swift in Sources */,
-				788E42D529496F3D005A5ED6 /* DevicePlugin.m in Sources */,
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				788E42CC2946CDA2005A5ED6 /* PluginCall.swift in Sources */,
+				787D287B2BE34BEC00CFAD50 /* CustomViewController.swift in Sources */,
 				784681D329AF0EF1000124AB /* CacophonyPlugin.swift in Sources */,
-				784681D429AF0EF1000124AB /* CacophonyPlugin.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -436,7 +432,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 8;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 36D3PXTZ4A;
 				INFOPLIST_FILE = App/Info.plist;
@@ -467,7 +463,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 36D3PXTZ4A;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Sidekick;

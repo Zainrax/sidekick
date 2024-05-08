@@ -1610,8 +1610,8 @@ function WifiSettingsTab() {
                     >
                       <div>
                         <p class="whitespace-pre-line pb-2 text-green-500">
-                          Successfully disconnected from WiFi.\n Would you like
-                          to try to connect to it?
+                          Successfully disconnected from WiFi.
+                          <br /> Would you like to try to connect to it?
                         </p>
                         <button
                           class="flex w-full items-center justify-center rounded-md bg-blue-500 py-3 text-white"
@@ -2274,6 +2274,7 @@ export function isKeyOfObject<T extends object>(
 function Devices() {
   const context = useDevice();
   const devices = () => [...context.devices.values()];
+  const [groupPromptCancelled, setGroupCancelledPrompt] = createSignal(false);
   const [locPromptCancelled, setPromptCancel] = createSignal(false);
 
   onMount(() => {
@@ -2354,11 +2355,11 @@ function Devices() {
           isDialogOpen()
         )
           return;
-        if (isDialogOpen()) return;
         if (devicesToUpdate.length === 1) {
           const device = context.devices.get(devicesToUpdate[0]);
           if (device) {
             if (device.group === "new") {
+              if (groupPromptCancelled()) return;
               const message = `Looks like ${device.name} needs to be assigned to a group. Would you like to assign it to a group?`;
               setIsDialogOpen(true);
               const { value } = await Prompt.confirm({
@@ -2371,7 +2372,7 @@ function Devices() {
                   tab: "General",
                 });
               }
-              setPromptCancel(true);
+              setGroupCancelledPrompt(true);
 
               setIsDialogOpen(false);
             } else {

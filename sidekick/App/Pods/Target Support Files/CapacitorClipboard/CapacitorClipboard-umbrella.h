@@ -10,7 +10,6 @@
 #endif
 #endif
 
-#import "Plugin.h"
 
 FOUNDATION_EXPORT double CapacitorClipboardVersionNumber;
 FOUNDATION_EXPORT const unsigned char CapacitorClipboardVersionString[];
