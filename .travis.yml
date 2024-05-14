@@ -17,15 +17,11 @@ env:
 before_install:
   # Update system packages and install required tools
   - sudo apt-get update
-  - sudo apt-get install -y wget unzip
+  - sudo apt-get install -y wget unzip gnupg2
 
-  # Install RVM (Ruby Version Manager)
-  - sudo apt-get install -y software-properties-common
-  - sudo apt-add-repository -y ppa:rael-gc/rvm
-  - sudo apt-get update
-  - sudo apt-get install -y rvm
-  - echo 'source /etc/profile.d/rvm.sh' >> ~/.bashrc
-  - source /etc/profile.d/rvm.sh
+  # Install RVM (Ruby Version Manager) from the official source
+  - \curl -sSL https://get.rvm.io | bash -s stable
+  - source ~/.rvm/scripts/rvm
 
   # Install the latest SDK tools
   - wget "https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip" -O commandlinetools.zip
