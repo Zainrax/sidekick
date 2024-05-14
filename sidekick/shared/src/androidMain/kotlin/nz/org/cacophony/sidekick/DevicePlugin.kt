@@ -43,35 +43,40 @@ class DevicePlugin: Plugin() {
     }
 
     enum class CallType {
-        PERMISSIONS,
-        SINGLE_UPDATE,
         DISCOVER,
-        CONNECT,
     }
 
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod
     fun discoverDevices(call: PluginCall) {
         try {
-            call.setKeepAlive(true)
             callQueue[call.callbackId] = CallType.DISCOVER
             multicastLock.acquire()
-            nsdHelper = object : NsdHelper(context) {
-                override fun onNsdServiceResolved(service: NsdServiceInfo) {
-                    val endpoint = "${service.serviceName}.local"
-                    val result = JSObject()
-                    result.put("endpoint", endpoint)
-                    result.put("host", service.host.hostAddress)
-                    call.resolve(result)
-                }
+            // check if nsdHelper is already initialized
+            if (!::nsdHelper.isInitialized) {
+                nsdHelper = object : NsdHelper(context) {
+                    override fun onNsdServiceResolved(service: NsdServiceInfo) {
+                        val serviceJson = JSObject().apply {
+                            val endpoint = "${service.serviceName}.local"
+                            put("endpoint", endpoint)
+                                put("host", service.host.hostAddress)
+                        }
+                        notifyListeners("onServiceResolved", serviceJson)
+                    }
 
-                override fun onNsdServiceLost(service: NsdServiceInfo) {
-                    // Handle service loss here if needed
+                    override fun onNsdServiceLost(service: NsdServiceInfo) {
+                        val result = JSObject().apply {
+                            val endpoint = "${service.serviceName}.local"
+                            put("endpoint", endpoint)
+                        }
+                        notifyListeners("onServiceLost", result)
+                    }
                 }
+                nsdHelper.initializeNsd()
+                nsdHelper.discoverServices()
             }
+            call.resolve()
 
-            nsdHelper.initializeNsd()
-            nsdHelper.discoverServices()
         } catch (e: Exception) {
             call.reject(e.toString())
         }
@@ -82,17 +87,10 @@ class DevicePlugin: Plugin() {
     fun stopDiscoverDevices(call: PluginCall) {
         val result = JSObject()
         try {
-            val id = call.getString("id") ?: return call.reject("No Id Found")
-            if (callQueue[id] != CallType.DISCOVER) {
-                return call.reject("Invalid Id")
-            }
-            callQueue.remove(id)
-            bridge.releaseCall(id)
             nsdHelper.stopDiscovery()
             multicastLock.release()
 
             result.put("success", true)
-            result.put("id", id)
             call.resolve(result)
         } catch (e: Exception) {
             result.put("success", false)

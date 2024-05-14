@@ -16,11 +16,11 @@
   "type": "module",
   "devDependencies": {
     "@biomejs/biome": "1.4.0",
-    "@capacitor/assets": "^2.0.4",
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^6.0.0",
     "@iconify-icon/solid": "^1.0.8",
     "@ionic/cli": "^7.2.0",
-    "@types/node": "^20.12.8",
+    "@types/node": "^20.12.11",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "autoprefixer": "^10.4.19",
@@ -39,9 +39,9 @@
     "vite-plugin-solid": "^2.10.2"
   },
   "dependencies": {
-    "@capacitor-community/firebase-crashlytics": "^3.0.0",
-    "@capacitor-community/keep-awake": "^4.0.0",
-    "@capacitor-community/sqlite": "5.0.2",
+    "@capacitor-community/keep-awake": "^5.0.0",
+    "@capacitor-community/sqlite": "6.0.0-alpha.1",
+    "@capacitor-firebase/crashlytics": "v6.0.0",
     "@capacitor/android": "^6.0.0",
     "@capacitor/app": "^6.0.0",
     "@capacitor/browser": "^6.0.0",
@@ -61,7 +61,7 @@
     "@solid-primitives/set": "^0.4.11",
     "@solidjs/meta": "^0.28.7",
     "@solidjs/router": "^0.8.4",
-    "capacitor-native-settings": "^5.0.1",
+    "capacitor-native-settings": "^6.0.0",
     "effect": "2.0.0-next.61",
     "kysely": "^0.24.2",
     "motion": "^10.17.0",
@@ -71,7 +71,7 @@
     "sql.js": "^1.10.3",
     "stacktrace-js": "^2.0.2",
     "undici": "^5.28.4",
-    "zod": "^3.23.5"
+    "zod": "^3.23.8"
   },
   "engines": {
     "node": ">=16"

@@ -2451,7 +2451,7 @@ function Devices() {
               disabled={context.isDiscovering()}
               loading={context.isDiscovering()}
               text="Search Devices"
-              loadingText="Searching..."
+              loadingText="Searching For Devices..."
             >
               <div class="text-blue-500">
                 <ImSearch size={28} />

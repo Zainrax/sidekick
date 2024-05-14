@@ -12,7 +12,7 @@ val performSigning = keystorePropertiesFile.exists()
 if (performSigning) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
-val sdk = 33
+val sdk = 34
 val minSdkVersion = 22
 val majorVersion = 3
 val minorVersion = 4
@@ -69,14 +69,14 @@ repositories {
 dependencies {
     implementation(project(":shared"))
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
-    implementation("androidx.appcompat:appcompat:1.4.2")
+    implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.coordinatorlayout:coordinatorlayout:1.2.0")
-    implementation("androidx.activity:activity-compose:1.4.0")
-    implementation(platform("com.google.firebase:firebase-bom:31.5.0"))
+    implementation("androidx.activity:activity-compose:1.9.0")
+    implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
     implementation("com.google.firebase:firebase-crashlytics-ktx")
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation(project(mapOf("path" to ":capacitor-android")))
-    implementation("androidx.core:core-splashscreen:1.0.0-rc01")
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation(project(":capacitor-cordova-android-plugins"))
 }
 

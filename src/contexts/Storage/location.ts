@@ -21,10 +21,12 @@ import { logError, logSuccess, logSync, logWarning } from "../Notification";
 import { useUserContext } from "../User";
 
 const MIN_STATION_SEPARATION_METERS = 60;
+
 // The radius of the station is half the max distance between stations: any recording inside the radius can
 // be considered to belong to that station.
 const MAX_DISTANCE_FROM_STATION_FOR_RECORDING =
   MIN_STATION_SEPARATION_METERS / 2;
+
 export interface LatLng {
   lat: number;
   lng: number;
@@ -73,7 +75,7 @@ export const isWithinRange = (
     lng,
     latitude,
     longitude,
-    range + accuracy
+    range + accuracy * 2
   );
   return inRange;
 };

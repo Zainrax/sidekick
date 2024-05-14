@@ -18,8 +18,8 @@ import { DeviceProvider } from "./contexts/Device";
 import { StorageProvider } from "./contexts/Storage";
 import NotificationPopup from "./components/NotificationPopup";
 import { BiSolidCopyAlt } from "solid-icons/bi";
-import { FirebaseCrashlytics } from "@capacitor-community/firebase-crashlytics";
 import BackgroundLogo from "./components/BackgroundLogo";
+import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
 
 const routes = [
   {

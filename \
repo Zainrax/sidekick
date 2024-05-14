@@ -10,11 +10,10 @@ import { Preferences } from "@capacitor/preferences";
 import { logSuccess, logWarning } from "./Notification";
 import { Result } from ".";
 import { z } from "zod";
-import { CacophonyPlugin } from "./CacophonyApi";
+import { AuthToken, CacophonyPlugin } from "./CacophonyApi";
 import { useNavigate } from "@solidjs/router";
-import { unbindAndRebind } from "./Device";
+import { DevicePlugin, unbindAndRebind } from "./Device";
 import { CapacitorHttp } from "@capacitor/core";
-import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
 
 const UserSchema = z.object({
   token: z.string(),

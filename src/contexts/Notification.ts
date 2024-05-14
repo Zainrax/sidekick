@@ -3,7 +3,7 @@
 // and will be used to manage the state of the notifications
 // such as error messages, success messages, and loading messages
 
-import { FirebaseCrashlytics } from "@capacitor-community/firebase-crashlytics";
+import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
 import { JSX, createSignal } from "solid-js";
 import StackTrace from "stacktrace-js";
 

@@ -63,7 +63,7 @@ function CircleButton(props: CircleButtonProps) {
           </Show>
         </Presence>
       </button>
-      <p class="test-gray-600">
+      <p class="text-gray-500">
         {props.loading ? props.loadingText : props.text}
       </p>
     </div>

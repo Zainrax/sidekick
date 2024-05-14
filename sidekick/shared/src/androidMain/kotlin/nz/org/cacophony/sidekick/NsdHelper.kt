@@ -54,7 +54,7 @@ abstract class NsdHelper(val context: Context) {
                         nsdManager?.resolveService(service, resolveListener)
                     }
                     else {
-                        // Resolver was busy. Add the service to the list of pending services
+                        // Resolver was busy. Addsymotion-prefix) the service to the list of pending services
                         pendingNsdServices.add(service)
                     }
                 }
@@ -73,9 +73,6 @@ abstract class NsdHelper(val context: Context) {
 
                 // Remove the lost service from the resolved services list
                 resolvedNsdServices.removeIf { it.serviceName == service.serviceName }
-
-                // Trigger a new discovery request to refresh the list of services
-                discoverServices()
 
                 // Do the rest of the processing for the lost service
                 onNsdServiceLost(service)

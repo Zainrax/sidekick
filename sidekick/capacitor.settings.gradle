@@ -2,14 +2,14 @@
 include ':capacitor-android'
 project(':capacitor-android').projectDir = new File('../node_modules/.pnpm/@capacitor+android@6.0.0_@capacitor+core@6.0.0/node_modules/@capacitor/android/capacitor')
 
-include ':capacitor-community-firebase-crashlytics'
-project(':capacitor-community-firebase-crashlytics').projectDir = new File('../node_modules/.pnpm/@capacitor-community+firebase-crashlytics@3.0.0_@capacitor+core@6.0.0/node_modules/@capacitor-community/firebase-crashlytics/android')
-
 include ':capacitor-community-keep-awake'
-project(':capacitor-community-keep-awake').projectDir = new File('../node_modules/.pnpm/@capacitor-community+keep-awake@4.0.0_@capacitor+core@6.0.0/node_modules/@capacitor-community/keep-awake/android')
+project(':capacitor-community-keep-awake').projectDir = new File('../node_modules/.pnpm/@capacitor-community+keep-awake@5.0.0_@capacitor+core@6.0.0/node_modules/@capacitor-community/keep-awake/android')
 
 include ':capacitor-community-sqlite'
-project(':capacitor-community-sqlite').projectDir = new File('../node_modules/.pnpm/@capacitor-community+sqlite@5.0.2_@capacitor+core@6.0.0/node_modules/@capacitor-community/sqlite/android')
+project(':capacitor-community-sqlite').projectDir = new File('../node_modules/.pnpm/@capacitor-community+sqlite@6.0.0-alpha.1_@capacitor+core@6.0.0/node_modules/@capacitor-community/sqlite/android')
+
+include ':capacitor-firebase-crashlytics'
+project(':capacitor-firebase-crashlytics').projectDir = new File('../node_modules/.pnpm/@capacitor-firebase+crashlytics@6.0.0_@capacitor+core@6.0.0/node_modules/@capacitor-firebase/crashlytics/android')
 
 include ':capacitor-app'
 project(':capacitor-app').projectDir = new File('../node_modules/.pnpm/@capacitor+app@6.0.0_@capacitor+core@6.0.0/node_modules/@capacitor/app/android')
@@ -39,4 +39,4 @@ include ':capacitor-preferences'
 project(':capacitor-preferences').projectDir = new File('../node_modules/.pnpm/@capacitor+preferences@6.0.0_@capacitor+core@6.0.0/node_modules/@capacitor/preferences/android')
 
 include ':capacitor-native-settings'
-project(':capacitor-native-settings').projectDir = new File('../node_modules/.pnpm/capacitor-native-settings@5.0.1_@capacitor+core@6.0.0/node_modules/capacitor-native-settings/android')
+project(':capacitor-native-settings').projectDir = new File('../node_modules/.pnpm/capacitor-native-settings@6.0.0_@capacitor+core@6.0.0/node_modules/capacitor-native-settings/android')
