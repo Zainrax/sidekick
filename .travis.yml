@@ -1,6 +1,6 @@
 language: minimal
 
-dist: xenial
+dist: focal
 
 cache:
   npm: false
@@ -48,8 +48,8 @@ before_install:
   - bundle install
 
   # Capacitor.js dependencies
-  - nvm install 18
-  - nvm use 18
+  - nvm install 20
+  - nvm use 20
   - npm install -g pnpm@8
   - pnpm config set store-dir ~/.pnpm-store
   - source /home/travis/.bashrc
