@@ -361,7 +361,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
                 connectingToDevice().filter((d) => d !== newDevice.endpoint)
               );
               devices.set(connectedDevice.id, connectedDevice);
-              clearUploaded(connectedDevice);
               return;
             }
           } catch (e) {
@@ -411,8 +410,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   const searchDevice = leading(
     throttle,
-    () => {
-      startDiscovery();
+    async () => {
+      await startDiscovery();
+      for (const device of devices.values()) {
+        if (!device.isConnected) continue;
+        clearUploaded(device);
+      }
     },
     10000
   );
