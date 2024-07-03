@@ -1,178 +1,155 @@
-package nz.org.cacophony.sidekick
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
-import java.util.*
+import java.util.Collections
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.collections.ArrayList
-
-abstract class NsdHelper(val context: Context) {
-
-    // Declare DNS-SD related variables for service discovery
-    val nsdManager: NsdManager? = context.getSystemService(Context.NSD_SERVICE) as NsdManager?
+import java.util.concurrent.ConcurrentHashMap
+abstract class NsdHelper(private val context: Context) {
+    private val nsdManager: NsdManager by lazy {
+        context.getSystemService(Context.NSD_SERVICE) as NsdManager
+    }
     private var discoveryListener: NsdManager.DiscoveryListener? = null
-    private var resolveListener: NsdManager.ResolveListener? = null
-    private var resolveListenerBusy = AtomicBoolean(false)
-    private var pendingNsdServices = ConcurrentLinkedQueue<NsdServiceInfo>()
-    var resolvedNsdServices: MutableList<NsdServiceInfo> = Collections.synchronizedList(ArrayList<NsdServiceInfo>())
+    private val resolveListenerBusy = AtomicBoolean(false)
+    private val pendingNsdServices = Collections.synchronizedList(mutableListOf<NsdServiceInfo>())
+    private val resolvedNsdServices = Collections.synchronizedList(mutableListOf<NsdServiceInfo>())
 
     companion object {
-
-        // Type of services to look for
-        const val NSD_SERVICE_TYPE: String = "_cacophonator-management._tcp."
+        const val NSD_SERVICE_TYPE = "_cacophonator-management._tcp."
+        private const val TAG = "NsdHelper"
     }
 
-    // Initialize Listeners
     fun initializeNsd() {
-        // Initialize only resolve listener
-        initializeResolveListener()
+        initializeDiscoveryListener()
     }
 
-    // Instantiate DNS-SD discovery listener
-    // used to discover available Sonata audio servers on the same network
+    fun discoverServices() {
+        stopDiscovery()
+        nsdManager.discoverServices(NSD_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+    }
+
+    fun stopDiscovery() {
+        discoveryListener?.let {
+            try {
+                nsdManager.stopServiceDiscovery(it)
+            } catch (e: IllegalArgumentException) {
+                Log.e(TAG, "Error stopping discovery: ${e.message}")
+            }
+        }
+    }
+
     private fun initializeDiscoveryListener() {
-
-        // Instantiate a new DiscoveryListener
         discoveryListener = object : NsdManager.DiscoveryListener {
-
             override fun onDiscoveryStarted(regType: String) {
-                // Called as soon as service discovery begins.
-                println("Service discovery started: $regType")
+                Log.d(TAG, "Service discovery started: $regType")
             }
 
             override fun onServiceFound(service: NsdServiceInfo) {
-                // A service was found! Do something with it
-                println("Service discovery success: $service")
-
-                if ( service.serviceType == NSD_SERVICE_TYPE ){
-                    // Both service type and service name are the ones we want
-                    // If the resolver is free, resolve the service to get all the details
+                Log.d(TAG, "Service discovery success: $service")
+                if (service.serviceType == NSD_SERVICE_TYPE) {
                     if (resolveListenerBusy.compareAndSet(false, true)) {
-                        nsdManager?.resolveService(service, resolveListener)
-                    }
-                    else {
-                        // Resolver was busy. Addsymotion-prefix) the service to the list of pending services
+                        resolveService(service)
+                    } else {
                         pendingNsdServices.add(service)
                     }
                 }
-                else {
-                    // Not our service. Log message but do nothing else
-                    println("Not our Service - Name: ${service.serviceName}, Type: ${service.serviceType}")
-                }
             }
 
-            @RequiresApi(Build.VERSION_CODES.N)
             override fun onServiceLost(service: NsdServiceInfo) {
-                println("Service lost: $service")
-
-                // Remove the lost service from the pending services queue
-                pendingNsdServices.removeIf { it.serviceName == service.serviceName }
-
-                // Remove the lost service from the resolved services list
-                resolvedNsdServices.removeIf { it.serviceName == service.serviceName }
-
-                // Do the rest of the processing for the lost service
+                Log.d(TAG, "Service lost: $service")
+                pendingNsdServices.removeAll { it.serviceName == service.serviceName }
+                resolvedNsdServices.removeAll { it.serviceName == service.serviceName }
                 onNsdServiceLost(service)
             }
 
             override fun onDiscoveryStopped(serviceType: String) {
-                println("Discovery stopped: $serviceType")
+                Log.d(TAG, "Discovery stopped: $serviceType")
             }
 
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-                println("Start Discovery failed: Error code: $errorCode")
+                Log.e(TAG, "Start Discovery failed: Error code: $errorCode")
                 stopDiscovery()
             }
 
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
-                println("Stop Discovery failed: Error code: $errorCode")
-                nsdManager?.stopServiceDiscovery(this)
+                Log.e(TAG, "Stop Discovery failed: Error code: $errorCode")
+                nsdManager.stopServiceDiscovery(this)
             }
         }
     }
 
+    private fun resolveService(service: NsdServiceInfo) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            resolveServiceModern(service)
+        } else {
+            resolveServiceLegacy(service)
+        }
+    }
 
-    // Instantiate DNS-SD resolve listener to get extra information about the service
-    private fun initializeResolveListener() {
-        resolveListener =  object : NsdManager.ResolveListener {
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun resolveServiceModern(service: NsdServiceInfo) {
+        nsdManager.registerServiceInfoCallback(
+            service,
+            context.mainExecutor,
+            object : NsdManager.ServiceInfoCallback {
+                override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {
+                    Log.e(TAG, "Service info callback registration failed: Error code: $errorCode")
+                    resolveNextInQueue()
+                }
 
-            override fun onServiceResolved(service: NsdServiceInfo) {
-                println("Resolve Succeeded: $service")
+                override fun onServiceUpdated(serviceInfo: NsdServiceInfo) {
+                    Log.d(TAG, "Service updated: $serviceInfo")
+                    resolvedNsdServices.add(serviceInfo)
+                    onNsdServiceResolved(serviceInfo)
+                    nsdManager.unregisterServiceInfoCallback(this)
+                    resolveNextInQueue()
+                }
 
-                // Register the newly resolved service into our list of resolved services
-                resolvedNsdServices.add(service)
+                override fun onServiceLost() {
+                    Log.d(TAG, "Service lost during resolution")
+                    onNsdServiceLost(service)
+                    resolveNextInQueue()
+                }
 
-                // Process the newly resolved service
-                onNsdServiceResolved(service)
+                override fun onServiceInfoCallbackUnregistered() {
+                    Log.d(TAG, "Service info callback unregistered")
+                }
+            }
+        )
+    }
 
-                // Process the next service waiting to be resolved
+    @Suppress("DEPRECATION")
+    private fun resolveServiceLegacy(service: NsdServiceInfo) {
+        nsdManager.resolveService(service, object : NsdManager.ResolveListener {
+            override fun onServiceResolved(resolvedService: NsdServiceInfo) {
+                Log.d(TAG, "Service resolved: $resolvedService")
+                resolvedNsdServices.add(resolvedService)
+                onNsdServiceResolved(resolvedService)
                 resolveNextInQueue()
             }
 
-            @RequiresApi(Build.VERSION_CODES.N)
             override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                println("Resolve failed: $serviceInfo - Error code: $errorCode")
-
-                when (errorCode) {
-                    NsdManager.FAILURE_ALREADY_ACTIVE -> {
-                        // A resolve request for the same service is already in progress
-                        // Do not add the service to the pending queue and process the next service
-                        resolveNextInQueue()
-                    }
-                    else -> {
-                        // Remove the failed service from the pending services queue
-                        pendingNsdServices.removeIf { it.serviceName == serviceInfo.serviceName }
-
-                        // Trigger a new discovery request to refresh the list of services
-                        discoverServices()
-
-                        // Process the next service waiting to be resolved
-                        resolveNextInQueue()
-                    }
-                }
+                Log.e(TAG, "Resolve failed: $serviceInfo - Error code: $errorCode")
+                resolveNextInQueue()
             }
-        }
+        })
     }
 
-    // Start discovering services on the network
-    fun discoverServices() {
-        // Cancel any existing discovery request
-        stopDiscovery()
-
-        initializeDiscoveryListener()
-
-        // Start looking for available audio channels in the network
-        nsdManager?.discoverServices(NSD_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
-    }
-
-    // Stop DNS-SD service discovery
-    fun stopDiscovery() {
-        if (discoveryListener != null) {
-            nsdManager?.stopServiceDiscovery(discoveryListener)
-            discoveryListener = null
-        }
-    }
-
-    // Resolve next NSD service pending resolution
     private fun resolveNextInQueue() {
-        // Get the next NSD service waiting to be resolved from the queue
-        val nextNsdService = pendingNsdServices.poll()
+        val nextNsdService = pendingNsdServices.firstOrNull()
         if (nextNsdService != null) {
-            // There was one. Send to be resolved.
-            nsdManager?.resolveService(nextNsdService, resolveListener)
-        }
-        else {
-            // There was no pending service. Release the flag
+            pendingNsdServices.remove(nextNsdService)
+            resolveService(nextNsdService)
+        } else {
             resolveListenerBusy.set(false)
         }
     }
 
-    // Function to be overriden with custom logic for new service resolved
     abstract fun onNsdServiceResolved(service: NsdServiceInfo)
-
-    // Function to be overriden with custom logic for service lost
     abstract fun onNsdServiceLost(service: NsdServiceInfo)
 }

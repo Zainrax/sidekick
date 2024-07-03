@@ -130,7 +130,7 @@ const DropdownInput: Component<DropdownInputProps> = (props) => {
               </div>
               <Show when={saving() === "saved"}>
                 <p class="pb-1 text-sm text-green-500">
-                  The device will be rebooted to apply the changes.
+                  Group has been changed!
                 </p>
               </Show>
               <Show when={error()}>

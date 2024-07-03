@@ -55,7 +55,6 @@ function Header() {
           });
         } else {
           setBackNav();
-          App.removeAllListeners();
           App.addListener("backButton", () => {
             if (location.pathname !== "/devices") {
               navigate("/devices");

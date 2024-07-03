@@ -1,4 +1,4 @@
-import { Motion, Presence } from "@motionone/solid";
+//import { Motion, Presence } from "@motionone/solid";
 import { JSXElement, Show } from "solid-js";
 
 interface CircleButtonProps {
@@ -19,6 +19,7 @@ function CircleButton(props: CircleButtonProps) {
         class="mb-2 h-20 w-20 rounded-full bg-white p-4 shadow-md"
         onClick={props.onClick}
       >
+        {/** 
         <Presence exitBeforeEnter>
           <Show
             when={props.loading}
@@ -62,6 +63,7 @@ function CircleButton(props: CircleButtonProps) {
             </Show>
           </Show>
         </Presence>
+      **/}
       </button>
       <p class="text-gray-500">
         {props.loading ? props.loadingText : props.text}

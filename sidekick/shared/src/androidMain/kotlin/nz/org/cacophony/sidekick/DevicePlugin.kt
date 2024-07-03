@@ -1,4 +1,5 @@
 package nz.org.cacophony.sidekick
+import NsdHelper
 import android.app.Activity.RESULT_OK
 import android.content.Context
 import android.net.ConnectivityManager
@@ -33,6 +34,7 @@ class DevicePlugin: Plugin() {
     var currNetworkCallback: ConnectivityManager.NetworkCallback? = null
     private var cm: ConnectivityManager? = null;
     private lateinit var multicastLock:WifiManager.MulticastLock
+    private var isDiscovering: Boolean = false;
 
 
     override fun load() {
@@ -49,17 +51,21 @@ class DevicePlugin: Plugin() {
 
     @PluginMethod
     fun discoverDevices(call: PluginCall) {
+        if (isDiscovering) {
+            call.reject("Currently discovering")
+        }
         try {
             callQueue[call.callbackId] = CallType.DISCOVER
             multicastLock.acquire()
-            // check if nsdHelper is already initialized
+
             if (!::nsdHelper.isInitialized) {
                 nsdHelper = object : NsdHelper(context) {
                     override fun onNsdServiceResolved(service: NsdServiceInfo) {
                         val serviceJson = JSObject().apply {
                             val endpoint = "${service.serviceName}.local"
                             put("endpoint", endpoint)
-                                put("host", service.host.hostAddress)
+                            put("host", service.host.hostAddress)
+                            put("port", service.port)
                         }
                         notifyListeners("onServiceResolved", serviceJson)
                     }
@@ -73,12 +79,15 @@ class DevicePlugin: Plugin() {
                     }
                 }
                 nsdHelper.initializeNsd()
-                nsdHelper.discoverServices()
             }
-            call.resolve()
 
+            nsdHelper.discoverServices()
+            call.resolve()
         } catch (e: Exception) {
-            call.reject(e.toString())
+            call.reject("Error discovering devices: ${e.message}")
+            isDiscovering = false
+        } finally {
+            multicastLock.release()
         }
     }
 
@@ -88,8 +97,8 @@ class DevicePlugin: Plugin() {
         val result = JSObject()
         try {
             nsdHelper.stopDiscovery()
-            multicastLock.release()
 
+            isDiscovering = false
             result.put("success", true)
             call.resolve(result)
         } catch (e: Exception) {
@@ -326,6 +335,31 @@ class DevicePlugin: Plugin() {
         call.resolve()
     }
 
+    @PluginMethod
+    fun hasConnection(call: PluginCall) {
+        val result = JSObject()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val isConnected = cm?.getNetworkCapabilities(wifiNetwork)
+                    ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                    ?: false
+
+                result.put("success", true)
+                result.put("connected", isConnected)
+            } else {
+                val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                val wifiInfo = wifiManager.connectionInfo
+                val isConnected = wifiInfo.ssid == "\"bushnet\""
+
+                result.put("success", true)
+                result.put("connected", isConnected)
+            }
+        } catch (e: Exception) {
+            result.put("success", false)
+            result.put("message", e.message)
+        }
+        call.resolve(result)
+    }
     @PluginMethod
     fun reregisterDevice(call: PluginCall) {
         device.reregister(pluginCall(call))

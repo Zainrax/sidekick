@@ -12,7 +12,7 @@ import { ReactiveMap, ReactiveWeakMap } from "@solid-primitives/map";
 import { createStore } from "solid-js/store";
 import { debounce, leading, throttle } from "@solid-primitives/scheduled";
 import { ReactiveSet } from "@solid-primitives/set";
-import { createEffect, createResource, createSignal } from "solid-js";
+import { createEffect, createResource, createSignal, onMount } from "solid-js";
 import { z } from "zod";
 import { GoToPermissions } from "~/components/GoToPermissions";
 import { Coords, Location } from "~/database/Entities/Location";
@@ -21,6 +21,7 @@ import { logError, logSuccess, logWarning } from "../Notification";
 import { useStorage } from "../Storage";
 import { isWithinRange } from "../Storage/location";
 import DeviceCamera from "./Camera";
+import { DeviceSettingsModal } from "~/components/DeviceSettings";
 
 const WifiNetwork = z
   .object({
@@ -41,7 +42,21 @@ const WifiNetwork = z
     };
   });
 export type WifiNetwork = z.infer<typeof WifiNetwork>;
-
+async function retryOperation<T>(
+  operation: () => Promise<T>,
+  retries = 3,
+  delay = 1000
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (retries > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return retryOperation(operation, retries - 1, delay * 2);
+    }
+    throw error;
+  }
+}
 export type DeviceId = string;
 export type DeviceName = string;
 export type DeviceHost = string;
@@ -91,11 +106,11 @@ export interface DevicePlugin {
   addListener(
     call: "onServiceResolved",
     callback: (res: DeviceService) => void
-  ): Promise<PluginListenerHandle>;
+  ): PluginListenerHandle;
   addListener(
     call: "onServiceLost",
     callback: (res: { endpoint: string }) => void
-  ): Promise<PluginListenerHandle>;
+  ): PluginListenerHandle;
   discoverDevices(): Promise<void>;
   stopDiscoverDevices(): Promise<void>;
   checkDeviceConnection(options: DeviceUrl): Result;
@@ -176,7 +191,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   // Callback ID is used to determine if the device is currently discovering
   const [callback, setCallback] =
     createSignal<[PluginListenerHandle, PluginListenerHandle]>();
-  const isDiscovering = () => callback()?.length ?? false;
+  const [isDiscovering, setIsDiscovering] = createSignal(false);
 
   const setCurrRecs = async (device: ConnectedDevice) =>
     deviceRecordings.set(device.id, await getRecordings(device));
@@ -273,126 +288,153 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const [connectingToDevice, setConnectingToDevice] = createSignal<string[]>(
     []
   );
+  const handleServiceResolved = async (newDevice: DeviceService) => {
+    if (!newDevice) return;
 
-  const startDiscovery = async () => {
-    console.log("Starting discovery", isDiscovering());
-    if (isDiscovering()) return;
-    const connectedDevices: ConnectedDevice[] = [];
-    // Clear devices that have been connected for more than 10 minutes
-    for (const device of devices.values()) {
-      const timeDiff = new Date().getTime() - device.timeFound.getTime();
-      const tenMinutes = 600000;
-      if (timeDiff > tenMinutes) {
-        devices.delete(device.id);
+    const existingDevice = [...devices.values()].find(
+      (d) =>
+        d.endpoint.split("-")[0] === newDevice.endpoint &&
+        d.host === newDevice.host
+    );
+
+    if (existingDevice) return;
+
+    if (connectingToDevice().includes(newDevice.endpoint)) return;
+
+    setConnectingToDevice((prev) => [...prev, newDevice.endpoint]);
+
+    try {
+      for (let i = 0; i < 3; i++) {
+        const connectedDevice = await retryOperation(() =>
+          endpointToDevice(newDevice.endpoint, newDevice.host)
+        );
+
+        if (connectedDevice) {
+          // Remove any devices with the same saltId
+          for (const device of devices.values()) {
+            if (
+              !device.isConnected &&
+              device.saltId === connectedDevice.saltId
+            ) {
+              devices.delete(device.id);
+              break;
+            }
+          }
+          devices.set(connectedDevice.id, connectedDevice);
+          startDeviceHeartbeat(connectedDevice.id);
+          break;
+        }
       }
+    } catch (error) {
+      logError({
+        error,
+        message: `Unable to connect to discovered device: ${JSON.stringify(
+          newDevice
+        )}`,
+      });
+    } finally {
+      setConnectingToDevice((prev) =>
+        prev.filter((d) => d !== newDevice.endpoint)
+      );
+    }
+  };
+  const deviceHeartbeats = new Map<DeviceId, NodeJS.Timeout>();
+  const stopDeviceHeartbeat = (deviceId: DeviceId) => {
+    const interval = deviceHeartbeats.get(deviceId);
+    if (interval) {
+      clearInterval(interval);
+      deviceHeartbeats.delete(deviceId);
+    }
+  };
+  const handleServiceLost = async (lostDevice: { endpoint: string }) => {
+    const device = [...devices.values()].find(
+      (d) => d.endpoint === lostDevice.endpoint
+    );
+    if (!device) return;
+
+    devices.set(device.id, { ...device, isConnected: false });
+    stopDeviceHeartbeat(device.id);
+  };
+
+  const startDeviceHeartbeat = (deviceId: DeviceId) => {
+    stopDeviceHeartbeat(deviceId);
+    const heartbeatInterval = setInterval(async () => {
+      try {
+        const device = devices.get(deviceId);
+        if (device && device.isConnected) {
+          const isConnected = await isDeviceConnected(device);
+          if (!isConnected) {
+            devices.set(deviceId, { ...device, isConnected: false });
+            stopDeviceHeartbeat(deviceId);
+          }
+        } else {
+          stopDeviceHeartbeat(deviceId);
+        }
+      } catch (error) {
+        logError({
+          error,
+          message: `Error during heartbeat for device ${deviceId}`,
+        });
+      }
+    }, 30000);
+    deviceHeartbeats.set(deviceId, heartbeatInterval);
+  };
+  const startDiscovery = async () => {
+    if (isDiscovering()) return;
+    debugger;
+    try {
+      const res = await DevicePlugin.discoverDevices();
+      setIsDiscovering(true);
+    } catch (e) {
+      setIsDiscovering(false);
+      return;
     }
 
-    // Check if devices are still connected
-    for (const device of devices.values()) {
-      const deviceInfo = await DevicePlugin.getDeviceInfo({ url: device.url });
-      if (deviceInfo.success) {
-        const info = DeviceInfoSchema.safeParse(JSON.parse(deviceInfo.data));
-        if (info.success) {
-          if (info.data.deviceID.toString() === device.id) {
+    try {
+      const connectedDevices: ConnectedDevice[] = [];
+
+      // Clear old devices
+      for (const device of devices.values()) {
+        const timeDiff = new Date().getTime() - device.timeFound.getTime();
+        if (timeDiff > 600000) {
+          // 10 minutes
+          devices.delete(device.id);
+          stopDeviceHeartbeat(device.id);
+        }
+      }
+
+      // Check device connections
+      for (const device of devices.values()) {
+        const deviceInfo = await retryOperation(() =>
+          DevicePlugin.getDeviceInfo({ url: device.url })
+        );
+        if (deviceInfo.success) {
+          const info = DeviceInfoSchema.safeParse(JSON.parse(deviceInfo.data));
+          if (info.success && info.data.deviceID.toString() === device.id) {
             const currDevice = {
               ...device,
               isConnected: true,
-            } satisfies ConnectedDevice;
+            } as ConnectedDevice;
             devices.set(device.id, currDevice);
-            clearUploaded(currDevice);
+            await clearUploaded(currDevice);
             connectedDevices.push(currDevice);
+            startDeviceHeartbeat(currDevice.id);
             continue;
           }
         }
+        devices.set(device.id, { ...device, isConnected: false });
+        stopDeviceHeartbeat(device.id);
       }
-
-      // modify device to be disconnected
-      devices.set(device.id, {
-        ...device,
-        isConnected: false,
-      });
+    } catch (error) {
+      logError({ error, message: "Error during device discovery" });
     }
-
-    if (isDiscovering()) {
-      try {
-        await DevicePlugin.stopDiscoverDevices();
-      } catch (e) {
-        console.log("Error stopping discovery");
-      }
-    }
-    const resolveListener = await DevicePlugin.addListener(
-      "onServiceResolved",
-      async (newDevice) => {
-        if (
-          !newDevice ||
-          connectedDevices.some(
-            (d) =>
-              d.endpoint.split("-")[0] === newDevice.endpoint &&
-              d.host === newDevice.host
-          )
-        )
-          return;
-
-        if (connectingToDevice().includes(newDevice.endpoint)) return;
-
-        for (let i = 0; i < 3; i++) {
-          try {
-            setConnectingToDevice([
-              ...connectingToDevice(),
-              newDevice.endpoint,
-            ]);
-            const connectedDevice = await endpointToDevice(
-              newDevice.endpoint,
-              newDevice.host
-            );
-
-            if (connectedDevice) {
-              // Remove any devices with the same saltId
-              for (const device of devices.values()) {
-                if (
-                  !device.isConnected &&
-                  device.saltId === connectedDevice.saltId
-                ) {
-                  devices.delete(device.id);
-                  break;
-                }
-              }
-              setConnectingToDevice(
-                connectingToDevice().filter((d) => d !== newDevice.endpoint)
-              );
-              devices.set(connectedDevice.id, connectedDevice);
-              return;
-            }
-          } catch (e) {
-            logWarning({
-              message: `Unable to connect to discovered device`,
-              details: JSON.stringify(newDevice),
-            });
-          }
-        }
-        setConnectingToDevice(
-          connectingToDevice().filter((d) => d !== newDevice.endpoint)
-        );
-      }
-    );
-
-    const lostListener = await DevicePlugin.addListener(
-      "onServiceLost",
-      async (lostDevice) => {
-        const device = [...devices.values()].find(
-          (d) => d.endpoint === lostDevice.endpoint
-        );
-        if (!device) return;
-        devices.set(device.id, {
-          ...device,
-          isConnected: false,
-        });
-      }
-    );
-    await DevicePlugin.discoverDevices();
-
-    setCallback([resolveListener, lostListener]);
   };
+
+  onMount(async () => {
+    DevicePlugin.addListener("onServiceResolved", handleServiceResolved);
+    DevicePlugin.addListener("onServiceLost", handleServiceLost);
+    startDiscovery();
+  });
 
   const stopDiscovery = async () => {
     const id = callback();
@@ -1184,6 +1226,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
+      console.log("Modem", res);
       return ConnectionRes.parse(JSON.parse(res.data)).connected;
     } catch (error) {
       console.error(error);
