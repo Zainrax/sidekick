@@ -19,14 +19,15 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     public var identifier: String = "DevicePlugin"
     public var jsName: String = "Device"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "discoverDevices",returnType: CAPPluginReturnCallback),
+        CAPPluginMethod(name: "discoverDevices",returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopDiscoverDevices",returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "checkDeviceConnection",returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDeviceInfo",returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setDeviceConfig",returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDeviceConfig",returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setLowPowerMode",returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "connectToDeviceAP",returnType: CAPPluginReturnCallback),
+        CAPPluginMethod(name: "connectToDeviceAP", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "checkIsAPConnected", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDeviceLocation",returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setDeviceLocation",returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getRecordings",returnType: CAPPluginReturnPromise),
@@ -43,13 +44,13 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "disconnectFromDeviceAP",returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "turnOnModem",returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "reregisterDevice",returnType: CAPPluginReturnPromise),
-        ]
+    ]
     
     enum CallType {
-            case permissions
-            case singleUpdate
-            case discover
-        }
+        case permissions
+        case singleUpdate
+        case discover
+    }
     enum Result {
         case success
         case failed
@@ -63,88 +64,150 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     func createBrowser() -> NWBrowser {
         return NWBrowser(for: .bonjour(type: type, domain: domain), using: .tcp)
     }
-    var serviceBrowser: NWBrowser?
-    
+    private var serviceBrowser: NWBrowser?
+    private var isDiscovering = false
+    func getIPFromHost(_ host: Network.NWEndpoint.Host) -> String? {
+        switch host {
+        case .ipv4(let ipv4Address):
+            return ipv4Address.debugDescription
+        case .ipv6(let ipv6Address):
+            var ipString = ipv6Address.debugDescription
+            // Remove the scope ID if present
+            if let percentIndex = ipString.firstIndex(of: "%") {
+                ipString = String(ipString[..<percentIndex])
+            }
+            return ipString
+        case .name(let hostname, _):
+            return hostname
+        @unknown default:
+            return nil
+        }
+    }
     @objc func discoverDevices(_ call: CAPPluginCall) {
-        call.keepAlive = true
-        callQueue[call.callbackId] = .discover
-        // check if we has network permissions iOS for 13+
-        requestPermissions(call)
-
-
-        serviceBrowser = createBrowser()
-
-        serviceBrowser?.browseResultsChangedHandler = {(res: Set<NWBrowser.Result>, old: Set<NWBrowser.Result.Change>) -> Void in
-            res.forEach { service in
-                call.resolve(["endpoint": service.endpoint.debugDescription])
+        if isDiscovering {
+            call.reject("Currently discovering")
+            return
+        }
+        
+        let parameters = NWParameters()
+        parameters.requiredInterfaceType = .wifi
+        
+        serviceBrowser = NWBrowser(for: .bonjour(type: "_cacophonator-management._tcp", domain: "local."), using: parameters)
+        serviceBrowser?.stateUpdateHandler = { newState in
+            switch newState {
+            case .failed(let error):
+                call.reject("Error discovering devices: \(error.localizedDescription)")
+            case .ready:
+                break
+            default:
+                break
             }
         }
-        serviceBrowser?.start(queue: .global())
+        
+        serviceBrowser?.browseResultsChangedHandler = { [weak self] results, changes in
+            for change in changes {
+                switch change {
+                case .added(let result):
+                    let endpoint = switch result.endpoint {
+                    case .service(let name, _, _, _):
+                        "\(name).local"
+                    default:
+                        result.endpoint.debugDescription
+                    }
+                    self?.notifyListeners("onServiceResolved", data: ["endpoint": endpoint])
+                case .identical:
+                    break
+                case .removed(let result):
+                    let endpoint = switch result.endpoint {
+                    case .service(let name, _, _, _):
+                        "\(name).local"
+                    default:
+                        result.endpoint.debugDescription
+                    }
+                    let data = ["endpoint": endpoint]
+                    self?.notifyListeners("onServiceLost", data: data)
+                case .changed(old: _, new: let new, flags: _):
+                    let endpoint = switch new.endpoint {
+                    case .service(let name, _, _, _):
+                        "\(name).local"
+                    default:
+                        new.endpoint.debugDescription
+                    }
+                    self?.notifyListeners("onServiceResolved", data: ["endpoint": endpoint])
+                    break
+                @unknown default:
+                    break
+                }
+                
+            }
+        }
+        
+        serviceBrowser?.start(queue: .main)
     }
+
+    
     @objc func stopDiscoverDevices(_ call: CAPPluginCall) {
-        guard let bridge = self.bridge else { return call.reject("Could not access bridge") }
-        guard let id = call.getString("id") else { return call.reject("No Id Found")}
-        bridge.releaseCall(withID: id)
-        serviceBrowser?.cancel()
-        call.resolve(["success": true, "id": id])
+        isDiscovering = false
+        call.resolve()
     }
     @objc func checkDeviceConnection(_ call: CAPPluginCall) {
         device.checkDeviceConnection(call: pluginCall(call: call))
     }
     
     @objc func connectToDeviceAP(_ call: CAPPluginCall) {
-        guard let bridge = self.bridge else { return call.reject("Could not access bridge") }
-        call.keepAlive = true
-        callQueue[call.callbackId] = .discover
-        NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
-        configuration.joinOnce = false
-        
-        NEHotspotConfigurationManager.shared.apply(configuration) { error in
-            if let error = error {
-                call.resolve(["success": false, "error": "\(error.localizedDescription)"])
-                bridge.releaseCall(withID: call.callbackId)
+        guard self.bridge != nil else { return }
+
+        // First, check if already connected to bushnet
+        checkCurrentConnection { isConnected in
+            if isConnected {
+                self.notifyListeners("onAccessPointChange", data: ["status": "connected"])
                 return
             }
-            if #available(iOS 14.0, *) {
-                NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
-                    if let currentSSID = currentConfiguration?.ssid, currentSSID == "bushnet" {
-                        // Successfully connected to the desired network
-                        call.resolve(["success": true, "data": "connected"])
-                    } else {
-                        // The device might have connected to a different network
-                        call.resolve(["success": false, "error": "Did not connect to the desired network"])
-                    }
-                }
-            } else {
-                // Fallback on earlier versions
-                guard let interfaceNames = CNCopySupportedInterfaces() else {
-                    call.resolve(["success": false, "error": "No interfaces found"])
+
+            // If not connected, proceed with connection attempt
+            NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
+            self.configuration.joinOnce = false
+            
+            NEHotspotConfigurationManager.shared.apply(self.configuration) { error in
+                if let error = error {
+                    self.notifyListeners("onAccessPointChange", data: ["status": "error", "error": error.localizedDescription])
                     return
                 }
-                guard let interfaceNames = CNCopySupportedInterfaces() else {
-                    call.resolve(["success": false, "error": "No interfaces found"])
-                    return
-                }
-                guard let swiftInterfaces = (interfaceNames as NSArray) as? [String] else {
-                    call.resolve(["success": false, "error": "No interfaces found"])
-                    return
-                }
-                for name in swiftInterfaces {
-                    guard let info = CNCopyCurrentNetworkInfo(name as CFString) as? [String: AnyObject] else {
-                        call.resolve(["success": false, "error": "Did not connect to the desired network"])
-                        return
+                
+                if #available(iOS 14.0, *) {
+                    NEHotspotHelper.register(options: [:], queue: DispatchQueue.main) { (command) in
+                        if command.commandType == .filterScanList {
+                            // Check if we've disconnected from bushnet
+                            if !(command.networkList?.contains(where: { $0.ssid == "bushnet" }) ?? false) {
+                                DispatchQueue.main.async {
+                                    self.notifyListeners("onAccessPointChange", data: ["status": "disconnected"])
+                                }
+                            }
+                        }
                     }
                     
-                    guard let ssid = info[kCNNetworkInfoKeySSID as String] as? String else {
-                        call.resolve(["success": false, "error": "Did not connect to the desired network"])
-                        return
+                    // Check if connection was successful
+                    self.checkCurrentConnection { isConnected in
+                        if isConnected {
+                            self.notifyListeners("onAccessPointChange", data: ["status": "connected"])
+                        } else {
+                            self.notifyListeners("onAccessPointChange", data: ["status": "disconnected"])
+                        }
                     }
-                        call.resolve(["success": true, "data": "connected"])
+                } else {
+                    // Fallback for iOS 13 and earlier
+                    self.checkCurrentConnection { isConnected in
+                        if isConnected {
+                            self.notifyListeners("onAccessPointChange", data: ["status": "connected"])
+                        } else {
+                            self.notifyListeners("onAccessPointChange", data: ["status": "disconnected"])
+                        }
+                    }
                 }
             }
         }
-        
     }
+    
     
     @objc func disconnectFromDeviceAP(_ call: CAPPluginCall) {
         guard let bridge = self.bridge else { return call.reject("Could not access bridge") }
@@ -154,7 +217,6 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
 
         // Add a 5 second delay before checking the connection status
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
             if #available(iOS 14.0, *) {
                 NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
                     if let currentSSID = currentConfiguration?.ssid, currentSSID == "bushnet" {
@@ -202,10 +264,42 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                 }
                 bridge.releaseCall(withID: call.callbackId)
             }
-
-        }
     }
 
+    @objc private func checkCurrentConnection(completion: @escaping (Bool) -> Void) {
+            if #available(iOS 14.0, *) {
+                NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
+                    let isConnected = currentConfiguration?.ssid == "bushnet"
+                    completion(isConnected)
+                }
+            } else {
+                // Fallback for iOS 13 and earlier
+                guard let interfaceNames = CNCopySupportedInterfaces() as? [String] else {
+                    completion(false)
+                    return
+                }
+                
+                for name in interfaceNames {
+                    guard let info = CNCopyCurrentNetworkInfo(name as CFString) as? [String: Any],
+                          let ssid = info[kCNNetworkInfoKeySSID as String] as? String else {
+                        continue
+                    }
+                    
+                    if ssid == "bushnet" {
+                        completion(true)
+                        return
+                    }
+                }
+                
+                completion(false)
+            }
+        }
+    
+    @objc func checkIsAPConnected(_ call: CAPPluginCall) {
+        checkCurrentConnection { isConnected in
+            call.resolve(["connected": isConnected])
+        }
+    }
 
 
     @objc func turnOnModem(_ call: CAPPluginCall) {

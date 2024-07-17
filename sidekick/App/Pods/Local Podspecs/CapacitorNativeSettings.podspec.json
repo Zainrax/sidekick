@@ -1,13 +1,13 @@
 {
   "name": "CapacitorNativeSettings",
-  "version": "5.0.1",
+  "version": "6.0.0",
   "summary": "Capacitor plugin to open native settings screens for android and iOS",
   "license": "MIT",
   "homepage": "git+https://github.com/RaphaelWoude/capacitor-native-settings.git",
   "authors": "Raphael vd Woude",
   "source": {
     "git": "git+https://github.com/RaphaelWoude/capacitor-native-settings.git",
-    "tag": "5.0.1"
+    "tag": "6.0.0"
   },
   "source_files": "ios/Plugin/**/*.{swift,h,m,c,cc,mm,cpp}",
   "platforms": {

@@ -16,6 +16,7 @@
 
 #include "Crashlytics/Crashlytics/Helpers/FIRCLSFeatures.h"
 
+extern NSString *const FIRCLSCustomFatalIndicatorFile;
 extern NSString *const FIRCLSReportBinaryImageFile;
 extern NSString *const FIRCLSReportExceptionFile;
 extern NSString *const FIRCLSReportCustomExceptionAFile;
@@ -35,6 +36,7 @@ extern NSString *const FIRCLSReportInternalIncrementalKVFile;
 extern NSString *const FIRCLSReportInternalCompactedKVFile;
 extern NSString *const FIRCLSReportUserIncrementalKVFile;
 extern NSString *const FIRCLSReportUserCompactedKVFile;
+extern NSString *const FIRCLSReportRolloutsFile;
 
 @class FIRCLSFileManager;
 
@@ -74,7 +76,7 @@ extern NSString *const FIRCLSReportUserCompactedKVFile;
 @property(nonatomic, copy, readonly) NSString *installID;
 
 /**
- * Returns YES if report contains a signal, mach exception or unhandled exception record, NO
+ * Returns true if report contains a signal, mach exception or unhandled exception record, false
  * otherwise.
  **/
 @property(nonatomic, assign, readonly) BOOL isCrash;

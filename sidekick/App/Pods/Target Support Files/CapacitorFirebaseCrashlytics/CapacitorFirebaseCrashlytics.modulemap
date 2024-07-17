@@ -1,0 +1,6 @@
+framework module CapacitorFirebaseCrashlytics {
+  umbrella header "CapacitorFirebaseCrashlytics-umbrella.h"
+
+  export *
+  module * { export * }
+}

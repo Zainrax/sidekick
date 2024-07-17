@@ -181,7 +181,6 @@ function SetupWizard(): JSX.Element {
     | "camera";
   const currentStep = () => searchParams.step as Steps;
   const setStep = (step: Steps): void => {
-    debugger;
     setSearchParams({ step });
   };
   const close = () => setSearchParams({ step: "" });
@@ -246,6 +245,7 @@ function SetupWizard(): JSX.Element {
     }
   };
   createEffect(() => {
+    console.log("CONNECTION", connectionStatus());
     if (
       connectionStatus() === "connected" &&
       (currentStep() === "directConnect" || currentStep() === "chooseDevice")
@@ -276,8 +276,20 @@ function SetupWizard(): JSX.Element {
     </div>
   );
   const getInstructions = (deviceType: DeviceType): JSX.Element => {
-    if (deviceType === "AI Doc Cam / Bird Monitor") {
-      return (
+    return (
+      <Show
+        when={deviceType === "AI Doc Cam / Bird Monitor"}
+        fallback={
+          <ol class="mb-4 list-inside list-decimal">
+            <li>Wait for the light on your device shows indicates 1 flash</li>
+            <li>
+              Press the <span class="text-blue-500">"Connect to Camera"</span>{" "}
+              button below.
+            </li>
+            <li>If prompted, confirm the connection to "bushnet"</li>
+          </ol>
+        }
+      >
         <ol class="mb-4 list-inside list-decimal">
           <li>Plug in and ensure the device is on.</li>
           <li>
@@ -290,19 +302,8 @@ function SetupWizard(): JSX.Element {
           </li>
           <li>If prompted, confirm the connection to "bushnet"</li>
         </ol>
-      );
-    } else {
-      return (
-        <ol class="mb-4 list-inside list-decimal">
-          <li>Wait for the light on your device shows indicates 1 flash</li>
-          <li>
-            Press the <span class="text-blue-500">"Connect to Camera"</span>{" "}
-            button below.
-          </li>
-          <li>If prompted, confirm the connection to "bushnet"</li>
-        </ol>
-      );
-    }
+      </Show>
+    );
   };
 
   const DirectConnectStep = (): JSX.Element => (

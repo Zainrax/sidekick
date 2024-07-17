@@ -28,6 +28,7 @@ import { headerMap } from "~/components/Header";
 import SetupWizard from "~/components/SetupWizard";
 import { useDevice } from "~/contexts/Device";
 import { useStorage } from "~/contexts/Storage";
+import { useUserContext } from "~/contexts/User";
 
 interface DeviceDetailsProps {
   id: string;
@@ -41,10 +42,13 @@ interface DeviceDetailsProps {
 function DeviceDetails(props: DeviceDetailsProps) {
   const context = useDevice();
   const storage = useStorage();
+  const userContext = useUserContext();
   const savedRecs = () =>
     storage
       .savedRecordings()
       .filter((rec) => rec.device === props.id && !rec.isUploaded);
+  const device = () => context.devices.get(props.id);
+  const needsSetup = () => device()?.group === "new";
   const deviceRecs = () => context.deviceRecordings.get(props.id) ?? [];
   const savedEvents = () =>
     storage
@@ -64,7 +68,14 @@ function DeviceDetails(props: DeviceDetailsProps) {
     debounce,
     () => {
       if (!props.isConnected) return;
-      setParams({ deviceSettings: props.id });
+      if (!userContext.dev() && needsSetup()) {
+        setParams({
+          setupDevice: props.id,
+          step: "wifiSetup",
+        });
+      } else {
+        setParams({ deviceSettings: props.id });
+      }
     },
     800
   );
@@ -78,7 +89,13 @@ function DeviceDetails(props: DeviceDetailsProps) {
       disabled={!props.isConnected}
       action={
         <Show when={props.isConnected}>
-          <button class="text-blue-500" onClick={() => openDeviceInterface()}>
+          <button
+            class="flex items-center text-blue-500"
+            onClick={() => openDeviceInterface()}
+          >
+            <Show when={needsSetup()}>
+              <p>Setup</p>
+            </Show>
             <RiArrowsArrowRightSLine size={32} />
           </button>
         </Show>

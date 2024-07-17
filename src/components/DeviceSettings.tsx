@@ -1757,9 +1757,15 @@ export function GroupSelect(props: SettingProps) {
   const id = () => props.deviceId;
   const device = () => context.devices.get(id());
   const groupName = () => device()?.group ?? "";
-
+  onMount(() => {
+    const interval = setInterval(async () => {
+      await user.refetchGroups();
+    }, 5000);
+    onCleanup(() => {
+      clearInterval(interval);
+    });
+  });
   const setGroup = async (v: string) => {
-    await user.refetchGroups();
     if (!user.groups()?.some((g) => g.groupName === v)) {
       const res = await user.createGroup(v);
       if (!res.success) {
@@ -1769,9 +1775,9 @@ export function GroupSelect(props: SettingProps) {
     const token = user.data()?.token;
     if (token) {
       const res = await context.changeGroup(id(), v, token);
-      if (res) {
-        await context.rebootDevice(id());
-      }
+      // if (res) {
+      //   await context.rebootDevice(id());
+      // }
     }
   };
 
@@ -2014,6 +2020,7 @@ export function DeviceSettingsModal() {
   const setCurrNav = (nav: ReturnType<typeof navItems>[number]) => {
     console.log(nav);
     setParams({ tab: nav });
+    console.log("Params", params);
   };
   return (
     <Show when={show()}>
