@@ -29,7 +29,6 @@ abstract class NsdHelper(private val context: Context) {
     }
 
     fun discoverServices() {
-        stopDiscovery()
         nsdManager.discoverServices(NSD_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
     }
 

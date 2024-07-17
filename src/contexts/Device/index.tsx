@@ -119,12 +119,11 @@ export interface DevicePlugin {
   addListener(
     call: "onServiceResolved",
     callback: (res: DeviceService) => void
-  ): PluginListenerHandle;
+  ): Promise<PluginListenerHandle>;
   addListener(
     call: "onServiceLost",
     callback: (res: { endpoint: string }) => void
-  ): PluginListenerHandle;
-  connectToDeviceAP(): Promise<void>;
+  ): Promise<PluginListenerHandle>;
   discoverDevices(): Promise<void>;
   stopDiscoverDevices(): Promise<void>;
   checkDeviceConnection(options: DeviceUrl): Result;
@@ -296,6 +295,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     []
   );
   const handleServiceResolved = async (newDevice: DeviceService) => {
+    console.log("DEVICE FOUND:", newDevice);
     if (!newDevice) return;
 
     const existingDevice = [...devices.values()].find(
@@ -304,7 +304,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         d.host === newDevice.host
     );
 
-    if (existingDevice) return;
+    if (existingDevice && existingDevice.isConnected) return;
 
     if (connectingToDevice().includes(newDevice.endpoint)) return;
 
@@ -410,7 +410,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const startDiscovery = async () => {
     if (isDiscovering()) return;
     try {
-      const res = await DevicePlugin.discoverDevices();
+      await DevicePlugin.stopDiscoverDevices();
+      await DevicePlugin.discoverDevices();
       setIsDiscovering(true);
     } catch (e) {
       setIsDiscovering(false);
@@ -423,8 +424,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       // Clear old devices
       for (const device of devices.values()) {
         const timeDiff = new Date().getTime() - device.timeFound.getTime();
-        if (timeDiff > 600000) {
-          // 10 minutes
+        if (!device.isConnected && timeDiff > 600000) {
           devices.delete(device.id);
           stopDeviceHeartbeat(device.id);
         }
@@ -456,11 +456,31 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       logError({ error, message: "Error during device discovery" });
     }
   };
+  const [listeners, setListeners] = createSignal<PluginListenerHandle[]>([]);
+
+  const removeAllListeners = () => {
+    listeners().forEach((listener) => listener.remove());
+    setListeners([]);
+  };
 
   onMount(async () => {
-    DevicePlugin.addListener("onServiceResolved", handleServiceResolved);
-    DevicePlugin.addListener("onServiceLost", handleServiceLost);
+    debugger;
+    removeAllListeners();
+    const serviceResolvedListener = await DevicePlugin.addListener(
+      "onServiceResolved",
+      handleServiceResolved
+    );
+    const serviceLostListener = await DevicePlugin.addListener(
+      "onServiceLost",
+      handleServiceLost
+    );
     startDiscovery();
+
+    onCleanup(() => {
+      serviceResolvedListener.remove();
+      serviceLostListener.remove();
+      removeAllListeners();
+    });
   });
 
   const stopDiscovery = async () => {
@@ -486,7 +506,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         clearUploaded(device);
       }
     },
-    10000
+    1000
   );
 
   const Authorization = "Basic YWRtaW46ZmVhdGhlcnM=";
@@ -941,8 +961,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   const isDeviceConnected = async (device: ConnectedDevice) => {
     const { url } = device;
-    const res = await DevicePlugin.checkDeviceConnection({ url });
-    return res.success;
+    try {
+      const res = await DevicePlugin.checkDeviceConnection({ url });
+      return res.success;
+    } catch (e) {
+      return false;
+    }
   };
 
   const [permission] = createResource(async () => {
@@ -1049,11 +1073,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
-      console.log("NETWORKS Result", res.data);
       if (res.status !== 200) {
         return null;
       }
-      console.log("NETWORKS", res.data);
       const networks = WifiNetwork.array().parse(JSON.parse(res.data));
       return networks
         ? networks
@@ -1205,7 +1227,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           }
         }, 5000);
       });
-      console.log("Connected", connected);
       return connected;
     } catch (error) {
       return false;
@@ -1334,7 +1355,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
-      console.log("MODEM", res);
       return res.status === 200 ? tc2ModemSchema.parse(res.data) : null;
     } catch (error) {
       console.error(error);
@@ -1348,7 +1368,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       if (!device || !device.isConnected) return false;
       const { url } = device;
       const res = await DevicePlugin.turnOnModem({ url, minutes: "5" });
-      console.log("TURN ON", res);
       return res.success;
     } catch (error) {
       console.error(error);
@@ -1404,7 +1423,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
-      console.log("SAVED", savedNetworks);
       if (savedNetworks.status !== 200) return [];
       return z
         .array(
@@ -1439,7 +1457,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         },
       });
       const interfaces = InterfaceSchema.array().parse(JSON.parse(res.data));
-      console.log("INTER", interfaces);
       return res.status === 200 ? interfaces : [];
     } catch (error) {
       console.log(error);
@@ -1620,12 +1637,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
     throw new Error("Could not change group");
   };
-
-  // print current devices
-  createEffect(() => {
-    console.log("DEVICES", devices.values());
-  });
-
   const configDefaultsSchema = z.object({
     // Config is much larger, but only these fields are used
     windows: z

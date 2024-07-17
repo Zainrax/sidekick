@@ -42,6 +42,27 @@ class DevicePlugin: Plugin() {
         device = DeviceInterface(context.applicationContext.filesDir.absolutePath)
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         multicastLock = wifi.createMulticastLock("multicastLock")
+
+        nsdHelper = object : NsdHelper(context) {
+            override fun onNsdServiceResolved(service: NsdServiceInfo) {
+                val serviceJson = JSObject().apply {
+                    val endpoint = "${service.serviceName}.local"
+                    put("endpoint", endpoint)
+                    put("host", service.host.hostAddress)
+                    put("port", service.port)
+                }
+                notifyListeners("onServiceResolved", serviceJson)
+            }
+
+            override fun onNsdServiceLost(service: NsdServiceInfo) {
+                val result = JSObject().apply {
+                    val endpoint = "${service.serviceName}.local"
+                    put("endpoint", endpoint)
+                }
+                notifyListeners("onServiceLost", result)
+            }
+        }
+        nsdHelper.initializeNsd()
     }
 
     enum class CallType {
@@ -53,41 +74,16 @@ class DevicePlugin: Plugin() {
     fun discoverDevices(call: PluginCall) {
         if (isDiscovering) {
             call.reject("Currently discovering")
+            return
         }
         try {
-            callQueue[call.callbackId] = CallType.DISCOVER
+            isDiscovering = true
             multicastLock.acquire()
-
-            if (!::nsdHelper.isInitialized) {
-                nsdHelper = object : NsdHelper(context) {
-                    override fun onNsdServiceResolved(service: NsdServiceInfo) {
-                        val serviceJson = JSObject().apply {
-                            val endpoint = "${service.serviceName}.local"
-                            put("endpoint", endpoint)
-                            put("host", service.host.hostAddress)
-                            put("port", service.port)
-                        }
-                        notifyListeners("onServiceResolved", serviceJson)
-                    }
-
-                    override fun onNsdServiceLost(service: NsdServiceInfo) {
-                        val result = JSObject().apply {
-                            val endpoint = "${service.serviceName}.local"
-                            put("endpoint", endpoint)
-                        }
-                        notifyListeners("onServiceLost", result)
-                    }
-                }
-                nsdHelper.initializeNsd()
-            }
-
             nsdHelper.discoverServices()
             call.resolve()
         } catch (e: Exception) {
             call.reject("Error discovering devices: ${e.message}")
             isDiscovering = false
-        } finally {
-            multicastLock.release()
         }
     }
 
@@ -95,10 +91,16 @@ class DevicePlugin: Plugin() {
     @PluginMethod
     fun stopDiscoverDevices(call: PluginCall) {
         val result = JSObject()
+        if (!isDiscovering) {
+            result.put("success", true)
+            call.resolve(result)
+            return
+        }
         try {
             nsdHelper.stopDiscovery()
 
             isDiscovering = false
+            multicastLock.release()
             result.put("success", true)
             call.resolve(result)
         } catch (e: Exception) {

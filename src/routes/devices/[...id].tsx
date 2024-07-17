@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams } from "@solidjs/router";
 import { Show, onMount } from "solid-js";
-import { headerMap } from "~/components/Header";
+import { useHeaderContext } from "~/components/Header";
 import { useDevice } from "~/contexts/Device";
 import { App } from "@capacitor/app";
 function DeviceSettings() {
@@ -26,8 +26,9 @@ function DeviceSettings() {
   const url = () =>
     (childPath()[1] ? device()?.url + "/" + childPath()[1] : device()?.url) ??
     "/devices";
+  const headerContext = useHeaderContext();
   onMount(() => {
-    headerMap.set(location.pathname, [
+    headerContext?.headerMap.set(location.pathname, [
       "Device Settings",
       undefined,
       `/devices?deviceSettings=${childPath()[0]}`,

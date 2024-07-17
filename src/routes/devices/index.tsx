@@ -24,7 +24,7 @@ import ActionContainer from "~/components/ActionContainer";
 import BackgroundLogo from "~/components/BackgroundLogo";
 import CircleButton from "~/components/CircleButton";
 import { DeviceSettingsModal } from "~/components/DeviceSettings";
-import { headerMap } from "~/components/Header";
+import { useHeaderContext } from "~/components/Header";
 import SetupWizard from "~/components/SetupWizard";
 import { useDevice } from "~/contexts/Device";
 import { useStorage } from "~/contexts/Storage";
@@ -231,12 +231,13 @@ function Devices() {
   const devices = () => [...context.devices.values()];
   const [groupPromptCancelled, setGroupCancelledPrompt] = createSignal(false);
   const [locPromptCancelled, setPromptCancel] = createSignal(false);
+  const headerContext = useHeaderContext();
 
   onMount(() => {
     // Add delete button to header
-    const header = headerMap.get("/devices");
+    const header = headerContext?.headerMap.get("/devices");
     if (!header || header?.[1]) return;
-    headerMap.set("/devices", [
+    headerContext?.headerMap.set("/devices", [
       header[0],
       () => (
         <Show
@@ -264,9 +265,9 @@ function Devices() {
                 }
               }}
               classList={{
-                "text-blue-500": state() === "default",
+                "text-blue-500":
+                  state() === "default" || state() === "disconnected",
                 "text-highlight": state() === "connected",
-                "text-red-500": state() === "disconnected",
               }}
             >
               <RiDeviceRouterFill size={28} />
@@ -304,7 +305,6 @@ function Devices() {
         const devicesToUpdate = devices.filter(
           (val) => !context.locationBeingSet.has(val)
         );
-        debugger;
         if (
           devicesToUpdate.length === 0 ||
           locPromptCancelled() ||

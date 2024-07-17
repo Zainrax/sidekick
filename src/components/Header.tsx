@@ -1,4 +1,5 @@
 import { App } from "@capacitor/app";
+import { createContextProvider } from "@solid-primitives/context";
 import { ReactiveMap } from "@solid-primitives/map";
 import { A, useLocation, useNavigate } from "@solidjs/router";
 import { RiArrowsArrowLeftSLine } from "solid-icons/ri";
@@ -7,16 +8,18 @@ import { JSXElement, createEffect, createSignal } from "solid-js";
 type Header = string;
 type BackLink = string;
 type HeaderButton = () => JSXElement;
-const headerMap = new ReactiveMap<string, [Header, HeaderButton?, BackLink?]>([
-  ["/", ["Devices"]],
-  ["/devices", ["Devices"]],
-  ["/storage", ["Storage"]],
-  ["/storage/recordings", ["Uploaded"]],
-  ["/settings", ["Settings"]],
-  ["/settings/user", ["User"]],
-]);
 
-function Header() {
+export const [HeaderProvider, useHeaderContext] = createContextProvider(() => {
+  const headerMap = new ReactiveMap<string, [Header, HeaderButton?, BackLink?]>(
+    [
+      ["/", ["Devices"]],
+      ["/devices", ["Devices"]],
+      ["/storage", ["Storage"]],
+      ["/storage/recordings", ["Uploaded"]],
+      ["/settings", ["Settings"]],
+      ["/settings/user", ["User"]],
+    ]
+  );
   const location = useLocation();
   const [HeaderButton, setHeaderButton] = createSignal<HeaderButton>();
   const [header, setHeader] = createSignal<string>(
@@ -68,8 +71,7 @@ function Header() {
       setHeader("");
     }
   });
-
-  return (
+  const HeaderElement = () => (
     <div class="pt-safe fixed top-0 z-30 flex w-screen items-center justify-between bg-white px-6 pb-3">
       <div class="flex items-center justify-end">
         <div class="flex w-6 items-center justify-center">{backNav()}</div>
@@ -78,7 +80,5 @@ function Header() {
       {HeaderButton()?.()}
     </div>
   );
-}
-
-export default Header;
-export { headerMap };
+  return { headerMap, HeaderElement };
+});

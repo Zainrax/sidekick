@@ -50,6 +50,7 @@ import { BsWifi1, BsWifi2, BsWifi } from "solid-icons/bs";
 import { useUserContext } from "~/contexts/User";
 import { Frame, Region, Track } from "~/contexts/Device/Camera";
 import { VsArrowSwap } from "solid-icons/vs";
+import DeviceSettings from "~/routes/devices/[...id]";
 type CameraCanvas = HTMLCanvasElement | undefined;
 const colours = ["#ff0000", "#00ff00", "#ffff00", "#80ffff"];
 type SettingProps = { deviceId: DeviceId };
@@ -1148,12 +1149,24 @@ export function WifiSettingsTab(props: SettingProps) {
     });
   });
 
+  // This state is used when a person disconnects from wifi
   const [disconnected, setDisconnected] = createSignal(false);
 
   createEffect(() => {
     const state = context.apState();
     if (state === "connected") {
       setDisconnected(false);
+    }
+  });
+
+  const [params, setSearchParams] = useSearchParams();
+
+  createEffect(() => {
+    if (!disconnected() && !connecting() && !(device()?.isConnected ?? false)) {
+      // remove
+      setSearchParams({
+        deviceSettings: null,
+      });
     }
   });
 
@@ -1304,6 +1317,7 @@ export function WifiSettingsTab(props: SettingProps) {
     }
   };
 
+  const [isForgetting, setIsForgetting] = createSignal<boolean>(false);
   return (
     <div class="flex w-full flex-col space-y-2 px-2 py-2">
       <Show
@@ -1658,12 +1672,16 @@ export function WifiSettingsTab(props: SettingProps) {
                     >
                       <button
                         class="flex w-full items-center justify-center rounded-md bg-blue-500 py-3 text-white"
-                        onClick={() => {
-                          forgetWifi(wifi().SSID);
+                        onClick={async () => {
+                          setIsForgetting(true);
+                          await forgetWifi(wifi().SSID);
+                          setIsForgetting(false);
                           context.searchDevice();
                         }}
                       >
-                        <p>Forget</p>
+                        <Show when={isForgetting()} fallback={<p>Forget</p>}>
+                          <p>Forgetting...</p>
+                        </Show>
                       </button>
                     </Show>
                   </div>

@@ -5,7 +5,7 @@ import { Show, onMount } from "solid-js";
 import { A } from "@solidjs/router";
 import ActionContainer from "~/components/ActionContainer";
 import CircleButton from "~/components/CircleButton";
-import { headerMap } from "~/components/Header";
+import { useHeaderContext } from "~/components/Header";
 import { useStorage } from "~/contexts/Storage";
 import { FaRegularTrashCan, FaSolidStop } from "solid-icons/fa";
 import { Dialog } from "@capacitor/dialog";
@@ -27,13 +27,14 @@ export default function Storage() {
     await storage.deleteEvents({ uploaded: false });
     await storage.deleteSyncLocations();
   };
+  const headerContext = useHeaderContext();
 
   onMount(() => {
     // Add delete button to header
-    const header = headerMap.get("/storage");
+    const header = headerContext?.headerMap.get("/storage");
     if (!header) return;
 
-    headerMap.set("/storage", [
+    headerContext?.headerMap.set("/storage", [
       header[0],
       () => (
         <button type="button" onClick={deleteSaved} class="text-red-400">

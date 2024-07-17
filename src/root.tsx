@@ -13,7 +13,7 @@ import NavBar from "./components/NavBar";
 import { UserProvider, useUserContext } from "./contexts/User";
 import "./root.css";
 import Login from "./login";
-import Header from "./components/Header";
+import { HeaderProvider, useHeaderContext } from "./components/Header";
 import { DeviceProvider } from "./contexts/Device";
 import { StorageProvider } from "./contexts/Storage";
 import NotificationPopup from "./components/NotificationPopup";
@@ -68,6 +68,7 @@ const AppRoutes = () => {
     navigate("/devices", { replace: true });
   });
   const context = useUserContext();
+  const headerContext = useHeaderContext();
   const Routes = useRoutes(routes);
   return (
     <Show when={!context?.data.loading} fallback={<LoadingScreen />}>
@@ -75,7 +76,7 @@ const AppRoutes = () => {
         when={context?.data() || context?.skippedLogin()}
         fallback={<Login />}
       >
-        <Header />
+        {headerContext?.HeaderElement()}
         <Routes />
         <NavBar />
       </Show>
@@ -139,14 +140,16 @@ export default function Root() {
             );
           }}
         >
-          <UserProvider>
-            <StorageProvider>
-              <DeviceProvider>
-                <AppRoutes />
-                <NotificationPopup />
-              </DeviceProvider>
-            </StorageProvider>
-          </UserProvider>
+          <HeaderProvider>
+            <UserProvider>
+              <StorageProvider>
+                <DeviceProvider>
+                  <AppRoutes />
+                  <NotificationPopup />
+                </DeviceProvider>
+              </StorageProvider>
+            </UserProvider>
+          </HeaderProvider>
         </ErrorBoundary>
       </Router>
     </main>
