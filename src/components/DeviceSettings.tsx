@@ -24,7 +24,7 @@ import {
   FaSolidVideo,
 } from "solid-icons/fa";
 import { FiCloudOff, FiMapPin } from "solid-icons/fi";
-import { ImArrowLeft, ImArrowRight, ImCross } from "solid-icons/im";
+import { ImArrowLeft, ImArrowRight, ImCog, ImCross } from "solid-icons/im";
 import { RiArrowsArrowRightSLine } from "solid-icons/ri";
 import { TbCameraPlus, TbPlugConnectedX } from "solid-icons/tb";
 import {
@@ -1035,7 +1035,9 @@ export function LocationSettingsTab(props: SettingProps) {
               disabled={!canSave()}
               onClick={() => saveLocationSettings()}
             >
-              <p>{location() ? "Update" : "Save"}</p>
+              <Show when={!setting() || !canSave()} fallback={<p>Saving...</p>}>
+                <p>Save</p>
+              </Show>
             </button>
             <button
               class="text-gray-400"
@@ -1086,10 +1088,8 @@ export function WifiSettingsTab(props: SettingProps) {
       return saved;
     }
   );
-  createEffect(() => {
-    console.log("Wifi Networks", wifiNetworks());
-  });
   const [password, setPassword] = createSignal("");
+  const [apn, setAPN] = createSignal("");
 
   const getWifiIcon = (signal: number) => (
     <Switch>
@@ -1123,6 +1123,8 @@ export function WifiSettingsTab(props: SettingProps) {
   const [errorConnecting, setErrorConnecting] = createSignal<string | null>(
     null
   );
+
+  const [openedModem, setOpenedModem] = createSignal<boolean>();
 
   const [connecting, setConnecting] = createSignal<null | string>(null);
   const connectToWifi = async () => {
@@ -1235,9 +1237,10 @@ export function WifiSettingsTab(props: SettingProps) {
     }
   );
 
-  const [modem] = createResource(async () => {
+  const [modem, { refetch: refetchModem }] = createResource(async () => {
     try {
       const res = await context.getModem(id());
+      console.log("MODEM", res);
       return res;
     } catch (error) {
       console.log(error);
@@ -1296,9 +1299,8 @@ export function WifiSettingsTab(props: SettingProps) {
   };
   const [showSaveNetwork, setShowSaveNetwork] = createSignal(false);
   const [ssid, setSsid] = createSignal("");
-  const [saving, setSaving] = createSignal<"saving" | "saved" | "error" | null>(
-    null
-  );
+  type SaveState = "saving" | "saved" | "error" | null;
+  const [saving, setSaving] = createSignal<SaveState>(null);
   const saveWifi = async () => {
     try {
       setSaving("saving");
@@ -1316,7 +1318,24 @@ export function WifiSettingsTab(props: SettingProps) {
       console.log(error);
     }
   };
+  const saveAPN = async () => {
+    try {
+      setSavingModem("saving");
+      const res = await context.saveAPN(id(), apn());
+      if (res) {
+        setSaving("saved");
+      } else {
+        setSaving("error");
+      }
+      refetchModem();
+    } catch (error) {
+      console.log("");
+    }
+  };
 
+  const [savingModem, setSavingModem] = createSignal<SaveState>(null);
+
+  const hasApn = () => modem()?.modem?.apn !== undefined;
   const [isForgetting, setIsForgetting] = createSignal<boolean>(false);
   return (
     <div class="flex w-full flex-col space-y-2 px-2 py-2">
@@ -1324,7 +1343,24 @@ export function WifiSettingsTab(props: SettingProps) {
         when={hasNetworkEndpoints.loading}
         fallback={
           <Show when={hasNetworkEndpoints()} fallback={LinkToNetwork()}>
-            <section class="w-full space-y-2">
+            <button
+              class="relative w-full space-y-2 pt-2"
+              onClick={() => {
+                if (!hasApn()) return;
+                setOpenedModem(true);
+              }}
+            >
+              <Show
+                when={
+                  !noSim() &&
+                  modemConnectedToInternet() === "disconnected" &&
+                  hasApn()
+                }
+              >
+                <div class="absolute left-[40%] top-[-0.1em] rounded-sm bg-yellow-400">
+                  <p class="px-2 py-1 text-sm">Set Modem APN</p>
+                </div>
+              </Show>
               <FieldWrapper
                 type="custom"
                 title={
@@ -1345,7 +1381,7 @@ export function WifiSettingsTab(props: SettingProps) {
                   </div>
                 }
               >
-                <div class="space-between flex h-full w-full items-center justify-between p-2">
+                <div class="space-between flex h-full w-full items-center justify-between p-2 text-sm">
                   <Switch>
                     <Match when={modem.loading}>
                       <FaSolidSpinner class="animate-spin" />
@@ -1364,40 +1400,42 @@ export function WifiSettingsTab(props: SettingProps) {
                     <Match when={modemConnectedToInternet() === "connected"}>
                       <p>Internet Connection</p>
                     </Match>
-                    <Match when={modemConnectedToInternet() === "connected"}>
-                      <p>Internet Connection</p>
-                    </Match>
                     <Match when={modemConnectedToInternet() === "disconnected"}>
                       <p>No Mobile Data</p>
                     </Match>
                   </Switch>
-                  <Show when={modemSignalStrength()}>
-                    {(modem) => (
-                      <Switch>
-                        <Match when={modem() <= 0.2}>
-                          <BiRegularSignal1 size={28} />
-                        </Match>
-                        <Match when={modem() <= 0.4}>
-                          <BiRegularSignal2 size={28} />
-                        </Match>
-                        <Match when={modem() <= 0.6}>
-                          <BiRegularSignal3 size={28} />
-                        </Match>
-                        <Match when={modem() <= 0.8}>
-                          <BiRegularSignal4 size={28} />
-                        </Match>
-                        <Match when={modem() <= 1}>
-                          <BiRegularSignal5 size={28} />
-                        </Match>
-                      </Switch>
-                    )}
+                  <div class="flex gap-x-2">
+                    <Show when={modemSignalStrength()}>
+                      {(modem) => (
+                        <Switch>
+                          <Match when={modem() <= 0.2}>
+                            <BiRegularSignal1 size={28} />
+                          </Match>
+                          <Match when={modem() <= 0.4}>
+                            <BiRegularSignal2 size={28} />
+                          </Match>
+                          <Match when={modem() <= 0.6}>
+                            <BiRegularSignal3 size={28} />
+                          </Match>
+                          <Match when={modem() <= 0.8}>
+                            <BiRegularSignal4 size={28} />
+                          </Match>
+                          <Match when={modem() <= 1}>
+                            <BiRegularSignal5 size={28} />
+                          </Match>
+                        </Switch>
+                      )}
+                    </Show>
+                  </div>
+                  <Show when={hasApn()}>
+                    <ImCog size={18} />
                   </Show>
                 </div>
               </FieldWrapper>
               <FieldWrapper
                 type="custom"
                 title={
-                  <div class="flex items-center justify-center gap-x-2">
+                  <div class="flex items-center justify-center gap-x-2 text-sm">
                     <div
                       classList={{
                         "bg-yellow-300": wifiConnectedToInternet.loading,
@@ -1419,7 +1457,7 @@ export function WifiSettingsTab(props: SettingProps) {
                   </p>
                 </div>
               </FieldWrapper>
-            </section>
+            </button>
             <section class="flex h-32 flex-col space-y-2 overflow-y-auto rounded-md bg-neutral-100 p-2">
               <For each={wifiNetworks()?.sort(sortWifi)}>
                 {(val) => (
@@ -1524,6 +1562,53 @@ export function WifiSettingsTab(props: SettingProps) {
           </div>
         </div>
       </Show>
+      <Portal>
+        <Show when={openedModem()}>
+          <div class="fixed left-1/2 top-1/2 z-40 h-auto w-11/12 -translate-x-1/2 -translate-y-1/2 transform rounded-xl border bg-white px-3 py-4  shadow-lg">
+            <div class="flex justify-between px-4 pb-2">
+              <div class="flex items-center space-x-4">
+                <h1 class="text-lg text-neutral-800">Modem Settings</h1>
+              </div>
+              <button
+                onClick={() => {
+                  setOpenedModem(false);
+                }}
+                class="p-2 text-gray-500"
+              >
+                <ImCross size={12} />
+              </button>
+            </div>
+            <h1 class="text-md pb-2 pl-2 text-gray-800">Access Point Name</h1>
+            <div class="flex gap-x-2">
+              <input
+                class="w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                type="text"
+                ref={inputRef}
+                placeholder={modem()?.modem?.apn ?? ""}
+                value={apn()}
+                onInput={(e) => setAPN((e.target as HTMLInputElement).value)}
+              />
+              <button
+                class="flex w-24 items-center justify-center space-x-2 rounded-md  bg-blue-500 py-3 text-white"
+                onClick={(e) => {
+                  e.preventDefault();
+                  saveAPN();
+                }}
+              >
+                <p>
+                  {saving() === "saving"
+                    ? "Saving..."
+                    : saving() === "error"
+                    ? "Failed Saved..."
+                    : saving() === "saved"
+                    ? "Saved"
+                    : "Save"}
+                </p>
+              </button>
+            </div>
+          </div>
+        </Show>
+      </Portal>
       <Portal>
         <Show when={openedNetwork()}>
           {(wifi) => (
@@ -1776,12 +1861,16 @@ export function GroupSelect(props: SettingProps) {
   const device = () => context.devices.get(id());
   const groupName = () => device()?.group ?? "";
   onMount(() => {
-    const interval = setInterval(async () => {
-      await user.refetchGroups();
-    }, 5000);
-    onCleanup(() => {
-      clearInterval(interval);
-    });
+    try {
+      const interval = setInterval(async () => {
+        await user.refetchGroups();
+      }, 5000);
+      onCleanup(() => {
+        clearInterval(interval);
+      });
+    } catch (e) {
+      console.error(e);
+    }
   });
   const setGroup = async (v: string) => {
     if (!user.groups()?.some((g) => g.groupName === v)) {
@@ -1793,9 +1882,6 @@ export function GroupSelect(props: SettingProps) {
     const token = user.data()?.token;
     if (token) {
       const res = await context.changeGroup(id(), v, token);
-      // if (res) {
-      //   await context.rebootDevice(id());
-      // }
     }
   };
 
@@ -1811,29 +1897,33 @@ export function GroupSelect(props: SettingProps) {
       : "";
 
   const onOpenGroups = async () => {
-    const sameServer = user.isProd() === device()?.isProd;
-    const notifyUser = !user.isLoggedIn() || !sameServer;
-    if (notifyUser) {
-      // Prompt to login
-      const message =
-        user.isLoggedIn() && !sameServer
-          ? "You must be logged in the same server as device. Would you like to login?"
-          : !user.isLoggedIn()
-          ? "You must be logged in to change group. Would you like to login?"
-          : "";
-      const res = await Prompt.confirm({
-        title: "Login Required",
-        message,
-      });
-      if (res.value) {
-        await user.logout();
-        return false;
-      } else {
-        return false;
+    try {
+      const sameServer = user.isProd() === device()?.isProd;
+      const notifyUser = !user.isLoggedIn() || !sameServer;
+      if (notifyUser) {
+        // Prompt to login
+        const message =
+          user.isLoggedIn() && !sameServer
+            ? "You must be logged in the same server as device. Would you like to login?"
+            : !user.isLoggedIn()
+            ? "You must be logged in to change group. Would you like to login?"
+            : "";
+        const res = await Prompt.confirm({
+          title: "Login Required",
+          message,
+        });
+        if (res.value) {
+          await user.logout();
+          return false;
+        } else {
+          return false;
+        }
       }
+      return true;
+    } catch (e) {
+      console.error(e);
+      return true;
     }
-    user.refetchGroups();
-    return true;
   };
 
   return (
@@ -1880,7 +1970,7 @@ export function GeneralSettingsTab(props: SettingProps) {
     );
   });
 
-  onMount(() => {
+  onMount(async () => {
     user.refetchGroups();
   });
 
@@ -1899,6 +1989,11 @@ export function GeneralSettingsTab(props: SettingProps) {
     const modemRes = await context.checkDeviceModemInternetConnection(id());
     return wifiRes || modemRes;
   });
+
+  const updateError = () => {
+    const error = context.getUpdateError(id());
+    return error;
+  };
 
   const softwareUpdateMessage = () => {
     if (canUpdate.loading) return "Checking for update...";
@@ -1936,20 +2031,22 @@ export function GeneralSettingsTab(props: SettingProps) {
       <FieldWrapper type="text" value={displayId()} title="ID" />
       <Show when={lowPowerMode() !== null}>
         <FieldWrapper type="custom" title={"Power Mode"}>
-          <div class="flex w-full items-center bg-gray-100 px-1">
+          <div class="flex w-full items-center gap-x-2 bg-gray-100 px-1">
             <button
               onClick={() => turnOnLowPowerMode(false)}
               classList={{
-                "bg-white": lowPowerMode() === false,
+                "bg-white outline outline-2 outline-green-500":
+                  lowPowerMode() === false,
                 "bg-gray-100": lowPowerMode() !== false,
               }}
-              class="flex w-full appearance-none items-center justify-center rounded-lg bg-white p-1"
+              class="flex w-full appearance-none items-center justify-center rounded-lg p-1"
             >
               High
             </button>
             <button
               classList={{
-                "bg-white": lowPowerMode() === true,
+                "bg-white outline outline-2 outline-green-500":
+                  lowPowerMode() === true,
                 "bg-gray-100": lowPowerMode() !== true,
               }}
               onClick={() => turnOnLowPowerMode(true)}
@@ -1978,6 +2075,9 @@ export function GeneralSettingsTab(props: SettingProps) {
             <span>{lastUpdated().toLocaleString()}</span>
           </p>
         )}
+      </Show>
+      <Show when={updateError()}>
+        {(error) => <p class="text-red-500">{error()}</p>}
       </Show>
       <button
         classList={{
@@ -2036,9 +2136,7 @@ export function DeviceSettingsModal() {
   };
 
   const setCurrNav = (nav: ReturnType<typeof navItems>[number]) => {
-    console.log(nav);
     setParams({ tab: nav });
-    console.log("Params", params);
   };
   return (
     <Show when={show()}>

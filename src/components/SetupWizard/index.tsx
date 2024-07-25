@@ -29,8 +29,8 @@ import { useUserContext } from "~/contexts/User";
 import { Dialog } from "@capacitor/dialog";
 import FieldWrapper from "../Field";
 import { AiOutlineInfoCircle } from "solid-icons/ai";
-type ColorType = "blue" | "green" | "yellow" | "gray" | "red";
-type DeviceType = "AI Doc Cam / Bird Monitor" | "Classic";
+export type ColorType = "blue" | "green" | "yellow" | "gray" | "red";
+export type DeviceType = "AI Doc Cam / Bird Monitor" | "Classic";
 
 type StoreType = {
   deviceType: DeviceType | null;
@@ -54,17 +54,13 @@ const CloseButton = (props: CloseButtonProps): JSX.Element => (
     &times;
   </button>
 );
-
-const DontShowAgainCheckbox = (): JSX.Element => (
-  <label class="flex items-center">
-    <input type="checkbox" class="mr-2" />
-    Don't show again
-  </label>
-);
-
-const DeviceTypeButton = (props: DeviceTypeButtonProps): JSX.Element => (
+export const DeviceTypeButton = (props: DeviceTypeButtonProps): JSX.Element => (
   <button
-    class={`rounded px-4 py-2 ${props.isSelected ? "bg-gray-200" : "bg-white"}`}
+    class={`rounded px-4 py-2 ${
+      props.isSelected
+        ? "bg-white outline outline-2 outline-green-500"
+        : "bg-gray-200"
+    }`}
     onClick={props.onClick}
   >
     {props.children}
@@ -72,7 +68,7 @@ const DeviceTypeButton = (props: DeviceTypeButtonProps): JSX.Element => (
 );
 
 type LightSequenceType = "short" | "long" | "blink";
-type LightSequence = LightSequenceType[];
+export type LightSequence = LightSequenceType[];
 
 type StepType = {
   color: ColorType;
@@ -85,7 +81,7 @@ type StartupProcessProps = {
   steps: StepType[];
 };
 
-const colorClasses: Record<ColorType, string> = {
+export const colorClasses: Record<ColorType, string> = {
   blue: "bg-blue-500",
   green: "bg-green-500",
   yellow: "bg-yellow-500",
@@ -100,56 +96,72 @@ const createLightAnimation = (sequence: LightSequence) => {
   for (const light of sequence) {
     switch (light) {
       case "short":
-        keyframes.push(0, 1, 0);
-        durations.push(0.5, 0.5, 0.5);
+        keyframes.push(0, 1);
+        durations.push(1, 1);
         break;
       case "long":
-        keyframes.push(0, 1, 1, 0);
-        durations.push(0.5, 1, 1, 0.5);
+        keyframes.push(0, 1);
+        durations.push(2, 2);
         break;
       case "blink":
-        keyframes.push(0, 1, 0);
-        durations.push(0.1, 0.1, 0.1);
+        keyframes.push(0, 1);
+        durations.push(0.1, 0.2);
         break;
     }
   }
 
-  // Add a pause at the end if the sequence is not empty
-  if (sequence.length > 0) {
-    keyframes.push(0);
-    durations.push(1);
-  } else {
-    // If the sequence is empty, keep the light on
-    keyframes.push(1);
-    durations.push(1);
-  }
-
+  const duration = durations.reduce((a, b) => a + b, 0);
+  let offset = 0;
   return {
     opacity: keyframes,
     transition: {
-      duration: durations.reduce((a, b) => a + b, 0),
-      ease: durations.map(() => "linear"),
-      times: durations.map((_, i) => i / durations.length),
+      duration,
+      ease: "ease-in-out",
       repeat: Infinity,
+      opacity: {
+        offset: durations.map((val) => {
+          debugger;
+          const value = val / duration;
+          const offsetValue = value + offset;
+          offset += value;
+          return Math.min(offsetValue, 1);
+        }),
+      },
     },
   };
 };
 
-const StartupProcess = (props: StartupProcessProps): JSX.Element => (
+export const LightSequence = (props: {
+  sequence: LightSequence;
+  color: ColorType;
+}) => {
+  const { opacity, transition } = createLightAnimation(props.sequence);
+  debugger;
+  return (
+    <Motion
+      class={`h-4 w-4 rounded-full ${colorClasses[props.color]}`}
+      animate={{ opacity }}
+      transition={transition}
+    />
+  );
+};
+
+export const Light = (props: { step: StepType }) => (
+  <div class="flex flex-col items-center">
+    <LightSequence sequence={props.step.sequence} color={props.step.color} />
+    <span class="mt-1 text-xs">{props.step.label}</span>
+    <span class="mt-1 text-xs">{props.step.duration}</span>
+  </div>
+);
+
+export const StartupProcess = (props: StartupProcessProps): JSX.Element => (
   <div class="mb-4">
     <h3 class="mb-2 font-bold">Startup Process</h3>
     <div class="flex items-center">
       <For each={props.steps}>
         {(step, index) => (
           <>
-            <div class="flex flex-col items-center">
-              <Motion
-                animate={createLightAnimation(step.sequence)}
-                class={`h-4 w-4 rounded-full ${colorClasses[step.color]}`}
-              />
-              <span class="mt-1 text-xs">{step.label}</span>
-              <span class="mt-1 text-xs">{step.duration}</span>
-            </div>
+            <Light step={step} />
             {index() < props.steps.length - 1 && (
               <div class="mx-2 h-px flex-grow bg-gray-300" />
             )}
@@ -160,6 +172,53 @@ const StartupProcess = (props: StartupProcessProps): JSX.Element => (
   </div>
 );
 
+export const getStartupSteps = (deviceType: DeviceType): StepType[] => {
+  if (deviceType === "AI Doc Cam / Bird Monitor") {
+    return [
+      { color: "blue", label: "Bootup", duration: "30s", sequence: ["long"] },
+      {
+        color: "green",
+        label: "Checks WiFi",
+        duration: "10s",
+        sequence: ["long"],
+      },
+      {
+        color: "yellow",
+        label: "Can Connect",
+        duration: "5m",
+        sequence: [],
+      },
+      { color: "gray", label: "Standby", duration: "", sequence: [] },
+    ];
+  } else {
+    return [
+      {
+        color: "blue",
+        label: "Bootup",
+        duration: "30s",
+        sequence: ["long", "blink", "blink"],
+      },
+      {
+        color: "blue",
+        label: "Checks WiFi",
+        duration: "10s",
+        sequence: ["short", "short"],
+      },
+      {
+        color: "blue",
+        label: "Can Connect",
+        duration: "5m",
+        sequence: ["long"],
+      },
+      {
+        color: "gray",
+        label: "Standby",
+        duration: "",
+        sequence: [],
+      },
+    ];
+  }
+};
 function SetupWizard(): JSX.Element {
   const deviceContext = useDevice();
   const navigate = useNavigate();
@@ -197,53 +256,6 @@ function SetupWizard(): JSX.Element {
       Help
     </button>
   );
-  const getStartupSteps = (deviceType: DeviceType): StepType[] => {
-    if (deviceType === "AI Doc Cam / Bird Monitor") {
-      return [
-        { color: "blue", label: "Bootup", duration: "30s", sequence: ["long"] },
-        {
-          color: "green",
-          label: "Checks WiFi",
-          duration: "10s",
-          sequence: ["long", "long"],
-        },
-        {
-          color: "yellow",
-          label: "Can Connect",
-          duration: "5m",
-          sequence: [],
-        },
-        { color: "gray", label: "Standby", duration: "", sequence: [] },
-      ];
-    } else {
-      return [
-        {
-          color: "blue",
-          label: "Bootup",
-          duration: "30s",
-          sequence: ["long", "short", "short"],
-        },
-        {
-          color: "blue",
-          label: "Checks WiFi",
-          duration: "10s",
-          sequence: ["short"],
-        },
-        {
-          color: "blue",
-          label: "Can Connect",
-          duration: "5m",
-          sequence: ["long", "long"],
-        },
-        {
-          color: "gray",
-          label: "Standby",
-          duration: "",
-          sequence: [],
-        },
-      ];
-    }
-  };
   createEffect(() => {
     console.log("CONNECTION", connectionStatus());
     if (
@@ -270,8 +282,7 @@ function SetupWizard(): JSX.Element {
     </div>
   );
   const Additional = () => (
-    <div class="mt-4 flex items-center justify-between border-t-2 border-gray-200 px-2 pt-2">
-      <DontShowAgainCheckbox />
+    <div class="flex-end mt-4 flex items-center border-t-2 border-gray-200 px-2 pt-2">
       <HelpButton />
     </div>
   );
@@ -280,32 +291,51 @@ function SetupWizard(): JSX.Element {
       <Show
         when={deviceType === "AI Doc Cam / Bird Monitor"}
         fallback={
+          <>
+            <ol class="mb-4 list-inside list-decimal">
+              <li>Plug in and ensure the device is on.</li>
+              <li>
+                Wait for the light on your device shows a single slow pulsing
+                light
+              </li>
+              <li>
+                Press the <span class="text-blue-500">"Connect to Camera"</span>{" "}
+                button below.
+              </li>
+              <li>If prompted, confirm the connection to "bushnet"</li>
+            </ol>
+            <p class="mb-4 text-center text-sm">
+              If your light does not match the process indicated below press
+              "help" for troubleshooting tips
+            </p>
+          </>
+        }
+      >
+        <>
           <ol class="mb-4 list-inside list-decimal">
-            <li>Wait for the light on your device shows indicates 1 flash</li>
+            <li>Plug in and ensure the device is on.</li>
+            <li>
+              Wait for the light on your device to turn{" "}
+              <span class="text-yellow-600">yellow</span>
+            </li>
             <li>
               Press the <span class="text-blue-500">"Connect to Camera"</span>{" "}
-              button below.
+              button
             </li>
             <li>If prompted, confirm the connection to "bushnet"</li>
           </ol>
-        }
-      >
-        <ol class="mb-4 list-inside list-decimal">
-          <li>Plug in and ensure the device is on.</li>
-          <li>
-            Wait for the light on your device to turn{" "}
-            <span class="text-yellow-600">yellow</span>
-          </li>
-          <li>
-            Press the <span class="text-blue-500">"Connect to Camera"</span>{" "}
-            button
-          </li>
-          <li>If prompted, confirm the connection to "bushnet"</li>
-        </ol>
+          <p class="mb-4 text-center text-sm">
+            If your light is <span class="text-red-500">red</span> or in{" "}
+            <span class="text-blue-500">standby</span>(not blinking), long press
+            (3 seconds) wait till the light is off, and long press again the
+            power button on your camera to restart the process.
+            <br />
+            Press "help" for more information
+          </p>
+        </>
       </Show>
     );
   };
-
   const DirectConnectStep = (): JSX.Element => (
     <>
       <Title title="Connect To Device" />
@@ -324,14 +354,6 @@ function SetupWizard(): JSX.Element {
         </DeviceTypeButton>
       </div>
       {store.deviceType && getInstructions(store.deviceType)}
-      <p class="mb-4 text-center text-sm">
-        If your light is <span class="text-red-500">red</span> or in{" "}
-        <span class="text-blue-500">standby</span>(not blinking), long press (3
-        seconds) wait till the light is off, and long press again the power
-        button on your camera to restart the process.
-        <br />
-        Press "help" for more information
-      </p>
       {store.deviceType && (
         <StartupProcess steps={getStartupSteps(store.deviceType)} />
       )}
@@ -359,6 +381,176 @@ function SetupWizard(): JSX.Element {
     </>
   );
 
+  const AIDocSVG = () => (
+    <svg
+      height="150"
+      viewBox="0 0 148 190"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M0 14C0 6.26801 6.26801 0 14 0H120.91C123.581 0 126.196 0.764147 128.447 2.20225L140.093 9.64297C142.003 10.8628 143.587 12.5277 144.711 14.4948L144.964 14.9373C146.293 17.2635 146.927 19.9223 146.791 22.598L139.627 162.74C139.268 169.756 133.766 175.42 126.764 175.981L24.1672 184.206C21.7632 184.399 19.3502 183.967 17.162 182.953L8.11355 178.76C3.16609 176.467 0 171.51 0 166.058V14Z"
+        fill="#8CA58D"
+      />
+      <rect x="9" y="9" width="139" height="175" rx="14" fill="#486C49" />
+      <rect
+        width="56.0954"
+        height="53.7699"
+        rx="26.8849"
+        transform="matrix(0.991488 0.130198 0.130198 -0.991488 51 115.312)"
+        fill="#729E73"
+      />
+      <path
+        d="M95 184.059C101.227 173.229 100.458 132.662 95 116.5L86.5 66C121.618 67.3159 129 147.5 129 184.059L95 184.059Z"
+        fill="#729E73"
+      />
+      <g filter="url(#filter0_d_0_1)">
+        <path
+          d="M69 80C69 79.4477 69.4477 79 70 79H93.5C94.0523 79 94.5 79.4477 94.5 80V104C94.5 104.552 94.0523 105 93.5 105H70C69.4477 105 69 104.552 69 104V80Z"
+          fill="#F4FFEF"
+        />
+      </g>
+      <path
+        d="M9 144H70C74.4183 144 78 147.582 78 152V152C78 156.418 74.4183 160 70 160H9V144Z"
+        fill="#363636"
+      />
+      <rect x="59" y="146" width="12" height="12" rx="6" fill="#71EF45" />
+      <rect
+        x="47.5"
+        y="148.5"
+        width="7"
+        height="7"
+        rx="3.5"
+        fill="#71EF45"
+        stroke="url(#paint0_linear_0_1)"
+      />
+      <rect x="14" y="146" width="22" height="12" fill="white" />
+      <rect x="25" y="34" width="28" height="28" rx="14" fill="#729E73" />
+      <path
+        d="M53.5 9C55.9 14.2 51.5 30.5 49 38L40.5 62C55 62 64.1667 26.3333 67.5 9H53.5Z"
+        fill="#729E73"
+      />
+      <defs>
+        <filter
+          id="filter0_d_0_1"
+          x="64.2"
+          y="74.2"
+          width="35.1"
+          height="35.6"
+          filterUnits="userSpaceOnUse"
+          color-interpolation-filters="sRGB"
+        >
+          <feFlood flood-opacity="0" result="BackgroundImageFix" />
+          <feColorMatrix
+            in="SourceAlpha"
+            type="matrix"
+            values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
+            result="hardAlpha"
+          />
+          <feOffset />
+          <feGaussianBlur stdDeviation="2.4" />
+          <feComposite in2="hardAlpha" operator="out" />
+          <feColorMatrix
+            type="matrix"
+            values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.25 0"
+          />
+          <feBlend
+            mode="normal"
+            in2="BackgroundImageFix"
+            result="effect1_dropShadow_0_1"
+          />
+          <feBlend
+            mode="normal"
+            in="SourceGraphic"
+            in2="effect1_dropShadow_0_1"
+            result="shape"
+          />
+        </filter>
+        <linearGradient
+          id="paint0_linear_0_1"
+          x1="51"
+          y1="148"
+          x2="51"
+          y2="156"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop stop-color="#EDEDED" />
+          <stop offset="1" stop-color="#EEEEEE" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+
+  const ClassicSVG = () => (
+    <svg
+      height="150"
+      viewBox="0 0 160 194"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M3 2C3 0.895435 3.89543 0 5 0H127.431C127.803 0 128.168 0.103707 128.484 0.29947L158.553 18.9136C159.142 19.2782 159.5 19.9215 159.5 20.6141V26.5L142.18 173.476C142.074 174.375 141.377 175.091 140.482 175.221L22.9428 192.363C22.3464 192.449 21.7425 192.263 21.2992 191.855L3.64505 175.594C3.23391 175.215 3 174.682 3 174.123V2Z"
+        fill="#A9A9A9"
+      />
+      <path d="M2.5 33H6.5H7.5V35L2.5 33Z" fill="#D9D9D9" />
+      <rect x="21" y="19" width="139" height="175" rx="2" fill="#CBCBCB" />
+      <rect x="37" y="52" width="110" height="59" fill="#F2F2F2" />
+      <path
+        d="M7 33L13.5 35L18 46.5V60L13.5 71L7 67L4.5 53.5V40L7 33Z"
+        fill="#D9D9D9"
+      />
+      <path d="M9 71H13.2353L18 60H13.2353L9 71Z" fill="#D9D9D9" />
+      <path
+        d="M2.5 33L9 35L13.5 46.5V60L9 71L2.5 67L0 53.5V40L2.5 33Z"
+        fill="#D9D9D9"
+      />
+      <path
+        d="M3.22222 36L9 37.7895L13 48.0789V60.1579L9 70L3.22222 66.4211L1 54.3421V42.2632L3.22222 36Z"
+        fill="#B6B6B6"
+      />
+      <path
+        d="M3.22222 36L9 37.7895L13 48.0789V60.1579L9 70L3.22222 66.4211L1 54.3421V42.2632L3.22222 36Z"
+        fill="#B6B6B6"
+      />
+      <path
+        d="M14 90.5C14 96.299 11.9853 101 9.5 101C7.01472 101 2.5 96.299 2.5 90.5C2.5 84.701 7.01472 80 9.5 80C11.9853 80 14 84.701 14 90.5Z"
+        fill="url(#paint0_radial_0_1)"
+      />
+      <ellipse
+        cx="6.59191"
+        cy="52.1868"
+        rx="5"
+        ry="15"
+        transform="rotate(-2.27661 6.59191 52.1868)"
+        fill="url(#paint1_radial_0_1)"
+      />
+      <ellipse cx="3.5" cy="90.5" rx="0.5" ry="1.5" fill="#6A67F0" />
+      <defs>
+        <radialGradient
+          id="paint0_radial_0_1"
+          cx="0"
+          cy="0"
+          r="1"
+          gradientUnits="userSpaceOnUse"
+          gradientTransform="translate(9.5 90) scale(4.5 11)"
+        >
+          <stop stop-color="#818181" />
+          <stop offset="1" stop-color="#494949" />
+        </radialGradient>
+        <radialGradient
+          id="paint1_radial_0_1"
+          cx="0"
+          cy="0"
+          r="1"
+          gradientUnits="userSpaceOnUse"
+          gradientTransform="translate(6.59191 52.1868) rotate(90) scale(15 5)"
+        >
+          <stop offset="0.71" stop-color="#CDCDCD" />
+          <stop offset="1" stop-color="#8B8B8B" />
+        </radialGradient>
+      </defs>
+    </svg>
+  );
   const ChooseDeviceStep = () => (
     <>
       <div class="mb-4 flex items-center justify-between">
@@ -376,10 +568,7 @@ function SetupWizard(): JSX.Element {
             setStep("directConnect");
           }}
         >
-          <div class="relative mb-2 h-48 w-32 bg-green-300">
-            <div class="absolute left-2 top-2 h-4 w-4 rounded-full bg-white"></div>
-            <div class="absolute bottom-2 left-2 h-4 w-4 rounded-full bg-green-500"></div>
-          </div>
+          <AIDocSVG />
           <span>AI Doc Cam/ Bird Monitor</span>
         </button>
         <button
@@ -389,10 +578,7 @@ function SetupWizard(): JSX.Element {
             setStep("directConnect");
           }}
         >
-          <div class="relative mb-2 h-48 w-32 bg-gray-300">
-            <div class="absolute left-2 top-2 h-4 w-4 rounded-full bg-white"></div>
-            <div class="absolute bottom-2 left-2 h-4 w-4 rounded-full bg-blue-500"></div>
-          </div>
+          <ClassicSVG />
           <span>Classic Thermal Camera</span>
         </button>
       </div>
@@ -452,6 +638,50 @@ function SetupWizard(): JSX.Element {
     </>
   );
 
+  const StepProgressIndicator = (props: {
+    nextStep?: Steps;
+    place: number;
+  }) => {
+    const totalSteps = 4;
+    return (
+      <div class="flex w-full flex-col items-center justify-center">
+        <div class="flex w-full items-center justify-center gap-x-2">
+          <For each={new Array(totalSteps)}>
+            {(_, index) => (
+              <div class="flex items-center justify-center">
+                <div class="relative flex h-4 w-4 rounded-full bg-gray-300" />
+                <Show when={props.place === index()}>
+                  <div class="absolute h-3 w-3 rounded-full bg-white" />
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
+        <Show
+          when={props.place === totalSteps}
+          fallback={
+            <button
+              onClick={() => {
+                setStep(props.nextStep!);
+              }}
+              class="relative flex items-center justify-center p-2 text-lg text-blue-500"
+            >
+              Next Step
+              <div class="pt- absolute right-[-1em]"></div>
+            </button>
+          }
+        >
+          <button
+            onClick={() => close()}
+            class="relative flex items-center justify-center p-2 text-lg text-blue-500"
+          >
+            Finish Setup
+          </button>
+        </Show>
+      </div>
+    );
+  };
+
   const WifiSetup = () => {
     return (
       <>
@@ -467,12 +697,7 @@ function SetupWizard(): JSX.Element {
           </p>
         </div>
         <WifiSettingsTab deviceId={searchParams.setupDevice} />
-        <button
-          onClick={() => setStep("group")}
-          class="w-full p-1 text-lg text-blue-500"
-        >
-          Next
-        </button>
+        <StepProgressIndicator nextStep="group" place={0} />
         <Additional />
       </>
     );
@@ -486,13 +711,10 @@ function SetupWizard(): JSX.Element {
           Assign your device to a group so that you can view it in
           browse.cacophony.org.nz
         </div>
-        <GroupSelect deviceId={searchParams.setupDevice} />
-        <button
-          onClick={() => setStep("location")}
-          class="w-full p-1 text-lg text-blue-500"
-        >
-          Next
-        </button>
+        <div class="space-y-4">
+          <GroupSelect deviceId={searchParams.setupDevice} />
+          <StepProgressIndicator nextStep="location" place={1} />
+        </div>
         <Additional />
       </>
     );
@@ -503,12 +725,7 @@ function SetupWizard(): JSX.Element {
       <>
         <Title title="Location Setings" back="group" />
         <LocationSettingsTab deviceId={searchParams.setupDevice} />
-        <button
-          onClick={() => setStep("camera")}
-          class="w-full p-1 text-lg text-blue-500"
-        >
-          Next
-        </button>
+        <StepProgressIndicator nextStep="camera" place={2} />
         <Additional />
       </>
     );
@@ -557,24 +774,26 @@ function SetupWizard(): JSX.Element {
         <CameraSettingsTab deviceId={searchParams.setupDevice} />
         <Show when={lowPowerMode() !== null}>
           <FieldWrapper type="custom" title={"Power Mode"}>
-            <div class="flex w-full items-center bg-gray-100 px-1">
+            <div class="flex w-full items-center gap-x-2 bg-gray-100 px-1">
               <button
                 onClick={() => turnOnLowPowerMode(false)}
                 classList={{
-                  "bg-white": lowPowerMode() === false,
+                  "bg-white outline outline-2 outline-green-500":
+                    lowPowerMode() === false,
                   "bg-gray-100": lowPowerMode() !== false,
                 }}
-                class="flex w-full appearance-none items-center justify-center rounded-lg bg-white p-1"
+                class="flex w-full appearance-none items-center justify-center rounded-lg p-1"
               >
                 High
               </button>
               <button
                 classList={{
-                  "bg-white": lowPowerMode() === true,
+                  "bg-white outline outline-2 outline-green-500":
+                    lowPowerMode() === true,
                   "bg-gray-100": lowPowerMode() !== true,
                 }}
                 onClick={() => turnOnLowPowerMode(true)}
-                class="flex w-full appearance-none items-center justify-center rounded-lg bg-white p-1"
+                class="flex w-full appearance-none items-center justify-center rounded-lg p-1"
               >
                 Low
               </button>
@@ -592,12 +811,7 @@ function SetupWizard(): JSX.Element {
             </Switch>
           </div>
         </Show>
-        <button
-          onClick={() => close()}
-          class="w-full p-1 text-lg text-blue-500"
-        >
-          Finish Setup
-        </button>
+        <StepProgressIndicator place={3} />
         <Additional />
       </>
     );

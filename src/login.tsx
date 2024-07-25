@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js";
+import { createEffect, createReaction, createSignal, on, Show } from "solid-js";
 import { Browser } from "@capacitor/browser";
 import { z } from "zod";
 import CacaophonyLogo from "./components/CacaophonyLogo";
@@ -103,11 +103,23 @@ function Login() {
     }
     if (email.success && password.success) {
       if (device.apState() === "connected") {
+        const track = createReaction(async () => {
+          const ap = device.apState();
+          if (ap === "disconnected" || ap === "default") {
+            await user?.login(email.data, password.data).catch(() => {
+              setError("Invalid Email or Password");
+            });
+          } else {
+            track(() => device.apState());
+          }
+        });
+        track(() => device.apState());
         await device.disconnectFromDeviceAP();
+      } else {
+        await user?.login(email.data, password.data).catch(() => {
+          setError("Invalid Email or Password");
+        });
       }
-      await user?.login(email.data, password.data).catch(() => {
-        setError("Invalid Email or Password");
-      });
     }
     setLoggingIn(false);
   };

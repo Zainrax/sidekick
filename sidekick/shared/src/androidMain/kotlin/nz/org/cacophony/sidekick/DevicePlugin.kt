@@ -1,5 +1,6 @@
 package nz.org.cacophony.sidekick
 import NsdHelper
+import android.annotation.SuppressLint
 import android.app.Activity.RESULT_OK
 import android.content.Context
 import android.net.ConnectivityManager
@@ -43,26 +44,6 @@ class DevicePlugin: Plugin() {
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         multicastLock = wifi.createMulticastLock("multicastLock")
 
-        nsdHelper = object : NsdHelper(context) {
-            override fun onNsdServiceResolved(service: NsdServiceInfo) {
-                val serviceJson = JSObject().apply {
-                    val endpoint = "${service.serviceName}.local"
-                    put("endpoint", endpoint)
-                    put("host", service.host.hostAddress)
-                    put("port", service.port)
-                }
-                notifyListeners("onServiceResolved", serviceJson)
-            }
-
-            override fun onNsdServiceLost(service: NsdServiceInfo) {
-                val result = JSObject().apply {
-                    val endpoint = "${service.serviceName}.local"
-                    put("endpoint", endpoint)
-                }
-                notifyListeners("onServiceLost", result)
-            }
-        }
-        nsdHelper.initializeNsd()
     }
 
     enum class CallType {
@@ -79,6 +60,26 @@ class DevicePlugin: Plugin() {
         try {
             isDiscovering = true
             multicastLock.acquire()
+            nsdHelper = object : NsdHelper(context) {
+                override fun onNsdServiceResolved(service: NsdServiceInfo) {
+                    val serviceJson = JSObject().apply {
+                        val endpoint = "${service.serviceName}.local"
+                        put("endpoint", endpoint)
+                        put("host", service.host.hostAddress)
+                        put("port", service.port)
+                    }
+                    notifyListeners("onServiceResolved", serviceJson)
+                }
+
+                override fun onNsdServiceLost(service: NsdServiceInfo) {
+                    val result = JSObject().apply {
+                        val endpoint = "${service.serviceName}.local"
+                        put("endpoint", endpoint)
+                    }
+                    notifyListeners("onServiceLost", result)
+                }
+            }
+            nsdHelper.initializeNsd()
             nsdHelper.discoverServices()
             call.resolve()
         } catch (e: Exception) {
@@ -119,12 +120,9 @@ class DevicePlugin: Plugin() {
     @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
     fun connectToDeviceAP(call: PluginCall) {
         try {
-            callQueue[call.callbackId] = CallType.DISCOVER
-            call.setKeepAlive(true)
             val ssid = "bushnet"
             val password = "feathers"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                call.setKeepAlive(true)
                 // ask for permission
                 val wifiSpecifier = WifiNetworkSpecifier.Builder()
                     .setSsid(ssid)
@@ -144,17 +142,15 @@ class DevicePlugin: Plugin() {
                         wifiNetwork = network
                         cm!!.bindProcessToNetwork(network)
                         val result = JSObject()
-                        result.put("success", true)
-                        result.put("data", "connected")
-                        call.resolve(result)
+                        result.put("status", "connected")
+                        notifyListeners("onAccessPointChange", result)
                     }
                     override fun onUnavailable() {
                         super.onUnavailable()
                         val result = JSObject()
+                        result.put("status", "disconnected")
+                        notifyListeners("onAccessPointChange", result)
                         wifiNetwork = null
-                        result.put("success", false)
-                        result.put("message", "Failed to connect to device AP")
-                        call.resolve(result)
                         call.setKeepAlive(false)
                         cm!!.unregisterNetworkCallback(this)
                         bridge.releaseCall(call.callbackId)
@@ -162,8 +158,8 @@ class DevicePlugin: Plugin() {
                     override fun onLost(network: Network) {
                         super.onLost(network)
                         val result = JSObject()
-                        result.put("success", true)
-                        result.put("data", "disconnected")
+                        result.put("status", "disconnected")
+                        notifyListeners("onAccessPointChange", result)
                         cm!!.bindProcessToNetwork(null)
                         wifiNetwork = null
                         cm!!.unregisterNetworkCallback(this)
@@ -177,13 +173,12 @@ class DevicePlugin: Plugin() {
             } else {
                 connectToWifiLegacy(ssid, password, {
                     val result = JSObject()
-                    result.put("success", true)
-                    call.resolve(result)
+                    result.put("status", "connected")
+                    notifyListeners("onAccessPointChange", result)
                 }, {
                     val result = JSObject()
-                    result.put("success", false)
-                    result.put("message", "Failed to connect to device AP")
-                    call.resolve(result)
+                    result.put("status", "disconnected")
+                    notifyListeners("onAccessPointChange", result)
                 })
             }
         } catch (e: Exception) {
@@ -321,19 +316,11 @@ class DevicePlugin: Plugin() {
 
     @PluginMethod
     fun unbindConnection(call: PluginCall) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            while (cm?.boundNetworkForProcess != null) {
-                cm?.bindProcessToNetwork(null)
-            }
-        }
         call.resolve()
     }
 
     @PluginMethod
     fun rebindConnection(call: PluginCall) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            cm?.bindProcessToNetwork(wifiNetwork)
-        }
         call.resolve()
     }
 
@@ -348,6 +335,36 @@ class DevicePlugin: Plugin() {
 
                 result.put("success", true)
                 result.put("connected", isConnected)
+            } else {
+                val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                val wifiInfo = wifiManager.connectionInfo
+                val isConnected = wifiInfo.ssid == "\"bushnet\""
+
+                result.put("success", true)
+                result.put("connected", isConnected)
+            }
+        } catch (e: Exception) {
+            result.put("success", false)
+            result.put("message", e.message)
+        }
+        call.resolve(result)
+    }
+    @SuppressLint("MissingPermission")
+    @PluginMethod
+    fun checkIsAPConnected(call: PluginCall) {
+        val result = JSObject()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val networkCapabilities = cm?.getNetworkCapabilities(wifiNetwork)
+                val isConnected = networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+                val ssid = if (isConnected) {
+                    (context.getSystemService(Context.WIFI_SERVICE) as WifiManager).connectionInfo.ssid
+                } else {
+                    ""
+                }
+
+                result.put("success", true)
+                result.put("connected", isConnected && ssid == "\"bushnet\"")
             } else {
                 val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
                 val wifiInfo = wifiManager.connectionInfo

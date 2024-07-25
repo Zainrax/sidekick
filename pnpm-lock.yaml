@@ -75,8 +75,8 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0(@capacitor/core@6.1.0)
       effect:
-        specifier: 2.0.0-next.61
-        version: 2.0.0-next.61
+        specifier: 3.5.5
+        version: 3.5.5
       kysely:
         specifier: ^0.24.2
         version: 0.24.2
@@ -1629,8 +1629,8 @@ packages:
   eastasianwidth@0.2.0:
     resolution: {integrity: sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==}
 
-  effect@2.0.0-next.61:
-    resolution: {integrity: sha512-BuRr9SEwYdMVLQunATRjm3MAkTgWI21Tyn5ooWVZnTeXj0lUqSV0fjaqNFksEymssmwJ1ucogbuYQ/3RLmwxgA==}
+  effect@3.5.5:
+    resolution: {integrity: sha512-AFsmXMUTwASzzfpubZB5Ro4dqIDFVCf5WV6FtUsKlr1hncECaAQ63OVIMkvilq7CkJMOZzHJKNJrkwKeCpyE2w==}
 
   electron-to-chromium@1.4.812:
     resolution: {integrity: sha512-7L8fC2Ey/b6SePDFKR2zHAy4mbdp1/38Yk5TsARO66W3hC5KEaeKMMHoxwtuH+jcu2AYLSn9QX04i95t6Fl1Hg==}
@@ -5599,7 +5599,7 @@ snapshots:
 
   eastasianwidth@0.2.0: {}
 
-  effect@2.0.0-next.61: {}
+  effect@3.5.5: {}
 
   electron-to-chromium@1.4.812: {}
 

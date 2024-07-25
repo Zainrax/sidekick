@@ -61,7 +61,7 @@
     "@solidjs/meta": "^0.28.7",
     "@solidjs/router": "^0.8.4",
     "capacitor-native-settings": "^6.0.0",
-    "effect": "2.0.0-next.61",
+    "effect": "3.5.5",
     "kysely": "^0.24.2",
     "motion": "^10.18.0",
     "nanoid": "^5.0.7",

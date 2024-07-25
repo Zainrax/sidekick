@@ -5,6 +5,7 @@ import { BsCameraVideoFill, BsHddStackFill } from "solid-icons/bs";
 import { IoSettingsSharp } from "solid-icons/io";
 import { Show, createEffect, mergeProps } from "solid-js";
 import { useStorage } from "~/contexts/Storage";
+import { FaSolidBook } from "solid-icons/fa";
 
 interface NavButtonProps extends LabelledIconProps {
   href?: string;
@@ -50,5 +51,8 @@ const StorageNav = () => {
 };
 
 const SettingsNav = () => <NavButton icon={IoSettingsSharp} label="Settings" />;
+const ManualNav = () => (
+  <NavButton icon={FaSolidBook} label="Help" href="manual" />
+);
 
-export { DashboardNav, DevicesNav, StorageNav, SettingsNav };
+export { DashboardNav, DevicesNav, StorageNav, SettingsNav, ManualNav };

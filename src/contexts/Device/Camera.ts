@@ -73,12 +73,15 @@ export type Frame = {
 };
 
 type ConnectedWebSocket = {
-  send: (message: Message) => Effect.Effect<never, never, void>;
-  listen: Stream.Stream<never, Event, MessageEvent<unknown>>;
+  send: (message: Message) => Effect.Effect<void, never, never>;
+  listen: Stream.Stream<MessageEvent<unknown>, Event, never>;
 };
 
-const WS = Context.Tag<WebSocket>();
-const ConnectedWS = Context.Tag<ConnectedWebSocket>();
+class WS extends Context.Tag("WS")<WS, WebSocket>() {}
+class ConnectedWS extends Context.Tag("CWS")<
+  ConnectedWS,
+  ConnectedWebSocket
+>() {}
 
 const sendWsMessage = (ws: WebSocket) => (options: Message) => {
   const { type, uuid, ...rest } = options;
@@ -92,7 +95,7 @@ const listener = Layer.effect(
     const ws = yield* _(WS);
     yield* _(Effect.addFinalizer(() => Effect.sync(() => ws.close())));
     const send = sendWsMessage(ws);
-    const listen = Stream.async<never, Event, MessageEvent<unknown>>((emit) => {
+    const listen = Stream.async<MessageEvent<unknown>, Event, never>((emit) => {
       ws.onmessage = (event) => emit(Effect.succeed(Chunk.of(event)));
       ws.onerror = (error) => emit(Effect.fail(Option.some(error)));
       ws.onclose = () => emit(Effect.fail(Option.none()));
@@ -105,7 +108,7 @@ const listener = Layer.effect(
 );
 
 function openWebSocketConnection(host: string) {
-  return Effect.async<never, Event, WebSocket>((resolve) => {
+  return Effect.async<WebSocket, Event, never>((resolve) => {
     const ws = new WebSocket(`ws://${host}/ws`);
     ws.onopen = () => resolve(Effect.succeed(ws));
     ws.onerror = (error) => resolve(Effect.fail(error));

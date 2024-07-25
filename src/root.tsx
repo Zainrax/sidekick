@@ -43,6 +43,10 @@ const routes = [
     ],
   },
   {
+    path: "/manual",
+    children: [{ path: "/", component: lazy(() => import("./routes/manual")) }],
+  },
+  {
     path: "/settings",
     children: [
       { path: "/", component: lazy(() => import("./routes/settings")) },
@@ -111,7 +115,6 @@ export default function Root() {
                   message: err.message,
                 });
               }
-              window.location.reload();
             }
             return (
               <div class="z-20 flex h-full w-screen flex-col items-center justify-center bg-white">

@@ -15,6 +15,7 @@ import { useNavigate } from "@solidjs/router";
 import { unbindAndRebind } from "./Device";
 import { CapacitorHttp } from "@capacitor/core";
 import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
+import { satisfies } from "effect/Function";
 
 const UserSchema = z.object({
   token: z.string(),
@@ -94,37 +95,34 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
   }
 
   async function login(email: string, password: string) {
-    try {
-      const authUser = await CacophonyPlugin.authenticateUser({
-        email,
-        password,
+    const authUser = await CacophonyPlugin.authenticateUser({
+      email,
+      password,
+    });
+    if (!authUser.success) {
+      logWarning({
+        message: "Login failed",
+        details: authUser.message,
+        warn: false,
       });
-      if (!authUser.success) {
-        logWarning({
-          message: "Login failed",
-          details: authUser.message,
-        });
-        return;
-      }
-      const { token, refreshToken, expiry } = authUser.data;
-      const user: User = {
-        token,
-        id: authUser.data.id,
-        email,
-        refreshToken,
-        expiry,
-        prod: isProd(),
-      };
-      Preferences.set({ key: "skippedLogin", value: "false" });
-      Preferences.set({
-        key: "user",
-        value: JSON.stringify(user),
-      });
-      mutateUser(user);
-      mutateSkip(false);
-    } catch (e) {
-      console.error(e);
+      throw new Error("Failed to login");
     }
+    const { token, refreshToken, expiry } = authUser.data;
+    const user: User = {
+      token,
+      id: authUser.data.id,
+      email,
+      refreshToken,
+      expiry,
+      prod: isProd(),
+    };
+    Preferences.set({ key: "skippedLogin", value: "false" });
+    Preferences.set({
+      key: "user",
+      value: JSON.stringify(user),
+    });
+    mutateUser(user);
+    mutateSkip(false);
   }
 
   const [server, setServer] = createSignal<"test" | "prod">("prod");
@@ -301,48 +299,59 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       ? "https://api.cacophony.org.nz"
       : "https://api-test.cacophony.org.nz";
   }
+  const GroupSchema = z.array(
+    z.object({
+      id: z.number(),
+      groupName: z.string(),
+    })
+  );
 
   const GroupsResSchema = z.discriminatedUnion("success", [
     z.object({
       success: z.literal(true),
       messages: z.array(z.string()),
-      groups: z.array(
-        z.object({
-          id: z.number(),
-          groupName: z.string(),
-        })
-      ),
+      groups: GroupSchema,
     }),
     z.object({
       success: z.literal(false),
       messages: z.array(z.string()),
     }),
   ]);
+
+  const getCachedGroups = async () =>
+    GroupSchema.safeParse(
+      JSON.parse((await Preferences.get({ key: "groups" })).value ?? "[]")
+    ).data ?? [];
   const [groups, { refetch: refetchGroups }] = createResource(
     () => [data(), getServerUrl()] as const,
     async ([_, url]) => {
-      const user = await getUser();
-      if (!url || !user) return [];
-      const res = await unbindAndRebind(async () => {
-        const res = await CapacitorHttp.request({
-          method: "GET",
-          url: `${url}/api/v1/groups`,
-          headers: {
-            Authorization: user.token,
-          },
+      try {
+        const user = await getUser();
+        if (!url || !user) return [];
+        const res = await unbindAndRebind(async () => {
+          const res = await CapacitorHttp.request({
+            method: "GET",
+            url: `${url}/api/v1/groups`,
+            headers: {
+              Authorization: user.token,
+            },
+          });
+          return res;
         });
-        return res;
-      });
-      if (!res) return [];
-      const result = GroupsResSchema.safeParse(res.data);
-      if (!result.success || result.data.success === false) {
-        return [];
+        if (!res) return [];
+        const result = GroupsResSchema.safeParse(res.data);
+        if (!result.success || result.data.success === false) {
+          return await getCachedGroups();
+        }
+        await Preferences.set({
+          key: "groups",
+          value: JSON.stringify(result.data.groups),
+        });
+        return result.data.groups;
+      } catch (e) {
+        console.error(e);
+        return await getCachedGroups();
       }
-      await Preferences.set({
-        key: "groups",
-        value: JSON.stringify(result.data.groups),
-      });
-      return result.data.groups;
     }
   );
 

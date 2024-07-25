@@ -1,13 +1,22 @@
 import { Dialog as Prompt } from "@capacitor/dialog";
 import { debounce, leading } from "@solid-primitives/scheduled";
 import { useNavigate, useSearchParams } from "@solidjs/router";
-import { BiRegularCurrentLocation } from "solid-icons/bi";
-import { BsCameraVideoFill } from "solid-icons/bs";
-import { FaSolidSpinner, FaSolidStop } from "solid-icons/fa";
+import { AiOutlineUnorderedList } from "solid-icons/ai";
+import { BiRegularCurrentLocation, BiSolidBattery } from "solid-icons/bi";
+import { BsBattery, BsCameraVideoFill } from "solid-icons/bs";
+import {
+  FaSolidBatteryFull,
+  FaSolidSpinner,
+  FaSolidStop,
+} from "solid-icons/fa";
 import { FiDownload } from "solid-icons/fi";
 import { ImCog, ImNotification, ImSearch } from "solid-icons/im";
 import { RiDeviceRouterFill, RiArrowsArrowRightSLine } from "solid-icons/ri";
-import { TbCurrentLocation, TbPlugConnectedX } from "solid-icons/tb";
+import {
+  TbBatteryFilled,
+  TbCurrentLocation,
+  TbPlugConnectedX,
+} from "solid-icons/tb";
 import {
   For,
   Match,
@@ -37,6 +46,7 @@ interface DeviceDetailsProps {
   isConnected: boolean;
   url?: string;
   isProd: boolean;
+  batteryPercentage?: string;
 }
 
 function DeviceDetails(props: DeviceDetailsProps) {
@@ -103,12 +113,20 @@ function DeviceDetails(props: DeviceDetailsProps) {
     >
       <div class=" flex items-center justify-between px-2">
         <div class="w-full" onClick={() => openDeviceInterface()} role="button">
-          <div class="flex items-center space-x-2 ">
+          <div class="flex items-center space-x-1 ">
             <Show when={!props.isProd}>
               <ImCog size={20} />
             </Show>
-            <h1 class="break-all text-left sm:text-lg">{props.name}</h1>
+            <h1 class="break-all text-left text-sm">{props.name}</h1>
           </div>
+          <Show when={props.batteryPercentage}>
+            {(percentage) => (
+              <div class="mt-2 flex w-full items-center space-x-2 text-slate-700">
+                <FaSolidBatteryFull size={20} />
+                <p class="text-sm">Battery: {percentage()}%</p>
+              </div>
+            )}
+          </Show>
           <div class="mt-2 flex w-full items-center space-x-2 text-slate-700">
             <BsCameraVideoFill size={20} />
             <p class="text-sm">
@@ -116,7 +134,7 @@ function DeviceDetails(props: DeviceDetailsProps) {
             </p>
           </div>
           <div class="mt-2 flex w-full items-center space-x-2 text-slate-700">
-            <ImNotification size={20} />
+            <AiOutlineUnorderedList size={20} />
             <p class="text-sm">
               Events Saved:{" "}
               {
@@ -289,18 +307,18 @@ function Devices() {
     });
   });
 
-  const [, setParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isDialogOpen, setIsDialogOpen] = createSignal(false);
   createEffect(
     on(
       () => {
         if (context.devicesLocToUpdate.loading) return false;
-        return [context.devicesLocToUpdate(), context.isDiscovering()] as const;
+        return [context.devicesLocToUpdate()] as const;
       },
       async (sources) => {
         if (!sources) return;
-        const [devices, isDiscovering] = sources;
-        if (!devices || isDiscovering) return;
+        const [devices] = sources;
+        if (!devices) return;
 
         const devicesToUpdate = devices.filter(
           (val) => !context.locationBeingSet.has(val)
@@ -308,28 +326,30 @@ function Devices() {
         if (
           devicesToUpdate.length === 0 ||
           locPromptCancelled() ||
-          isDialogOpen()
+          isDialogOpen() ||
+          searchParams.setupDevice
         )
           return;
         if (devicesToUpdate.length === 1) {
           const device = context.devices.get(devicesToUpdate[0]);
           if (device) {
+            // if it's new and not in the setup wizard prompt the user to do so.
             if (device.group === "new") {
               if (groupPromptCancelled()) return;
-              const message = `Looks like ${device.name} needs to be assigned to a group. Would you like to assign it to a group?`;
+              const message = `Looks like ${device.name} needs to be setup. Would you like to setup the group and location?`;
               setIsDialogOpen(true);
               const { value } = await Prompt.confirm({
                 title: "Setup Device",
                 message,
               });
               if (value) {
-                setParams({
-                  deviceSettings: devicesToUpdate[0],
-                  tab: "General",
+                setSearchParams({
+                  setupDevice: devicesToUpdate[0],
+                  step: "wifiSetup",
                 });
+              } else {
+                setGroupCancelledPrompt(true);
               }
-              setGroupCancelledPrompt(true);
-
               setIsDialogOpen(false);
             } else {
               const message = `${
@@ -344,7 +364,7 @@ function Devices() {
 
               if (value) {
                 await context.setDeviceToCurrLocation(devicesToUpdate[0]);
-                setParams({
+                setSearchParams({
                   deviceSettings: devicesToUpdate[0],
                   tab: "Location",
                 });
@@ -371,7 +391,10 @@ function Devices() {
             for (const device of devicesToUpdate) {
               await context.setDeviceToCurrLocation(device);
             }
-            setParams({ deviceSettings: devicesToUpdate[0], tab: "Location" });
+            setSearchParams({
+              deviceSettings: devicesToUpdate[0],
+              tab: "Location",
+            });
           } else {
             setPromptCancel(true);
           }
@@ -380,12 +403,13 @@ function Devices() {
     )
   );
 
-  const [searchParams, setSearchParams] = useSearchParams();
   const findDevice = () => {
-    debugger;
     setSearchParams({ step: "chooseDevice" });
-    console.log(searchParams.step);
   };
+
+  createEffect(() => {
+    console.log(searchParams);
+  });
 
   return (
     <>
@@ -403,6 +427,7 @@ function Devices() {
               isProd={device.isProd}
               isConnected={device.isConnected}
               groupName={device.group}
+              batteryPercentage={device.batteryPercentage}
             />
           )}
         </For>

@@ -160,24 +160,18 @@ export default function Storage() {
       </Show>
 
       <div class="pb-bar fixed inset-x-0 bottom-2 mx-auto flex justify-center">
-        <CircleButton
-          text={
-            user.isProd() ? "Upload to Cacophony" : "Upload to Cacophony Test"
-          }
-          loadingText="Uploading..."
+        <button
+          class="flex items-center justify-center space-x-2 rounded-md bg-white px-4 py-4"
           onClick={toggleUpload}
           disabled={false}
-          loading={storage.isUploading()}
-          loadingIcon={
-            <div class="text-red-500">
-              <FaSolidStop size={36} />
-            </div>
-          }
         >
           <div class="text-blue-500">
-            <FiUploadCloud size={36} />
+            <FiUploadCloud size={28} />
           </div>
-        </CircleButton>
+          <Show when={!storage.isUploading()} fallback={<p>Uploading...</p>}>
+            <p>Upload</p>
+          </Show>
+        </button>
       </div>
     </section>
   );

@@ -159,6 +159,9 @@ const DropdownInput: Component<DropdownInputProps> = (props) => {
                       setSaving("saving");
                       await props.onChange(search());
                       setSaving("saved");
+                      setTimeout(() => {
+                        setOpen(false);
+                      }, 1500);
                     } catch (error) {
                       console.error(error);
                       setSaving("error");

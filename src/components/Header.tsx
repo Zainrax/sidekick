@@ -18,6 +18,7 @@ export const [HeaderProvider, useHeaderContext] = createContextProvider(() => {
       ["/storage/recordings", ["Uploaded"]],
       ["/settings", ["Settings"]],
       ["/settings/user", ["User"]],
+      ["/manual", ["Manual"]],
     ]
   );
   const location = useLocation();
