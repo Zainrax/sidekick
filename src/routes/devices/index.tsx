@@ -407,10 +407,6 @@ function Devices() {
     setSearchParams({ step: "chooseDevice" });
   };
 
-  createEffect(() => {
-    console.log(searchParams);
-  });
-
   return (
     <>
       <section class="pb-bar pt-bar relative z-20 space-y-2 overflow-y-auto px-2">

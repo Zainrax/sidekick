@@ -156,7 +156,6 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     
     @objc func connectToDeviceAP(_ call: CAPPluginCall) {
         guard self.bridge != nil else { return }
-
         // First, check if already connected to bushnet
         checkCurrentConnection { isConnected in
             if isConnected {
@@ -166,44 +165,14 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
 
             // If not connected, proceed with connection attempt
             NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
-            self.configuration.joinOnce = false
+            
             
             NEHotspotConfigurationManager.shared.apply(self.configuration) { error in
                 if let error = error {
                     self.notifyListeners("onAccessPointChange", data: ["status": "error", "error": error.localizedDescription])
                     return
                 }
-                
-                if #available(iOS 14.0, *) {
-                    NEHotspotHelper.register(options: [:], queue: DispatchQueue.main) { (command) in
-                        if command.commandType == .filterScanList {
-                            // Check if we've disconnected from bushnet
-                            if !(command.networkList?.contains(where: { $0.ssid == "bushnet" }) ?? false) {
-                                DispatchQueue.main.async {
-                                    self.notifyListeners("onAccessPointChange", data: ["status": "disconnected"])
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Check if connection was successful
-                    self.checkCurrentConnection { isConnected in
-                        if isConnected {
-                            self.notifyListeners("onAccessPointChange", data: ["status": "connected"])
-                        } else {
-                            self.notifyListeners("onAccessPointChange", data: ["status": "disconnected"])
-                        }
-                    }
-                } else {
-                    // Fallback for iOS 13 and earlier
-                    self.checkCurrentConnection { isConnected in
-                        if isConnected {
-                            self.notifyListeners("onAccessPointChange", data: ["status": "connected"])
-                        } else {
-                            self.notifyListeners("onAccessPointChange", data: ["status": "disconnected"])
-                        }
-                    }
-                }
+                self.notifyListeners("onAccessPointChange", data: ["status": "connected"]);
             }
         }
     }
@@ -216,7 +185,6 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         // Attempt to remove the Wi-Fi configuration for the SSID "bushnet"
         NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
 
-        // Add a 5 second delay before checking the connection status
             if #available(iOS 14.0, *) {
                 NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
                     if let currentSSID = currentConfiguration?.ssid, currentSSID == "bushnet" {

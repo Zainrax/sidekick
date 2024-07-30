@@ -30,7 +30,7 @@ import { Dialog } from "@capacitor/dialog";
 import FieldWrapper from "../Field";
 import { AiOutlineInfoCircle } from "solid-icons/ai";
 export type ColorType = "blue" | "green" | "yellow" | "gray" | "red";
-export type DeviceType = "AI Doc Cam / Bird Monitor" | "Classic";
+export type DeviceType = "DOC AI Cam / Bird Monitor" | "Classic";
 
 type StoreType = {
   deviceType: DeviceType | null;
@@ -173,7 +173,7 @@ export const StartupProcess = (props: StartupProcessProps): JSX.Element => (
 );
 
 export const getStartupSteps = (deviceType: DeviceType): StepType[] => {
-  if (deviceType === "AI Doc Cam / Bird Monitor") {
+  if (deviceType === "DOC AI Cam / Bird Monitor") {
     return [
       { color: "blue", label: "Bootup", duration: "30s", sequence: ["long"] },
       {
@@ -243,6 +243,9 @@ function SetupWizard(): JSX.Element {
     setSearchParams({ step });
   };
   const close = () => setSearchParams({ step: "" });
+  const finishSetup = () => {
+    deviceContext.rebootDevice(searchParams.setupDevice);
+  };
   const [showHelp, setShowHelp] = createSignal(false);
 
   const user = useUserContext();
@@ -289,7 +292,7 @@ function SetupWizard(): JSX.Element {
   const getInstructions = (deviceType: DeviceType): JSX.Element => {
     return (
       <Show
-        when={deviceType === "AI Doc Cam / Bird Monitor"}
+        when={deviceType === "DOC AI Cam / Bird Monitor"}
         fallback={
           <>
             <ol class="mb-4 list-inside list-decimal">
@@ -341,10 +344,10 @@ function SetupWizard(): JSX.Element {
       <Title title="Connect To Device" />
       <div class="mb-4 flex space-x-2">
         <DeviceTypeButton
-          isSelected={store.deviceType === "AI Doc Cam / Bird Monitor"}
-          onClick={() => setStore("deviceType", "AI Doc Cam / Bird Monitor")}
+          isSelected={store.deviceType === "DOC AI Cam / Bird Monitor"}
+          onClick={() => setStore("deviceType", "DOC AI Cam / Bird Monitor")}
         >
-          AI Doc Cam / Bird Monitor
+          DOC AI Cam / Bird Monitor
         </DeviceTypeButton>
         <DeviceTypeButton
           isSelected={store.deviceType === "Classic"}
@@ -564,12 +567,12 @@ function SetupWizard(): JSX.Element {
         <button
           class="flex flex-col items-center rounded-lg bg-green-200 p-4"
           onClick={() => {
-            setStore("deviceType", "AI Doc Cam / Bird Monitor");
+            setStore("deviceType", "DOC AI Cam / Bird Monitor");
             setStep("directConnect");
           }}
         >
           <AIDocSVG />
-          <span>AI Doc Cam/ Bird Monitor</span>
+          <span>DOC AI Cam/ Bird Monitor</span>
         </button>
         <button
           class="flex flex-col items-center rounded-lg bg-gray-200 p-4"
@@ -658,7 +661,7 @@ function SetupWizard(): JSX.Element {
           </For>
         </div>
         <Show
-          when={props.place === totalSteps}
+          when={props.place === totalSteps - 1}
           fallback={
             <button
               onClick={() => {
@@ -671,12 +674,15 @@ function SetupWizard(): JSX.Element {
             </button>
           }
         >
-          <button
-            onClick={() => close()}
-            class="relative flex items-center justify-center p-2 text-lg text-blue-500"
-          >
-            Finish Setup
-          </button>
+          <div class="flex flex-col items-center justify-center">
+            <button
+              onClick={() => finishSetup()}
+              class="relative flex items-center justify-center p-2 text-lg text-blue-500"
+            >
+              Finish Setup
+            </button>
+            <p class="text-sm text-gray-500">Will reboot to apply changes.</p>
+          </div>
         </Show>
       </div>
     );

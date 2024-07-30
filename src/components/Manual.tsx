@@ -26,7 +26,7 @@ export default function Manual() {
     createSignal<string>("");
   const tabs = [
     { id: "connectionMethods", label: "Connection Methods" },
-    { id: "aiDocCam", label: "AI Doc Cam/ Bird Monitor" },
+    { id: "aiDocCam", label: "DOC AI Cam/ Bird Monitor" },
     { id: "classicThermal", label: "Classic Thermal Camera" },
   ];
 
@@ -50,25 +50,26 @@ export default function Manual() {
     const deviceContext = useDevice();
     const connectionStatus = () => deviceContext.apState();
     const [deviceType, setDeviceType] = createSignal<DeviceType>(
-      "AI Doc Cam / Bird Monitor"
+      "DOC AI Cam / Bird Monitor"
     );
-    switch (method) {
-      case "directConnect":
-        return (
+
+    return (
+      <Switch fallback={<p>Select a connection method to see instructions.</p>}>
+        <Match when={method === "directConnect"}>
           <>
             <button
               onClick={() => setSelectedConnectionMethod("")}
               class="flex items-center justify-center py-2 text-xl text-blue-500"
             >
               <RiArrowsArrowLeftSLine size={32} />
-              Direct Conncetion
+              Direct Connection
             </button>
             <div class="mb-4 flex w-full items-center justify-center space-x-2">
               <DeviceTypeButton
-                isSelected={deviceType() === "AI Doc Cam / Bird Monitor"}
-                onClick={() => setDeviceType("AI Doc Cam / Bird Monitor")}
+                isSelected={deviceType() === "DOC AI Cam / Bird Monitor"}
+                onClick={() => setDeviceType("DOC AI Cam / Bird Monitor")}
               >
-                AI Doc Cam / Bird Monitor
+                DOC AI Cam / Bird Monitor
               </DeviceTypeButton>
               <DeviceTypeButton
                 isSelected={deviceType() === "Classic"}
@@ -82,6 +83,24 @@ export default function Manual() {
               <li>Press the "Connect to Camera" button below.</li>
               <li>If prompted, confirm the connection to "bushnet"</li>
             </ol>
+            <Switch>
+              <Match when={deviceType() === "DOC AI Cam / Bird Monitor"}>
+                <p class="mb-4 text-center text-sm">
+                  If your light is <span class="text-red-500">red</span> or in{" "}
+                  <span class="text-blue-500">standby</span>(not blinking), long
+                  press (3 seconds) wait till the light is off, and long press
+                  again the power button on your camera to restart the process.
+                  <br />
+                  Press "help" for more information
+                </p>
+              </Match>
+              <Match when={deviceType() === "Classic"}>
+                <p class="mb-4 text-center text-sm">
+                  If your light does not match the process indicated below press
+                  "help" for troubleshooting tips
+                </p>
+              </Match>
+            </Switch>
             <StartupProcess steps={getStartupSteps(deviceType())} />
             <button
               class="mb-4 w-full rounded bg-blue-500 py-2 text-white"
@@ -104,9 +123,8 @@ export default function Manual() {
               </Switch>
             </button>
           </>
-        );
-      case "phoneHotspot":
-        return (
+        </Match>
+        <Match when={method === "phoneHotspot"}>
           <>
             <button
               onClick={() => setSelectedConnectionMethod("")}
@@ -115,13 +133,17 @@ export default function Manual() {
               <RiArrowsArrowLeftSLine size={32} />
               Phone Hotspot
             </button>
-            <ol class="list-decimal pl-5">
+            <ol class="list-decimal px-6">
               <li>Set up Personal Hotspot</li>
               <li>
                 Go to Settings {">"} Personal Hotspot (or Portable Hotspot)
               </li>
               <li>Tap the slider next to Allow Others to Join</li>
               <li>Enable Maximize Compatibility if on iOS</li>
+              <li>
+                Connect using direct connect and add your hotspot through the
+                wifi settings
+              </li>
             </ol>
             <button
               onClick={() => {
@@ -135,9 +157,8 @@ export default function Manual() {
               Hotspot Settings
             </button>
           </>
-        );
-      case "wifiConnection":
-        return (
+        </Match>
+        <Match when={method === "wifiConnection"}>
           <>
             <button
               onClick={() => setSelectedConnectionMethod("")}
@@ -166,12 +187,10 @@ export default function Manual() {
               WiFi Settings
             </button>
           </>
-        );
-      default:
-        return <p>Select a connection method to see instructions.</p>;
-    }
+        </Match>
+      </Switch>
+    );
   };
-
   const LightStatus = (props: {
     status: string;
     sequence: LightSequence;
@@ -291,7 +310,7 @@ export default function Manual() {
             <LightStatus
               sequence={["long"]}
               color="red"
-              status="Device is Off"
+              status="Device is Off/in standby"
               sequenceText="(Solid Light)"
             />
             <LightStatus
