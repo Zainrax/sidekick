@@ -555,7 +555,9 @@ export function useLocationStorage() {
     const user = await userContext.getUser();
     let uploadPhotos: string[] = location.uploadPhotos ?? [];
     let referencePhotos = location.referencePhotos ?? [];
-    if (!user) return [uploadPhotos, referencePhotos];
+    const isConnectedToDevice = await DevicePlugin.checkIsAPConnected();
+    if (!user || isConnectedToDevice.connected)
+      return [uploadPhotos, referencePhotos];
     const uploadedPhotos: [string, string][] = (
       await Promise.all(
         uploadPhotos.map(async (photo) => {

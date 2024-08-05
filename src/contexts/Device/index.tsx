@@ -32,7 +32,7 @@ import { logError, logSuccess, logWarning } from "../Notification";
 import { useStorage } from "../Storage";
 import { isWithinRange } from "../Storage/location";
 import DeviceCamera from "./Camera";
-import { Effect } from "effect";
+import { Effect, Schedule } from "effect";
 import { satisfies } from "effect/Function";
 
 const WifiNetwork = z
@@ -117,13 +117,6 @@ type DeviceService = {
 
 export interface DevicePlugin {
   addListener(
-    call: "onAccessPointChange",
-    callback: (res: {
-      status: "connected" | "disconnected" | "error";
-      error?: string;
-    }) => void
-  ): Promise<PluginListenerHandle>;
-  addListener(
     call: "onServiceResolved",
     callback: (res: DeviceService) => void
   ): Promise<PluginListenerHandle>;
@@ -131,7 +124,10 @@ export interface DevicePlugin {
     call: "onServiceLost",
     callback: (res: { endpoint: string }) => void
   ): Promise<PluginListenerHandle>;
-  connectToDeviceAP(): Promise<void>;
+  connectToDeviceAP(): Promise<{
+    status: "connected" | "disconnected" | "error";
+    error?: string;
+  }>;
   discoverDevices(): Promise<void>;
   stopDiscoverDevices(): Promise<void>;
   checkDeviceConnection(options: DeviceUrl): Result;
@@ -159,7 +155,7 @@ export interface DevicePlugin {
   downloadRecording(
     options: DeviceUrl & { recordingPath: string }
   ): Result<{ path: string; size: number }>;
-  disconnectFromDeviceAP(): Promise<void>;
+  disconnectFromDeviceAP(): Promise<Result<"disconnected">>;
   reregisterDevice(
     options: DeviceUrl & { group: string; device: string }
   ): Result;
@@ -1538,7 +1534,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   };
 
   // Access point
-
   const [apState, setApState] = createSignal<
     "connected" | "disconnected" | "loading" | "default"
   >("default");
@@ -1561,27 +1556,28 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   );
 
   const host = `http://192.168.4.1`;
-  onMount(async () => {
-    const res = await DevicePlugin.addListener(
-      "onAccessPointChange",
-      async (res) => {
+  const checkPolicy = Schedule.addDelay(Schedule.recurs(4), () => 1000);
+  const connectToDeviceAP = leading(
+    debounce,
+    async () => {
+      setApState("loading");
+      try {
+        const res = await DevicePlugin.connectToDeviceAP();
         if (res.status === "connected") {
-          const device = await createDevice(host);
-          if (device) {
-            const connectedDevice: ConnectedDevice = {
-              ...device,
-              host,
-              endpoint: host,
-            };
-            addConnectedDevice(connectedDevice);
-          }
-          searchDevice();
           setApState("connected");
-        } else if (res.status === "disconnected") {
-          setApState("disconnected");
-          setTimeout(() => {
-            setApState("default");
-          }, 4000);
+          setTimeout(async () => {
+            const device = await createDevice(host);
+            if (device) {
+              const connectedDevice: ConnectedDevice = {
+                ...device,
+                host,
+                endpoint: host,
+              };
+              addConnectedDevice(connectedDevice);
+            }
+          }, 1000);
+
+          searchDevice();
         } else if (res.status === "error") {
           logWarning({
             message:
@@ -1589,24 +1585,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           });
           setApState("default");
         }
-      }
-    );
-    onCleanup(async () => {
-      await res.remove();
-    });
-  });
-
-  const connectToDeviceAP = leading(
-    debounce,
-    async () => {
-      setApState("loading");
-      try {
-        await DevicePlugin.connectToDeviceAP();
       } catch (err) {
-        logWarning({
-          message:
-            "Please try again, or connect to 'bushnet' with password 'feathers' in your wifi settings. Alternatively, set up a hotspot named 'bushnet' password: 'feathers'.",
-        });
         setApState("default");
       }
     },
@@ -1615,9 +1594,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const disconnectFromDeviceAP = async () => {
     try {
       setApState("loading");
-      await DevicePlugin.disconnectFromDeviceAP();
+      const res = await DevicePlugin.disconnectFromDeviceAP();
+      if (res.success && res.data === "disconnected") {
+        setApState("disconnected");
+      }
       searchDevice();
-      setApState("disconnected");
       return true;
     } catch (error) {
       return false;

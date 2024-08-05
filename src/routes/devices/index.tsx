@@ -94,6 +94,10 @@ function DeviceDetails(props: DeviceDetailsProps) {
 
   const updateLocState = () => context.shouldDeviceUpdateLocation(props.id);
 
+  createEffect(() => {
+    console.log("BATTERY", props.batteryPercentage);
+  });
+
   return (
     <ActionContainer
       disabled={!props.isConnected}
@@ -119,7 +123,13 @@ function DeviceDetails(props: DeviceDetailsProps) {
             </Show>
             <h1 class="break-all text-left text-sm">{props.name}</h1>
           </div>
-          <Show when={props.batteryPercentage}>
+          <Show
+            when={
+              props.batteryPercentage !== "0" &&
+              props.batteryPercentage !== "" &&
+              props.batteryPercentage
+            }
+          >
             {(percentage) => (
               <div class="mt-2 flex w-full items-center space-x-2 text-slate-700">
                 <FaSolidBatteryFull size={20} />

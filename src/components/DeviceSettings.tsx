@@ -713,18 +713,26 @@ export function LocationSettingsTab(props: SettingProps) {
     const photoPaths = photoFilesToUpload();
     const deviceLocation = await context.getLocationCoords(id());
     const loc = location();
+    debugger;
     if (!loc && deviceLocation.success) {
-      await storage.createLocation({
-        name,
-        coords: {
-          lat: deviceLocation.data.latitude,
-          lng: deviceLocation.data.longitude,
-        },
-        groupName: groupName(),
-        uploadPhotos: photoPaths.map((photo) => photo.file),
-        isProd: isProd(),
-      });
-      await refetchLocation();
+      try {
+        await storage.createLocation({
+          name,
+          coords: {
+            lat: deviceLocation.data.latitude,
+            lng: deviceLocation.data.longitude,
+          },
+          groupName: groupName(),
+          uploadPhotos: photoPaths.map((photo) => photo.file),
+          isProd: isProd(),
+        });
+        await refetchLocation();
+      } catch (e) {
+        setPhotoFilesToUpload([]);
+        setNewName("");
+        toggleEditing(false);
+        setSetting(false);
+      }
       setPhotoFilesToUpload([]);
       setNewName("");
       toggleEditing(false);
@@ -839,7 +847,7 @@ export function LocationSettingsTab(props: SettingProps) {
   );
   const lat = () => locCoords()?.latitude ?? "...";
   const lng = () => locCoords()?.longitude ?? "...";
-
+  const [settingLocation, setSettingLocation] = createSignal(false);
   return (
     <section class="px-4 py-4">
       <Show when={shouldUpdateLocState() === "needsUpdate"}>
@@ -847,11 +855,25 @@ export function LocationSettingsTab(props: SettingProps) {
           <button
             class="my-2 flex space-x-2 self-center rounded-md bg-blue-500 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
             onClick={async () => {
-              await context.setDeviceToCurrLocation(id());
-              await refetch();
+              try {
+                setSettingLocation(true);
+                await context.setDeviceToCurrLocation(id());
+                await refetch();
+                setSettingLocation(false);
+              } catch (e) {
+                setSettingLocation(false);
+              }
             }}
+            disabled={settingLocation()}
           >
-            <span class="text-sm">Update to Current Location</span>
+            <Show
+              when={settingLocation()}
+              fallback={
+                <span class="text-sm">Updating to Current Location...</span>
+              }
+            >
+              <span class="text-sm">Update to Current Location</span>
+            </Show>
             <FiMapPin size={18} />
           </button>
         </div>

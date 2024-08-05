@@ -155,24 +155,23 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     }
     
     @objc func connectToDeviceAP(_ call: CAPPluginCall) {
-        guard self.bridge != nil else { return }
+        guard let bridge = self.bridge else { return }
         // First, check if already connected to bushnet
         checkCurrentConnection { isConnected in
             if isConnected {
-                self.notifyListeners("onAccessPointChange", data: ["status": "connected"])
+                call.resolve(["status": "connected"])
                 return
             }
-
+            
             // If not connected, proceed with connection attempt
             NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
             
-            
             NEHotspotConfigurationManager.shared.apply(self.configuration) { error in
                 if let error = error {
-                    self.notifyListeners("onAccessPointChange", data: ["status": "error", "error": error.localizedDescription])
+                    call.resolve(["status": "error", "error": error.localizedDescription])
                     return
                 }
-                self.notifyListeners("onAccessPointChange", data: ["status": "connected"]);
+                call.resolve(["status": "connected"])
             }
         }
     }

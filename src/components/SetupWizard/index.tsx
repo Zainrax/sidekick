@@ -729,7 +729,7 @@ function SetupWizard(): JSX.Element {
   const LocationSettings = () => {
     return (
       <>
-        <Title title="Location Setings" back="group" />
+        <Title title="Location Settings" back="group" />
         <LocationSettingsTab deviceId={searchParams.setupDevice} />
         <StepProgressIndicator nextStep="camera" place={2} />
         <Additional />
