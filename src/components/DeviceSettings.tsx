@@ -891,7 +891,7 @@ export function LocationSettingsTab(props: SettingProps) {
             </div>
             <p class="flex space-x-2 text-sm text-blue-600">
               Location will update when online and logged in as a member of the{" "}
-              {device()?.group ?? "device's"} group.
+              "{device()?.group ?? "device's"}" group.
             </p>
           </div>
         )}
@@ -966,9 +966,122 @@ export function LocationSettingsTab(props: SettingProps) {
           <div>
             <p class="text-sm text-slate-400">Photo Reference:</p>
             <div class="relative rounded-md bg-slate-100">
-              <Show
-                when={photoReference()}
-                fallback={
+              <Switch>
+                <Match when={photoReference.loading}>
+                  <div class="absolute flex h-full w-full flex-col justify-between gap-2">
+                    <div class="flex w-full justify-between">
+                      <button
+                        class="flex h-10 w-10 items-center justify-center rounded-br-lg bg-slate-100 p-2 text-blue-500"
+                        onClick={() => addPhotoToDevice()}
+                      >
+                        <TbCameraPlus size={28} />
+                      </button>
+                      <button
+                        class="flex h-10 w-10 items-center justify-center rounded-bl-lg bg-slate-100 p-2 text-red-500"
+                        onClick={() => removePhotoReference()}
+                      >
+                        <FaRegularTrashCan size={22} />
+                      </button>
+                    </div>
+                    <div class="flex w-full justify-between">
+                      <button
+                        class="flex h-10 w-10 items-center justify-center rounded-r-full bg-slate-100 p-2 text-gray-500"
+                        onClick={() =>
+                          setPhotoIndex((i) =>
+                            i === 0 ? photos().length - 1 : i - 1
+                          )
+                        }
+                      >
+                        <ImArrowLeft size={18} />
+                      </button>
+                      <button
+                        class="flex h-10 w-10 items-center justify-center rounded-l-full bg-slate-100 p-2 text-gray-500"
+                        onClick={() =>
+                          setPhotoIndex((i) =>
+                            i === photos().length - 1 ? 0 : i + 1
+                          )
+                        }
+                      >
+                        <ImArrowRight size={18} />
+                      </button>
+                    </div>
+                    <div class="w-fit self-center rounded-lg bg-slate-50 p-1">
+                      {photoIndex() + 1}/{photos().length}
+                    </div>
+                  </div>
+                  <div
+                    class="flex h-[18rem] w-full flex-col items-center justify-center  text-gray-700"
+                    onClick={() => addPhotoToDevice()}
+                  >
+                    <FaSolidSpinner size={28} class="animate-spin" />
+                    <p class="text-sm text-gray-800">Loading...</p>
+                  </div>
+                </Match>
+                <Match when={photoReference() && !photoReference.loading}>
+                  <div class="absolute flex h-full w-full flex-col justify-between gap-2">
+                    <div class="flex w-full justify-between">
+                      <button
+                        class="flex h-10 w-10 items-center justify-center rounded-br-lg bg-slate-100 p-2 text-blue-500"
+                        onClick={() => addPhotoToDevice()}
+                      >
+                        <TbCameraPlus size={28} />
+                      </button>
+                      <button
+                        class="flex h-10 w-10 items-center justify-center rounded-bl-lg bg-slate-100 p-2 text-red-500"
+                        onClick={() => removePhotoReference()}
+                      >
+                        <FaRegularTrashCan size={22} />
+                      </button>
+                    </div>
+                    <div class="flex w-full justify-between">
+                      <button
+                        class="flex h-10 w-10 items-center justify-center rounded-r-full bg-slate-100 p-2 text-gray-500"
+                        onClick={() =>
+                          setPhotoIndex((i) =>
+                            i === 0 ? photos().length - 1 : i - 1
+                          )
+                        }
+                      >
+                        <ImArrowLeft size={18} />
+                      </button>
+                      <button
+                        class="flex h-10 w-10 items-center justify-center rounded-l-full bg-slate-100 p-2 text-gray-500"
+                        onClick={() =>
+                          setPhotoIndex((i) =>
+                            i === photos().length - 1 ? 0 : i + 1
+                          )
+                        }
+                      >
+                        <ImArrowRight size={18} />
+                      </button>
+                    </div>
+                    <div class="w-fit self-center rounded-lg bg-slate-50 p-1">
+                      {photoIndex() + 1}/{photos().length}
+                    </div>
+                  </div>
+                  <div
+                    classList={{
+                      "outline-blue-500 outline outline-2": isImageToUpload(),
+                    }}
+                    class="h-[18rem]"
+                  >
+                    <Show
+                      when={
+                        !photoReference.loading &&
+                        !photoReference.error &&
+                        photoReference()
+                      }
+                    >
+                      {(photo) => (
+                        <img
+                          src={photo()}
+                          class="h-[18rem] w-full rounded-md object-cover p-4"
+                        />
+                      )}
+                    </Show>
+                  </div>
+                </Match>
+                <Match when={!photoReference.loading && !photoReference()}>
                   <button
                     class="flex w-full flex-col items-center justify-center p-8  text-gray-700"
                     onClick={() => addPhotoToDevice()}
@@ -976,71 +1089,8 @@ export function LocationSettingsTab(props: SettingProps) {
                     <TbCameraPlus size={52} />
                     <p class="text-sm text-gray-800">Add Photo</p>
                   </button>
-                }
-              >
-                <div class="absolute flex h-full w-full flex-col justify-between gap-2">
-                  <div class="flex w-full justify-between">
-                    <button
-                      class="flex h-10 w-10 items-center justify-center rounded-br-lg bg-slate-100 p-2 text-blue-500"
-                      onClick={() => addPhotoToDevice()}
-                    >
-                      <TbCameraPlus size={28} />
-                    </button>
-                    <button
-                      class="flex h-10 w-10 items-center justify-center rounded-bl-lg bg-slate-100 p-2 text-red-500"
-                      onClick={() => removePhotoReference()}
-                    >
-                      <FaRegularTrashCan size={22} />
-                    </button>
-                  </div>
-                  <div class="flex w-full justify-between">
-                    <button
-                      class="flex h-10 w-10 items-center justify-center rounded-r-full bg-slate-100 p-2 text-gray-500"
-                      onClick={() =>
-                        setPhotoIndex((i) =>
-                          i === 0 ? photos().length - 1 : i - 1
-                        )
-                      }
-                    >
-                      <ImArrowLeft size={18} />
-                    </button>
-                    <button
-                      class="flex h-10 w-10 items-center justify-center rounded-l-full bg-slate-100 p-2 text-gray-500"
-                      onClick={() =>
-                        setPhotoIndex((i) =>
-                          i === photos().length - 1 ? 0 : i + 1
-                        )
-                      }
-                    >
-                      <ImArrowRight size={18} />
-                    </button>
-                  </div>
-                  <div class="w-fit self-center rounded-lg bg-slate-50 p-1">
-                    {photoIndex() + 1}/{photos().length}
-                  </div>
-                </div>
-                <div
-                  classList={{
-                    "outline-blue-500 outline outline-2": isImageToUpload(),
-                  }}
-                  class="h-[18rem]"
-                >
-                  <Show
-                    when={
-                      !photoReference.loading &&
-                      !photoReference.error &&
-                      photoReference()
-                    }
-                  >
-                    {(photo) => (
-                      <img
-                        src={photo()}
-                        class="h-[18rem] w-full rounded-md object-cover p-4"
-                      />
-                    )}
-                  </Show>
-                </div>
-              </Show>
+                </Match>
+              </Switch>
             </div>
           </div>
           <div
@@ -1149,6 +1199,18 @@ export function WifiSettingsTab(props: SettingProps) {
   const [openedModem, setOpenedModem] = createSignal<boolean>();
 
   const [connecting, setConnecting] = createSignal<null | string>(null);
+  createEffect(
+    on(connecting, (ssid) => {
+      const currDevice = device();
+      if (currDevice) {
+        if (ssid) {
+          context.devicesConnectingToWifi.set(currDevice.id, ssid !== null);
+        } else {
+          context.devicesConnectingToWifi.delete(currDevice.id);
+        }
+      }
+    })
+  );
   const connectToWifi = async () => {
     setErrorConnecting(null);
     const wifi = openedNetwork();
@@ -1161,6 +1223,9 @@ export function WifiSettingsTab(props: SettingProps) {
       setOpenedNetwork(null);
     } else {
       setErrorConnecting("Could not connect to wifi. Please try again.");
+      setTimeout(() => {
+        context.devicesConnectingToWifi.delete(device()?.id);
+      }, 5000);
     }
     context.searchDevice();
     refetch();
@@ -1304,10 +1369,11 @@ export function WifiSettingsTab(props: SettingProps) {
     }
   );
 
-  const [hasNetworkEndpoints] = createResource(async () => {
-    const hasEndpoint = await context.hasNetworkEndpoints(id());
-    return hasEndpoint;
-  });
+  const [hasNetworkEndpoints, { refetch: refetchHasNetworkEndpoints }] =
+    createResource(async () => {
+      const hasEndpoint = await context.hasNetworkEndpoints(id());
+      return hasEndpoint;
+    });
 
   const LinkToNetwork = () => (
     <div class="flex w-full items-center justify-center py-2 text-lg text-blue-500">
@@ -1360,6 +1426,8 @@ export function WifiSettingsTab(props: SettingProps) {
 
   const [savingModem, setSavingModem] = createSignal<SaveState>(null);
 
+  const disableConnect = (ssid: string) =>
+    (showPassword() && password().length < 8) || connecting() === ssid;
   const hasApn = () => modem()?.modem?.apn !== undefined;
   const [isForgetting, setIsForgetting] = createSignal<boolean>(false);
   return (
@@ -1484,6 +1552,12 @@ export function WifiSettingsTab(props: SettingProps) {
               </FieldWrapper>
             </button>
             <section class="flex h-32 flex-col space-y-2 overflow-y-auto rounded-md bg-neutral-100 p-2">
+              <Show when={wifiNetworks.loading && wifiNetworks()?.length === 0}>
+                <div class="flex h-full w-full flex-col items-center justify-center">
+                  <FaSolidSpinner size={28} class="animate-spin" />
+                  <p>Loading Networks...</p>
+                </div>
+              </Show>
               <For each={wifiNetworks()?.sort(sortWifi)}>
                 {(val) => (
                   <button
@@ -1759,11 +1833,14 @@ export function WifiSettingsTab(props: SettingProps) {
                   <div class="flex w-full items-center space-x-2">
                     <button
                       type="submit"
+                      classList={{
+                        "bg-gray-300 text-gray-700": disableConnect(
+                          wifi().SSID
+                        ),
+                        "bg-blue-500": !disableConnect(wifi().SSID),
+                      }}
                       class="flex w-full items-center justify-center space-x-2 rounded-md bg-blue-500 py-3 text-white"
-                      disabled={
-                        (showPassword() && password().length < 8) ||
-                        connecting() === wifi().SSID
-                      }
+                      disabled={disableConnect(wifi().SSID)}
                       onClick={(e) => {
                         e.preventDefault();
                         connectToWifi();
@@ -1788,6 +1865,7 @@ export function WifiSettingsTab(props: SettingProps) {
                           setIsForgetting(true);
                           await forgetWifi(wifi().SSID);
                           setIsForgetting(false);
+                          await refetchSavedWifi();
                           context.searchDevice();
                         }}
                       >

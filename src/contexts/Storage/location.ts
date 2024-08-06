@@ -419,7 +419,8 @@ export function useLocationStorage() {
     try {
       await DevicePlugin.unbindConnection();
       const user = await userContext.getUser();
-      if (user) {
+      const isConnectedToDevice = await DevicePlugin.checkIsAPConnected();
+      if (user && !isConnectedToDevice.connected) {
         const res = await CacophonyPlugin.uploadReferencePhoto({
           token: user.token,
           station: location.id.toString(),

@@ -29,6 +29,7 @@ import { useUserContext } from "~/contexts/User";
 import { Dialog } from "@capacitor/dialog";
 import FieldWrapper from "../Field";
 import { AiOutlineInfoCircle } from "solid-icons/ai";
+import { TbPlugConnectedX } from "solid-icons/tb";
 export type ColorType = "blue" | "green" | "yellow" | "gray" | "red";
 export type DeviceType = "DOC AI Cam / Bird Monitor" | "Classic";
 
@@ -239,6 +240,7 @@ function SetupWizard(): JSX.Element {
     | "location"
     | "camera";
   const currentStep = () => searchParams.step as Steps;
+  const device = () => deviceContext.devices.get(searchParams.setupDevice);
   const setStep = (step: Steps): void => {
     setSearchParams({ step });
   };
@@ -368,7 +370,7 @@ function SetupWizard(): JSX.Element {
         }}
         disabled={connectionStatus() !== "default"}
       >
-        <Switch>
+        <Switch fallback={<>Connect To Camera</>}>
           <Match when={connectionStatus() === "default"}>
             Connect To Camera
           </Match>
@@ -612,9 +614,9 @@ function SetupWizard(): JSX.Element {
         the “bushnet” network in your WiFi settings, if not join the network
         with password “feathers”
       </p>
-      <div class="rounded-lg bg-gray-200 p-1">
+      <div class="space-y-1 rounded-lg bg-gray-200 p-1">
         <Show when={!!devices()} fallback={<div>No devices found...</div>}>
-          <For each={devices()}>
+          <For each={devices().filter((device) => device.isConnected)}>
             {(device) => (
               <button
                 onClick={() => openDevice(device)}
@@ -844,9 +846,16 @@ function SetupWizard(): JSX.Element {
       }
     })
   );
+  createEffect(() => {
+    console.log(
+      "HERER",
+      device(),
+      deviceContext.devicesConnectingToWifi.get(device()?.id)
+    );
+  });
   return (
     <Show when={show()}>
-      <div class="shadow-lgm fixed left-1/2 top-20 z-40 h-auto w-11/12 -translate-x-1/2 transform rounded-xl border bg-white px-2 py-4">
+      <div class="fixed left-1/2 top-20 z-40 h-auto w-11/12 -translate-x-1/2 transform rounded-xl border bg-white px-2 py-4 shadow-lg">
         <Switch>
           <Match when={showHelp()}>
             <HelpSection onClose={toggleHelp} />
@@ -859,6 +868,34 @@ function SetupWizard(): JSX.Element {
           </Match>
           <Match when={currentStep() === "searchingDevice"}>
             <SearchingDeviceStep />
+          </Match>
+          <Match
+            when={
+              !device()?.isConnected &&
+              !deviceContext.devicesConnectingToWifi.has(device()?.id) &&
+              device()
+            }
+          >
+            {(device) => (
+              <>
+                <Title
+                  title="Device Disconnected"
+                  back={
+                    deviceContext.apState() === "default"
+                      ? "chooseDevice"
+                      : "searchingDevice"
+                  }
+                />
+                <div class="flex w-full flex-col items-center">
+                  <div class="px-8 text-neutral-700">
+                    <TbPlugConnectedX size={82} />
+                  </div>
+                  <p class="text-center text-lg font-bold text-gray-600">
+                    Device "{device().name}" Disconnected
+                  </p>
+                </div>
+              </>
+            )}
           </Match>
           <Match when={currentStep() === "wifiSetup"}>
             <WifiSetup />

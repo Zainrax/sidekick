@@ -14,13 +14,13 @@ import {
   debounce,
   leading,
   leadingAndTrailing,
-  throttle,
 } from "@solid-primitives/scheduled";
 import { ReactiveSet } from "@solid-primitives/set";
 import {
   createEffect,
   createResource,
   createSignal,
+  on,
   onCleanup,
   onMount,
 } from "solid-js";
@@ -33,7 +33,6 @@ import { useStorage } from "../Storage";
 import { isWithinRange } from "../Storage/location";
 import DeviceCamera from "./Camera";
 import { Effect, Schedule } from "effect";
-import { satisfies } from "effect/Function";
 
 const WifiNetwork = z
   .object({
@@ -354,6 +353,36 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     await clearUploaded(connectedDevice);
     await turnOnModem(connectedDevice.id);
   };
+  const checkDeviceIntervals = new Map();
+  createEffect(
+    on(
+      () => [...devices.values()],
+      (devices) => {
+        for (const device of devices) {
+          debugger;
+          if (!device.isConnected) {
+            const interval = checkDeviceIntervals.get(device.id);
+            if (interval) {
+              clearInterval(interval);
+            }
+          } else {
+            if (checkDeviceIntervals.has(device.id)) return;
+            checkDeviceIntervals.set(
+              device.id,
+              setInterval(async () => {
+                const res = await DevicePlugin.checkDeviceConnection({
+                  url: device.url,
+                });
+                if (!res.success) {
+                  handleServiceLost({ endpoint: device.endpoint });
+                }
+              }, 5000)
+            );
+          }
+        }
+      }
+    )
+  );
 
   const handleServiceLost = async (lostDevice: { endpoint: string }) => {
     const device = [...devices.values()].find(
@@ -365,13 +394,13 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   };
 
   onMount(() => {
-    setInterval(async () => {
+    const interval = setInterval(async () => {
       if (apState() === "connected") {
         const res = await DevicePlugin.checkIsAPConnected();
 
         if (!res.connected) {
           setTimeout(() => {
-            setApState("disconnected");
+            setApState("default");
           }, 10000);
         }
       } else if (apState() === "default") {
@@ -382,7 +411,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         }
       }
     }, 10000);
+    onCleanup(() => clearInterval(interval));
   });
+
+  const devicesConnectingToWifi = new ReactiveMap();
 
   const getDeviceInfo = (url: string) =>
     Effect.tryPromise({
@@ -968,7 +1000,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     },
     async ([devices, permission]) => {
       try {
-        if (!devices || !permission) return [];
+        if (!devices || devices.length === 0 || !permission) return [];
         if (permission === "denied") return [];
         const pos = await Geolocation.getCurrentPosition({
           enableHighAccuracy: true,
@@ -1215,25 +1247,16 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       rtcBattery: Number(data.rtcBattery),
     }));
   const getBattery = async (url: URL) => {
-    try {
-      const res = await CapacitorHttp.get({
-        url: `${url}/api/battery`,
-        headers: { ...headers, "Content-Type": "application/json" },
-        webFetchExtra: {
-          credentials: "include",
-        },
-      });
-      debugger;
-      return dataSchema.safeParse(JSON.parse(res.data)).data;
-    } catch (error) {
-      console.log(error);
-      return undefined;
-    }
+    const res = await CapacitorHttp.get({
+      url: `${url}/api/battery`,
+      headers: { ...headers, "Content-Type": "application/json" },
+      webFetchExtra: {
+        credentials: "include",
+      },
+    });
+    debugger;
+    return dataSchema.safeParse(JSON.parse(res.data)).data;
   };
-
-  onMount(async () => {
-    // Update batteries
-  });
 
   const disconnectFromWifi = async (deviceId: DeviceId) => {
     try {
@@ -1449,13 +1472,20 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return false;
       const { url } = device;
-      const res = await CapacitorHttp.get({
-        url: `${url}/api/network/wifi/current`,
-        headers,
-        webFetchExtra: {
-          credentials: "include",
-        },
-      });
+      const res = await Effect.runPromise(
+        Effect.retry(
+          Effect.tryPromise<HttpResponse>(() => {
+            return CapacitorHttp.get({
+              url: `${url}/api/network/wifi/current`,
+              headers,
+              webFetchExtra: {
+                credentials: "include",
+              },
+            });
+          }),
+          { times: 3 }
+        )
+      );
       return res.status === 200;
     } catch (error) {
       return false;
@@ -1538,6 +1568,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     "connected" | "disconnected" | "loading" | "default"
   >("default");
 
+  createEffect(() => {
+    console.log("AP", apState());
+  });
+
   createEffect(
     (prev: Device[]) => {
       const currDevices = [...devices.values()];
@@ -1563,15 +1597,18 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       setApState("loading");
       try {
         const res = await DevicePlugin.connectToDeviceAP();
+        debugger;
         if (res.status === "connected") {
           setApState("connected");
           setTimeout(async () => {
             const device = await createDevice(host);
             if (device) {
+              const batteryPercentage = await getBattery(host);
               const connectedDevice: ConnectedDevice = {
                 ...device,
                 host,
                 endpoint: host,
+                batteryPercentage: batteryPercentage?.mainBattery,
               };
               addConnectedDevice(connectedDevice);
             }
@@ -2004,6 +2041,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     didDeviceUpdate,
     saveAPN,
     getBattery,
+    devicesConnectingToWifi,
   };
 });
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion

@@ -54,141 +54,162 @@ export default function Manual() {
     );
 
     return (
-      <Switch fallback={<p>Select a connection method to see instructions.</p>}>
-        <Match when={method === "directConnect"}>
-          <>
-            <button
-              onClick={() => setSelectedConnectionMethod("")}
-              class="flex items-center justify-center py-2 text-xl text-blue-500"
-            >
-              <RiArrowsArrowLeftSLine size={32} />
-              Direct Connection
-            </button>
-            <div class="mb-4 flex w-full items-center justify-center space-x-2">
-              <DeviceTypeButton
-                isSelected={deviceType() === "DOC AI Cam / Bird Monitor"}
-                onClick={() => setDeviceType("DOC AI Cam / Bird Monitor")}
+      <div class="px-4">
+        <Switch
+          fallback={<p>Select a connection method to see instructions.</p>}
+        >
+          <Match when={method === "directConnect"}>
+            <>
+              <button
+                onClick={() => setSelectedConnectionMethod("")}
+                class="flex items-center justify-center py-2 text-xl text-blue-500"
               >
-                DOC AI Cam / Bird Monitor
-              </DeviceTypeButton>
-              <DeviceTypeButton
-                isSelected={deviceType() === "Classic"}
-                onClick={() => setDeviceType("Classic")}
-              >
-                Classic
-              </DeviceTypeButton>
-            </div>
-            <ol class="list-decimal pl-5">
-              <li>Wait for the light on your device shows indicates 1 flash</li>
-              <li>Press the "Connect to Camera" button below.</li>
-              <li>If prompted, confirm the connection to "bushnet"</li>
-            </ol>
-            <Switch>
-              <Match when={deviceType() === "DOC AI Cam / Bird Monitor"}>
-                <p class="mb-4 text-center text-sm">
-                  If your light is <span class="text-red-500">red</span> or in{" "}
-                  <span class="text-blue-500">standby</span>(not blinking), long
-                  press (3 seconds) wait till the light is off, and long press
-                  again the power button on your camera to restart the process.
-                  <br />
-                  Press "help" for more information
-                </p>
-              </Match>
-              <Match when={deviceType() === "Classic"}>
-                <p class="mb-4 text-center text-sm">
-                  If your light does not match the process indicated below press
-                  "help" for troubleshooting tips
-                </p>
-              </Match>
-            </Switch>
-            <StartupProcess steps={getStartupSteps(deviceType())} />
-            <button
-              class="mb-4 w-full rounded bg-blue-500 py-2 text-white"
-              onClick={() => {
-                deviceContext.connectToDeviceAP();
-                deviceContext.searchDevice();
-              }}
-              disabled={connectionStatus() !== "default"}
-            >
+                <RiArrowsArrowLeftSLine size={32} />
+                Direct Connection
+              </button>
+              <div class="mb-4 flex w-full items-center justify-center space-x-2">
+                <DeviceTypeButton
+                  isSelected={deviceType() === "DOC AI Cam / Bird Monitor"}
+                  onClick={() => setDeviceType("DOC AI Cam / Bird Monitor")}
+                >
+                  DOC AI Cam / Bird Monitor
+                </DeviceTypeButton>
+                <DeviceTypeButton
+                  isSelected={deviceType() === "Classic"}
+                  onClick={() => setDeviceType("Classic")}
+                >
+                  Classic
+                </DeviceTypeButton>
+              </div>
+              <ol class="list-decimal pl-5">
+                <li>
+                  Wait for the light on your device shows indicates 1 flash
+                </li>
+                <li>Press the "Connect to Camera" button below.</li>
+                <li>If prompted, confirm the connection to "bushnet"</li>
+              </ol>
               <Switch>
-                <Match when={connectionStatus() === "default"}>
-                  Connect To Camera
+                <Match when={deviceType() === "DOC AI Cam / Bird Monitor"}>
+                  <p class="mb-4 text-center text-sm">
+                    If your light is <span class="text-red-500">red</span> or in{" "}
+                    <span class="text-blue-500">standby</span>(not blinking),
+                    long press (3 seconds) wait till the light is off, and long
+                    press again the power button on your camera to restart the
+                    process.
+                    <br />
+                    Press "help" for more information
+                  </p>
                 </Match>
-                <Match when={connectionStatus() === "loading"}>
-                  Connecting to device...
-                </Match>
-                <Match when={connectionStatus() === "connected"}>
-                  Connected To Camera
+                <Match when={deviceType() === "Classic"}>
+                  <p class="mb-4 text-center text-sm">
+                    If your light does not match the process indicated below
+                    press "help" for troubleshooting tips
+                  </p>
                 </Match>
               </Switch>
-            </button>
-          </>
-        </Match>
-        <Match when={method === "phoneHotspot"}>
-          <>
-            <button
-              onClick={() => setSelectedConnectionMethod("")}
-              class="flex items-center justify-center py-2 text-xl text-blue-500"
-            >
-              <RiArrowsArrowLeftSLine size={32} />
-              Phone Hotspot
-            </button>
-            <ol class="list-decimal px-6">
-              <li>Set up Personal Hotspot</li>
-              <li>
-                Go to Settings {">"} Personal Hotspot (or Portable Hotspot)
-              </li>
-              <li>Tap the slider next to Allow Others to Join</li>
-              <li>Enable Maximize Compatibility if on iOS</li>
-              <li>
-                Connect using direct connect and add your hotspot through the
-                wifi settings
-              </li>
-            </ol>
-            <button
-              onClick={() => {
-                NativeSettings.open({
-                  optionAndroid: AndroidSettings.Wireless,
-                  optionIOS: IOSSettings.Tethering,
-                });
-              }}
-              class="mt-4 rounded bg-blue-500 px-4 py-2 text-white"
-            >
-              Hotspot Settings
-            </button>
-          </>
-        </Match>
-        <Match when={method === "wifiConnection"}>
-          <>
-            <button
-              onClick={() => setSelectedConnectionMethod("")}
-              class="flex items-center justify-center py-2 text-xl text-blue-500"
-            >
-              <RiArrowsArrowLeftSLine size={32} />
-              Wifi Connection
-            </button>
-            <p>If your device is already connected to WiFi:</p>
-            <ol class="list-decimal pl-5">
-              <li>Connect to the same network as your device</li>
-            </ol>
-            <p class="mt-2">
-              Otherwise, use another connection method and add the WiFi network
-              to the device's WiFi settings.
-            </p>
-            <button
-              onClick={() => {
-                NativeSettings.open({
-                  optionAndroid: AndroidSettings.Wifi,
-                  optionIOS: IOSSettings.WiFi,
-                });
-              }}
-              class="mt-4 rounded bg-blue-500 px-4 py-2 text-white"
-            >
-              WiFi Settings
-            </button>
-          </>
-        </Match>
-      </Switch>
+              <StartupProcess steps={getStartupSteps(deviceType())} />
+              <button
+                class="mb-4 w-full rounded bg-blue-500 py-2 text-white"
+                onClick={() => {
+                  deviceContext.connectToDeviceAP();
+                  deviceContext.searchDevice();
+                }}
+                disabled={
+                  connectionStatus() !== "default" &&
+                  connectionStatus() !== "disconnected"
+                }
+              >
+                <Switch fallback={<>Connect To Camera</>}>
+                  <Match
+                    when={
+                      connectionStatus() === "default" ||
+                      connectionStatus() === "disconnected"
+                    }
+                  >
+                    Connect To Camera
+                  </Match>
+                  <Match when={connectionStatus() === "loading"}>
+                    Connecting to device...
+                  </Match>
+                  <Match when={connectionStatus() === "connected"}>
+                    Connected To Camera
+                  </Match>
+                </Switch>
+              </button>
+            </>
+          </Match>
+          <Match when={method === "phoneHotspot"}>
+            <>
+              <button
+                onClick={() => setSelectedConnectionMethod("")}
+                class="flex items-center justify-center py-2 text-xl text-blue-500"
+              >
+                <RiArrowsArrowLeftSLine size={32} />
+                Phone Hotspot
+              </button>
+              <ol class="list-decimal px-6">
+                <li>Set up Personal Hotspot</li>
+                <li>
+                  Go to Settings {">"} Personal Hotspot (or Portable Hotspot)
+                </li>
+                <li>Tap the slider next to Allow Others to Join</li>
+                <li>Enable Maximize Compatibility if on iOS</li>
+                <li>
+                  Connect using direct connect and add your hotspot through the
+                  wifi settings
+                </li>
+              </ol>
+              <button
+                onClick={() => {
+                  NativeSettings.open({
+                    optionAndroid: AndroidSettings.Wireless,
+                    optionIOS: IOSSettings.Tethering,
+                  });
+                }}
+                class="mt-4 rounded bg-blue-500 px-4 py-2 text-white"
+              >
+                Hotspot Settings
+              </button>
+            </>
+          </Match>
+          <Match when={method === "wifiConnection"}>
+            <>
+              <button
+                onClick={() => setSelectedConnectionMethod("")}
+                class="flex items-center justify-center py-2 text-xl text-blue-500"
+              >
+                <RiArrowsArrowLeftSLine size={32} />
+                Wifi Connection
+              </button>
+              <ul>
+                <li>
+                  You will need to first either connect directly to the device,
+                  or use your phone's hotspot
+                </li>
+                <li>
+                  follow the steps to add a wifi by clicking on the device that
+                  appears.
+                </li>
+                <li>
+                  <p>If your device is already connected to WiFi:</p>
+                  <p>Connect to the same network as your device</p>
+                </li>
+              </ul>
+              <button
+                onClick={() => {
+                  NativeSettings.open({
+                    optionAndroid: AndroidSettings.Wifi,
+                    optionIOS: IOSSettings.WiFi,
+                  });
+                }}
+                class="mt-4 rounded bg-blue-500 px-4 py-2 text-white"
+              >
+                WiFi Settings
+              </button>
+            </>
+          </Match>
+        </Switch>
+      </div>
     );
   };
   const LightStatus = (props: {
