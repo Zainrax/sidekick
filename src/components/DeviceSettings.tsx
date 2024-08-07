@@ -713,7 +713,6 @@ export function LocationSettingsTab(props: SettingProps) {
     const photoPaths = photoFilesToUpload();
     const deviceLocation = await context.getLocationCoords(id());
     const loc = location();
-    debugger;
     if (!loc && deviceLocation.success) {
       try {
         await storage.createLocation({
@@ -1218,6 +1217,7 @@ export function WifiSettingsTab(props: SettingProps) {
     setConnecting(wifi.SSID);
     const res = await context.connectToWifi(id(), wifi.SSID, password());
     setConnecting(null);
+    debugger;
     if (res) {
       setPassword("");
       setOpenedNetwork(null);
@@ -1309,6 +1309,9 @@ export function WifiSettingsTab(props: SettingProps) {
     const interval = setInterval(() => {
       refetchWifiNetowrks();
       refetchSavedWifi();
+      if (modem() === null) {
+        refetchModem();
+      }
       refetch();
     }, 10000);
     onCleanup(() => clearInterval(interval));
@@ -1337,6 +1340,7 @@ export function WifiSettingsTab(props: SettingProps) {
   const [modemSignal] = createResource(async () => {
     try {
       const res = await context.getModemSignalStrength(id());
+      console.log("modem signal", res);
       if (res === null) return null;
       if (typeof res === "number") return res / 5;
       return parseInt(res.signal?.strength ?? "0") / 30;
@@ -1370,10 +1374,16 @@ export function WifiSettingsTab(props: SettingProps) {
   );
 
   const [hasNetworkEndpoints, { refetch: refetchHasNetworkEndpoints }] =
-    createResource(async () => {
+    createResource<boolean>(async () => {
       const hasEndpoint = await context.hasNetworkEndpoints(id());
       return hasEndpoint;
     });
+  createEffect(() => {
+    if (device()?.isConnected) {
+      refetchHasNetworkEndpoints();
+    }
+    console.log("HAS END BOOL", hasNetworkEndpoints());
+  });
 
   const LinkToNetwork = () => (
     <div class="flex w-full items-center justify-center py-2 text-lg text-blue-500">
@@ -1792,8 +1802,8 @@ export function WifiSettingsTab(props: SettingProps) {
               >
                 <Show when={connecting() === wifi().SSID}>
                   <p class="px-2 pb-2">
-                    To continue accessing this device, please ensure you are
-                    connected to the same WiFi network.
+                    To continue accessing this device, ensure you are connected
+                    to the same WiFi network.
                   </p>
                 </Show>
                 <div class="flex w-full flex-col items-center space-y-2 px-2">

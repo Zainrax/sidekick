@@ -463,10 +463,11 @@ function Devices() {
           <BackgroundLogo />
           <div class="flex h-32 w-full justify-center">
             <Show when={context.devices.size <= 0}>
-              <p class="mt-4 max-w-sm px-4 text-center text-neutral-600">
+              <p class="mt-4 max-w-sm px-4 text-center text-sm text-neutral-600">
                 No devices detected.
-                <br /> To access a device, press the device's power button, then
-                press the
+                <br />
+                Follow the instructions in "Find Device" below. You can connect
+                to a device using the top right
                 <span class="mx-1 inline-block text-blue-500">
                   <RiDeviceRouterFill />
                 </span>

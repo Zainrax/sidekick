@@ -2,8 +2,10 @@ package nz.org.cacophony.sidekick
 import NsdHelper
 import android.annotation.SuppressLint
 import android.app.Activity.RESULT_OK
+import android.app.Instrumentation
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.ConnectivityManager.NetworkCallback
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
@@ -116,8 +118,7 @@ class DevicePlugin: Plugin() {
         device.checkDeviceConnection(pluginCall(call))
     }
 
-
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
     fun connectToDeviceAP(call: PluginCall) {
         try {
             val ssid = "bushnet"
@@ -136,49 +137,45 @@ class DevicePlugin: Plugin() {
 
                 cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
                 cm!!.bindProcessToNetwork(null)
-                val callback = object : ConnectivityManager.NetworkCallback() {
+                currNetworkCallback = object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) {
                         super.onAvailable(network)
                         wifiNetwork = network
                         cm!!.bindProcessToNetwork(network)
                         val result = JSObject()
                         result.put("status", "connected")
-                        notifyListeners("onAccessPointChange", result)
+                        call.resolve(result)
                     }
                     override fun onUnavailable() {
                         super.onUnavailable()
                         val result = JSObject()
                         result.put("status", "disconnected")
-                        notifyListeners("onAccessPointChange", result)
+                        call.resolve(result)
                         wifiNetwork = null
-                        call.setKeepAlive(false)
                         cm!!.unregisterNetworkCallback(this)
-                        bridge.releaseCall(call.callbackId)
                     }
                     override fun onLost(network: Network) {
                         super.onLost(network)
                         val result = JSObject()
                         result.put("status", "disconnected")
-                        notifyListeners("onAccessPointChange", result)
+                        call.resolve(result)
                         cm!!.bindProcessToNetwork(null)
                         wifiNetwork = null
                         cm!!.unregisterNetworkCallback(this)
                         call.resolve(result)
-                        call.setKeepAlive(false)
-                        bridge.releaseCall(call.callbackId)
                     }
                 }
-                currNetworkCallback = callback
-                cm!!.requestNetwork(networkRequest, callback)
+
+                cm!!.requestNetwork(networkRequest, currNetworkCallback!!)
             } else {
                 connectToWifiLegacy(ssid, password, {
                     val result = JSObject()
                     result.put("status", "connected")
-                    notifyListeners("onAccessPointChange", result)
+                    call.resolve(result)
                 }, {
                     val result = JSObject()
                     result.put("status", "disconnected")
-                    notifyListeners("onAccessPointChange", result)
+                    call.resolve(result)
                 })
             }
         } catch (e: Exception) {
@@ -189,7 +186,7 @@ class DevicePlugin: Plugin() {
         }
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
     fun disconnectFromDeviceAP(call: PluginCall) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -200,8 +197,10 @@ class DevicePlugin: Plugin() {
                 result.put("data", "Disconnected from device AP")
                 call.resolve(result)
             } else {
+                val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                wifiManager.disconnect()
                 val result = JSObject()
-                result.put("success", false)
+                result.put("success", true)
                 result.put("message", "Failed to disconnect from device AP")
                 call.resolve(result)
             }
@@ -214,7 +213,7 @@ class DevicePlugin: Plugin() {
     }
 
     @ActivityCallback
-    fun connectToWifi(call: PluginCall, result: ActivityResult) {
+    fun connectToWifi(call: PluginCall, result: Instrumentation.ActivityResult) {
         if (result.resultCode == RESULT_OK) {
             val res= JSObject()
             res.put("success", true)

@@ -121,7 +121,6 @@ const createLightAnimation = (sequence: LightSequence) => {
       repeat: Infinity,
       opacity: {
         offset: durations.map((val) => {
-          debugger;
           const value = val / duration;
           const offsetValue = value + offset;
           offset += value;
@@ -247,6 +246,7 @@ function SetupWizard(): JSX.Element {
   const close = () => setSearchParams({ step: "" });
   const finishSetup = () => {
     deviceContext.rebootDevice(searchParams.setupDevice);
+    close();
   };
   const [showHelp, setShowHelp] = createSignal(false);
 
@@ -559,7 +559,7 @@ function SetupWizard(): JSX.Element {
   const ChooseDeviceStep = () => (
     <>
       <div class="mb-4 flex items-center justify-between">
-        <h2 class="text-xl font-bold">Choose your Device</h2>
+        <h2 class="pl-4 text-xl font-bold">Choose your Device</h2>
         <CloseButton onClick={() => navigate("/devices")} />
       </div>
       <p class="mb-4 text-center">
@@ -696,8 +696,8 @@ function SetupWizard(): JSX.Element {
         <Title title="Wifi Setings" back="searchingDevice" />
         <div class="flex flex-col gap-y-2 text-sm">
           <p class="text-center">
-            The device may temporarily disconnect, ensure that your phone is
-            connected to the same WiFi.
+            The camera/bird monitor may temporarily disconnect, ensure that your
+            phone is connected to the same WiFi.
           </p>
           <p class="text-center">
             Follow instructions in Help {">"} Connection Method {">"} Phone

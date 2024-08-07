@@ -221,13 +221,20 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     await Promise.all([setCurrRecs(device), setCurrEvents(device)]);
   };
   const createDevice = async (url: string) => {
-    const infoRes = await CapacitorHttp.get({
-      url: `${url}/api/device-info`,
-      headers,
-      webFetchExtra: {
-        credentials: "include",
-      },
-    });
+    const infoRes = await Effect.runPromise(
+      Effect.retry(
+        Effect.tryPromise<HttpResponse>(() =>
+          CapacitorHttp.get({
+            url: `${url}/api/device-info`,
+            headers,
+            webFetchExtra: {
+              credentials: "include",
+            },
+          })
+        ),
+        { times: 3 }
+      )
+    );
     if (infoRes.status !== 200) {
       return;
     }
@@ -265,7 +272,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const batteryPercentage = await getBattery(url);
       const connectedDevice: ConnectedDevice = {
         ...device,
-        host: deviceName,
+        host,
         endpoint,
         batteryPercentage: batteryPercentage?.mainBattery,
       };
@@ -300,13 +307,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     []
   );
   const handleServiceResolved = async (newDevice: DeviceService) => {
-    console.log("DEVICE FOUND:", newDevice);
+    debugger;
+    console.log("DEVICE FOUND:", newDevice, [...devices.values()]);
     if (!newDevice) return;
 
     const existingDevice = [...devices.values()].find(
-      (d) =>
-        d.endpoint.split("-")[0] === newDevice.endpoint &&
-        d.host === newDevice.host
+      (d) => d.endpoint === newDevice.endpoint && d.host === newDevice.host
     );
 
     if (existingDevice && existingDevice.isConnected) return;
@@ -326,6 +332,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       );
       if (connectedDevice) {
         addConnectedDevice(connectedDevice);
+        setConnectingToDevice((prev) =>
+          prev.filter((previous) => previous === connectedDevice.endpoint)
+        );
       }
     } catch (error) {
       logError({
@@ -341,6 +350,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
   };
   const addConnectedDevice = async (connectedDevice: ConnectedDevice) => {
+    console.log("ADD DEVICE", connectedDevice);
     // Remove any devices with the same saltId
     for (const device of devices.values()) {
       if (!device.isConnected && device.saltId === connectedDevice.saltId) {
@@ -359,7 +369,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       () => [...devices.values()],
       (devices) => {
         for (const device of devices) {
-          debugger;
           if (!device.isConnected) {
             const interval = checkDeviceIntervals.get(device.id);
             if (interval) {
@@ -401,7 +410,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         if (!res.connected) {
           setTimeout(() => {
             setApState("default");
-          }, 10000);
+          }, 5000);
         }
       } else if (apState() === "default") {
         const res = await DevicePlugin.checkIsAPConnected();
@@ -1254,7 +1263,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         credentials: "include",
       },
     });
-    debugger;
     return dataSchema.safeParse(JSON.parse(res.data)).data;
   };
 
@@ -1312,8 +1320,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
         data: { ssid, password },
-        connectTimeout: 20000,
-        readTimeout: 20000,
+        connectTimeout: 10000,
+        readTimeout: 10000,
       });
       let tries = 0;
       const connected = await new Promise((resolve) => {
@@ -1446,7 +1454,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
-      debugger;
       return res.status === 200 ? tc2ModemSchema.parse(res.data) : null;
     } catch (error) {
       console.error(error);
@@ -1486,6 +1493,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           { times: 3 }
         )
       );
+      console.log("HAS ENDPOINT", res);
       return res.status === 200;
     } catch (error) {
       return false;
@@ -1497,14 +1505,24 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return null;
       const { url } = device;
-      const res = await CapacitorHttp.get({
-        url: `${url}/api/signal-strength`,
-        headers,
-        webFetchExtra: {
-          credentials: "include",
-        },
-      });
-      return res.status === 200 ? JSON.parse(res.data) : null;
+      const res = await Effect.runPromise(
+        Effect.retry(
+          Effect.tryPromise(async () => {
+            const res = await CapacitorHttp.get({
+              url: `${url}/api/signal-strength`,
+              headers,
+              webFetchExtra: {
+                credentials: "include",
+              },
+            });
+            console.log("Modem Signal", res);
+            if (res.status !== 200) throw Error("No Modem");
+            return JSON.parse(res.data);
+          }),
+          { times: 3 }
+        )
+      );
+      return res;
     } catch (error) {
       return null;
     }
@@ -1597,23 +1615,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       setApState("loading");
       try {
         const res = await DevicePlugin.connectToDeviceAP();
-        debugger;
         if (res.status === "connected") {
           setApState("connected");
-          setTimeout(async () => {
-            const device = await createDevice(host);
-            if (device) {
-              const batteryPercentage = await getBattery(host);
-              const connectedDevice: ConnectedDevice = {
-                ...device,
-                host,
-                endpoint: host,
-                batteryPercentage: batteryPercentage?.mainBattery,
-              };
-              addConnectedDevice(connectedDevice);
-            }
-          }, 1000);
-
           searchDevice();
         } else if (res.status === "error") {
           logWarning({
@@ -1632,9 +1635,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     try {
       setApState("loading");
       const res = await DevicePlugin.disconnectFromDeviceAP();
-      if (res.success && res.data === "disconnected") {
-        setApState("disconnected");
-      }
       searchDevice();
       return true;
     } catch (error) {
@@ -1905,7 +1905,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     if (!device || !device.isConnected) return null;
     const existing = updatingDevice.find((d) => d.id === deviceId);
     const lastCallOut = existing?.lastCallOut;
-    debugger;
     if (lastCallOut?.includes("accepted?"))
       return "Contact support to accept your device.";
   };
