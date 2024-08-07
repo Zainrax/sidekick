@@ -236,7 +236,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       )
     );
     if (infoRes.status !== 200) {
-      return;
+      throw Error(`Could not get device info ${infoRes}`);
     }
     const info = DeviceInfoSchema.parse(JSON.parse(infoRes.data));
     const id: DeviceId = info.deviceID.toString();
@@ -269,7 +269,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         createDevice(`http://${host}`),
       ]);
       if (!device) throw Error("Failed to conenct to device");
-      const batteryPercentage = await getBattery(url);
+      const batteryPercentage = await getBattery(device.url);
       const connectedDevice: ConnectedDevice = {
         ...device,
         host,
@@ -1256,14 +1256,18 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       rtcBattery: Number(data.rtcBattery),
     }));
   const getBattery = async (url: URL) => {
-    const res = await CapacitorHttp.get({
-      url: `${url}/api/battery`,
-      headers: { ...headers, "Content-Type": "application/json" },
-      webFetchExtra: {
-        credentials: "include",
-      },
-    });
-    return dataSchema.safeParse(JSON.parse(res.data)).data;
+    try {
+      const res = await CapacitorHttp.get({
+        url: `${url}/api/battery`,
+        headers: { ...headers, "Content-Type": "application/json" },
+        webFetchExtra: {
+          credentials: "include",
+        },
+      });
+      return dataSchema.safeParse(JSON.parse(res.data)).data;
+    } catch (e) {
+      return;
+    }
   };
 
   const disconnectFromWifi = async (deviceId: DeviceId) => {

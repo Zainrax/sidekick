@@ -847,9 +847,16 @@ export function LocationSettingsTab(props: SettingProps) {
   const lat = () => locCoords()?.latitude ?? "...";
   const lng = () => locCoords()?.longitude ?? "...";
   const [settingLocation, setSettingLocation] = createSignal(false);
+  const updateLocation = createMemo(shouldUpdateLocState, "current", {
+    equals: (prev, curr) => {
+      if (curr === "loading" && prev === "needsUpdate") return true;
+      else if (curr === prev) return true;
+      else return false;
+    },
+  });
   return (
     <section class="px-4 py-4">
-      <Show when={shouldUpdateLocState() === "needsUpdate"}>
+      <Show when={updateLocation() === "needsUpdate"}>
         <div class="flex w-full flex-col items-center">
           <button
             class="my-2 flex space-x-2 self-center rounded-md bg-blue-500 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
@@ -866,7 +873,7 @@ export function LocationSettingsTab(props: SettingProps) {
             disabled={settingLocation()}
           >
             <Show
-              when={settingLocation()}
+              when={!settingLocation()}
               fallback={
                 <span class="text-sm">Updating to Current Location...</span>
               }
