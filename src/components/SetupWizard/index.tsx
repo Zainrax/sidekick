@@ -30,6 +30,7 @@ import { Dialog } from "@capacitor/dialog";
 import FieldWrapper from "../Field";
 import { AiOutlineInfoCircle } from "solid-icons/ai";
 import { TbPlugConnectedX } from "solid-icons/tb";
+import { getSteps } from "../Manual";
 export type ColorType = "blue" | "green" | "yellow" | "gray" | "red";
 export type DeviceType = "DOC AI Cam / Bird Monitor" | "Classic";
 
@@ -291,56 +292,6 @@ function SetupWizard(): JSX.Element {
       <HelpButton />
     </div>
   );
-  const getInstructions = (deviceType: DeviceType): JSX.Element => {
-    return (
-      <Show
-        when={deviceType === "DOC AI Cam / Bird Monitor"}
-        fallback={
-          <>
-            <ol class="mb-4 list-inside list-decimal">
-              <li>Plug in and ensure the device is on.</li>
-              <li>
-                Wait for the light on your device shows a single slow pulsing
-                light
-              </li>
-              <li>
-                Press the <span class="text-blue-500">"Connect to Camera"</span>{" "}
-                button below.
-              </li>
-              <li>If prompted, confirm the connection to "bushnet"</li>
-            </ol>
-            <p class="mb-4 text-center text-sm">
-              If your light does not match the process indicated below press
-              "help" for troubleshooting tips
-            </p>
-          </>
-        }
-      >
-        <>
-          <ol class="mb-4 list-inside list-decimal">
-            <li>Plug in and ensure the device is on.</li>
-            <li>
-              Wait for the light on your device to turn{" "}
-              <span class="text-yellow-600">yellow</span>
-            </li>
-            <li>
-              Press the <span class="text-blue-500">"Connect to Camera"</span>{" "}
-              button
-            </li>
-            <li>If prompted, confirm the connection to "bushnet"</li>
-          </ol>
-          <p class="mb-4 text-center text-sm">
-            If your light is <span class="text-red-500">red</span> or in{" "}
-            <span class="text-blue-500">standby</span>(not blinking), long press
-            (3 seconds) wait till the light is off, and long press again the
-            power button on your camera to restart the process.
-            <br />
-            Press "help" for more information
-          </p>
-        </>
-      </Show>
-    );
-  };
   const DirectConnectStep = (): JSX.Element => (
     <>
       <Title title="Connect To Device" />
@@ -358,7 +309,7 @@ function SetupWizard(): JSX.Element {
           Classic
         </DeviceTypeButton>
       </div>
-      {store.deviceType && getInstructions(store.deviceType)}
+      {store.deviceType && getSteps(store.deviceType)}
       {store.deviceType && (
         <StartupProcess steps={getStartupSteps(store.deviceType)} />
       )}

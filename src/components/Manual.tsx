@@ -20,6 +20,52 @@ import {
   IOSSettings,
 } from "capacitor-native-settings";
 import { Motion } from "solid-motionone";
+
+export const getSteps = (deviceType: DeviceType): JSX.Element => {
+  return (
+    <Show
+      when={deviceType === "DOC AI Cam / Bird Monitor"}
+      fallback={
+        <>
+          <ol class="mb-4 list-inside list-decimal">
+            <li>Plug in and ensure the device is on.</li>
+            <li>Wait until the light indicates a slow pulsing.</li>
+            <li>
+              Press the <span class="text-blue-500">"Connect to Camera"</span>{" "}
+              button below.
+            </li>
+            <li>If prompted, confirm the connection to "bushnet"</li>
+          </ol>
+          <p class="mb-4 text-center text-sm">
+            If your light does not match the process indicated below try reset
+            the device pressing the power button.
+          </p>
+        </>
+      }
+    >
+      <>
+        <ol class="mb-4 list-inside list-decimal">
+          <li>Plug in and ensure the device is on.</li>
+          <li>
+            Wait for the light on your device to turn{" "}
+            <span class="text-yellow-600">yellow</span>.
+          </li>
+          <li>
+            Press the <span class="text-blue-500">"Connect to Camera"</span>{" "}
+            button.
+          </li>
+          <li>If prompted, confirm the connection to "bushnet".</li>
+        </ol>
+        <p class="mb-4 text-center text-sm">
+          If your light is <span class="text-red-500">red</span> or in{" "}
+          <span class="text-blue-500">standby</span>(not blinking), long press
+          (3 seconds) wait until the light is off, and long press again the
+          power button on your camera to restart the process.
+        </p>
+      </>
+    </Show>
+  );
+};
 export default function Manual() {
   const [selectedTab, setSelectedTab] = createSignal("connectionMethods");
   const [selectedConnectionMethod, setSelectedConnectionMethod] =
@@ -35,7 +81,7 @@ export default function Manual() {
       id: "directConnect",
       label: "Direct Connect",
       tooltip:
-        "Connects to camera's hotspot. Use when offline/remote locations to download recordings without using your data.",
+        "Connects to camera's hotspot. Use in offline/remote locations to download recordings without using your data.",
     },
     {
       id: "phoneHotspot",
@@ -81,32 +127,7 @@ export default function Manual() {
                   Classic
                 </DeviceTypeButton>
               </div>
-              <ol class="list-decimal pl-5">
-                <li>
-                  Wait for the light on your device shows indicates 1 flash
-                </li>
-                <li>Press the "Connect to Camera" button below.</li>
-                <li>If prompted, confirm the connection to "bushnet"</li>
-              </ol>
-              <Switch>
-                <Match when={deviceType() === "DOC AI Cam / Bird Monitor"}>
-                  <p class="mb-4 text-center text-sm">
-                    If your light is <span class="text-red-500">red</span> or in{" "}
-                    <span class="text-blue-500">standby</span>(not blinking),
-                    long press (3 seconds) wait till the light is off, and long
-                    press again the power button on your camera to restart the
-                    process.
-                    <br />
-                    Press "help" for more information
-                  </p>
-                </Match>
-                <Match when={deviceType() === "Classic"}>
-                  <p class="mb-4 text-center text-sm">
-                    If your light does not match the process indicated below
-                    press "help" for troubleshooting tips
-                  </p>
-                </Match>
-              </Switch>
+              {getSteps(deviceType())}
               <StartupProcess steps={getStartupSteps(deviceType())} />
               <button
                 class="mb-4 w-full rounded bg-blue-500 py-2 text-white"
@@ -156,7 +177,7 @@ export default function Manual() {
                 <li>Enable Maximize Compatibility if on iOS</li>
                 <li>
                   Connect using direct connect and add your hotspot through the
-                  wifi settings
+                  WiFi settings
                 </li>
               </ol>
               <button
@@ -179,20 +200,20 @@ export default function Manual() {
                 class="flex items-center justify-center py-2 text-xl text-blue-500"
               >
                 <RiArrowsArrowLeftSLine size={32} />
-                Wifi Connection
+                WiFi Connection
               </button>
               <ul>
                 <li>
-                  You will need to first either connect directly to the device,
-                  or use your phone's hotspot
+                  You will need to first either connect directly to the device
+                  or use your phone's hotspot.
                 </li>
                 <li>
-                  follow the steps to add a wifi by clicking on the device that
-                  appears.
+                  Follow the steps to add a WiFi network by clicking on the
+                  device that appears.
                 </li>
                 <li>
                   <p>If your device is already connected to WiFi:</p>
-                  <p>Connect to the same network as your device</p>
+                  <p>Connect to the same network as your device.</p>
                 </li>
               </ul>
               <button
@@ -212,6 +233,7 @@ export default function Manual() {
       </div>
     );
   };
+
   const LightStatus = (props: {
     status: string;
     sequence: LightSequence;
@@ -258,7 +280,7 @@ export default function Manual() {
             fallback={getInstructions(selectedConnectionMethod())}
           >
             <p class="text-md text-center text-gray-700">
-              In case you are unable to connect to your camera you can try an
+              If you are unable to connect to your camera, you can try an
               alternative method.
             </p>
             <div class="mb-4 flex flex-col gap-y-2">
@@ -292,7 +314,7 @@ export default function Manual() {
             <LightStatus
               sequence={[]}
               color="blue"
-              status="Booted up Device"
+              status="Device Booted up"
               sequenceText="(Solid light)"
             />
             <h1>WiFi</h1>
@@ -357,14 +379,14 @@ export default function Manual() {
             <LightStatus
               sequence={["long", "blink"]}
               color="blue"
-              status="Conneting to WiFi"
+              status="Connecting to WiFi"
               sequenceText="(One slow pulse, one flash)"
             />
             <br />
             <LightStatus
               sequence={["long"]}
               color="blue"
-              status="Conneted to WiFi or Setup hotspot"
+              status="Connected to WiFi or Setup hotspot"
               sequenceText="(One slow pulse)"
             />
             <br />
