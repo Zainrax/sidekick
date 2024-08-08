@@ -26,8 +26,8 @@ export type Telemetry = z.infer<typeof TelemetrySchema>;
 
 const CameraInfoSchema = z.object({
   Brand: z.string().or(z.number()).optional(),
-  Model: z.string().or(z.number()),
-  FPS: z.number(),
+  Model: z.string().or(z.number()).optional(),
+  FPS: z.number().optional(),
   ResX: z.number(),
   ResY: z.number(),
   Firmware: z.string().optional(),
@@ -61,8 +61,8 @@ export type Track = z.infer<typeof TrackSchema>;
 
 const FrameInfoSchema = z.object({
   Telemetry: TelemetrySchema,
-  AppVersion: z.string(),
-  BinaryVersion: z.string(),
+  AppVersion: z.string().optional(),
+  BinaryVersion: z.string().optional(),
   Camera: CameraInfoSchema,
   Tracks: z.nullable(z.array(TrackSchema)),
 });
