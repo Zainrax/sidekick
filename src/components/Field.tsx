@@ -163,7 +163,7 @@ const DropdownInput: Component<DropdownInputProps> = (props) => {
                         setOpen(false);
                       }, 1500);
                     } catch (error) {
-                      console.error(error);
+                      console.error("Save Group error: ", error);
                       setSaving("error");
                       if (error instanceof Error) {
                         setError(error.message);

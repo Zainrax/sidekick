@@ -325,7 +325,7 @@ function SetupWizard(): JSX.Element {
           <Match when={connectionStatus() === "default"}>
             Connect To Camera
           </Match>
-          <Match when={connectionStatus() === "loading"}>
+          <Match when={connectionStatus() === "loadingConnect"}>
             Connecting to device...
           </Match>
           <Match when={connectionStatus() === "connected"}>
@@ -797,13 +797,6 @@ function SetupWizard(): JSX.Element {
       }
     })
   );
-  createEffect(() => {
-    console.log(
-      "HERER",
-      device(),
-      deviceContext.devicesConnectingToWifi.get(device()?.id)
-    );
-  });
   return (
     <Show when={show()}>
       <div class="fixed left-1/2 top-20 z-40 h-auto w-11/12 -translate-x-1/2 transform rounded-xl border bg-white px-2 py-4 shadow-lg">

@@ -269,7 +269,11 @@ function Devices() {
       header[0],
       () => (
         <Show
-          when={context.apState() !== "loading" && context.apState()}
+          when={
+            !["loadingConnect", "loadingDisconnect"].includes(
+              context.apState()
+            ) && context.apState()
+          }
           fallback={
             <span class="text-blue-500">
               <FaSolidSpinner size={28} class="animate-spin" />

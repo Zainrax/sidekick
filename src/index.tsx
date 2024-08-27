@@ -2,7 +2,6 @@
 import { render } from "solid-js/web";
 import "./root.css";
 import App from "./root";
-
 const root = document.getElementById("root");
 
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {

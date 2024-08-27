@@ -340,9 +340,14 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         });
         if (!res) return [];
         const result = GroupsResSchema.safeParse(res.data);
-        if (!result.success || result.data.success === false) {
+        if (
+          !result.success ||
+          result.data.success === false ||
+          result.data.groups.length === 0
+        ) {
           return await getCachedGroups();
         }
+        console.log("GROUPS", result.data);
         await Preferences.set({
           key: "groups",
           value: JSON.stringify(result.data.groups),

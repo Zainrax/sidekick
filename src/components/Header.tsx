@@ -3,7 +3,7 @@ import { createContextProvider } from "@solid-primitives/context";
 import { ReactiveMap } from "@solid-primitives/map";
 import { A, useLocation, useNavigate } from "@solidjs/router";
 import { RiArrowsArrowLeftSLine } from "solid-icons/ri";
-import { JSXElement, createEffect, createSignal } from "solid-js";
+import { JSXElement, createEffect, createSignal, onMount } from "solid-js";
 
 type Header = string;
 type BackLink = string;
@@ -28,21 +28,25 @@ export const [HeaderProvider, useHeaderContext] = createContextProvider(() => {
   );
   const [backNav, setBackNav] = createSignal<JSXElement>();
   const navigate = useNavigate();
+  const [link, setLink] = createSignal("");
+  onMount(() => {
+    App.addListener("backButton", () => {
+      navigate(link());
+    });
+  });
   createEffect(() => {
     if (headerMap.has(location.pathname)) {
       const newHeader = headerMap.get(location.pathname) ?? ["Dashboard"];
       setHeaderButton(() => newHeader[1]);
       setHeader(newHeader[0]);
-      const link = newHeader[2];
-      if (link) {
+      const newLink = newHeader[2];
+      if (newLink) {
+        setLink(newLink);
         setBackNav(
-          <A href={link} class="flex items-center text-xl text-blue-500">
+          <A href={link()} class="flex items-center text-xl text-blue-500">
             <RiArrowsArrowLeftSLine size={32} />
           </A>
         );
-        App.addListener("backButton", () => {
-          navigate(link);
-        });
       } else {
         const link = location.pathname.split("/").slice(0, -1);
         if (link.length > 1) {

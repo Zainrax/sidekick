@@ -1796,9 +1796,14 @@ export function WifiSettingsTab(props: SettingProps) {
                           onClick={async () => {
                             context.connectToDeviceAP();
                           }}
-                          disabled={context.apState() === "loading"}
+                          disabled={[
+                            "loadingDisconect",
+                            "loadingConnect",
+                          ].includes(context.apState())}
                         >
-                          {context.apState() === "loading"
+                          {["loadingDisconect", "loadingConnect"].includes(
+                            context.apState()
+                          )
                             ? "Connecting..."
                             : "Connect to Device"}
                         </button>

@@ -114,7 +114,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     default:
                         result.endpoint.debugDescription
                     }
-                    self?.notifyListeners("onServiceResolved", data: ["endpoint": endpoint])
+                    self?.notifyListeners("onServiceResolved", data: ["endpoint": endpoint, "status": "connected"])
                 case .identical:
                     break
                 case .removed(let result):
@@ -124,7 +124,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     default:
                         result.endpoint.debugDescription
                     }
-                    let data = ["endpoint": endpoint]
+                    let data = ["endpoint": endpoint, "status": "disconnected"]
                     self?.notifyListeners("onServiceLost", data: data)
                 case .changed(old: _, new: let new, flags: _):
                     let endpoint = switch new.endpoint {
@@ -133,7 +133,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     default:
                         new.endpoint.debugDescription
                     }
-                    self?.notifyListeners("onServiceResolved", data: ["endpoint": endpoint])
+                    self?.notifyListeners("onServiceResolved", data: ["endpoint": endpoint, "status": "connected"])
                     break
                 @unknown default:
                     break
@@ -151,39 +151,45 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     }
     @objc func checkDeviceConnection(_ call: CAPPluginCall) {
-        device.checkDeviceConnection(call: pluginCall(call: call))
+        DispatchQueue.global().async { [weak self] in
+            self?.device.checkDeviceConnection(call: pluginCall(call: call))
+        }
     }
     
     @objc func connectToDeviceAP(_ call: CAPPluginCall) {
         guard let bridge = self.bridge else { return }
-        // First, check if already connected to bushnet
-        checkCurrentConnection { isConnected in
-            if isConnected {
-                call.resolve(["status": "connected"])
-                return
-            }
+        DispatchQueue.global().async { [self] in
             
-            // If not connected, proceed with connection attempt
-            NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
-            
-            NEHotspotConfigurationManager.shared.apply(self.configuration) { error in
-                if let error = error {
-                    call.resolve(["status": "error", "error": error.localizedDescription])
+            // First, check if already connected to bushnet
+            checkCurrentConnection { isConnected in
+                if isConnected {
+                    call.resolve(["status": "connected"])
                     return
                 }
-                call.resolve(["status": "connected"])
+                self.configuration.joinOnce = true
+                
+                // If not connected, proceed with connection attempt
+                NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
+                
+                NEHotspotConfigurationManager.shared.apply(self.configuration) { error in
+                    if let error = error {
+                        call.resolve(["status": "error", "error": error.localizedDescription])
+                        return
+                    }
+                    call.resolve(["status": "connected"])
+                }
             }
-        }
-    }
+        }}
     
     
     @objc func disconnectFromDeviceAP(_ call: CAPPluginCall) {
         guard let bridge = self.bridge else { return call.reject("Could not access bridge") }
         call.keepAlive = true
-
-        // Attempt to remove the Wi-Fi configuration for the SSID "bushnet"
-        NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
-
+        DispatchQueue.global().async {
+            
+            // Attempt to remove the Wi-Fi configuration for the SSID "bushnet"
+            NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
+            
             if #available(iOS 14.0, *) {
                 NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
                     if let currentSSID = currentConfiguration?.ssid, currentSSID == "bushnet" {
@@ -206,7 +212,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                 guard let swiftInterfaces = (interfaceNames as NSArray) as? [String] else {
                     call.resolve(["success": false, "error": "No interfaces found"])
                     bridge.releaseCall(withID: call.callbackId)
-
+                    
                     return
                 }
                 for name in swiftInterfaces {
@@ -231,6 +237,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                 }
                 bridge.releaseCall(withID: call.callbackId)
             }
+        }
     }
 
     @objc private func checkCurrentConnection(completion: @escaping (Bool) -> Void) {

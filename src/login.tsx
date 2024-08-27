@@ -1,4 +1,11 @@
-import { createEffect, createReaction, createSignal, on, Show } from "solid-js";
+import {
+  createComputed,
+  createEffect,
+  createReaction,
+  createSignal,
+  on,
+  Show,
+} from "solid-js";
 import { Browser } from "@capacitor/browser";
 import { z } from "zod";
 import CacaophonyLogo from "./components/CacaophonyLogo";
@@ -6,6 +13,7 @@ import { useUserContext } from "./contexts/User";
 import { ImCog } from "solid-icons/im";
 import { FaRegularEye, FaRegularEyeSlash } from "solid-icons/fa";
 import { useDevice } from "./contexts/Device";
+import { untrack } from "solid-js/web";
 type LoginInput = {
   type: string;
   placeholder?: string;
@@ -103,25 +111,26 @@ function Login() {
     }
     if (email.success && password.success) {
       if (device.apState() === "connected") {
-        const track = createReaction(async () => {
-          const ap = device.apState();
-          if (ap === "disconnected" || ap === "default") {
-            await user?.login(email.data, password.data).catch(() => {
-              setError("Invalid Email or Password");
-            });
-          } else {
-            track(() => device.apState());
-          }
-        });
-        track(() => device.apState());
+        createComputed(
+          on(device.apState, async (ap) => {
+            console.log("LOGGING IN", ap);
+            if (ap === "disconnected" || ap === "default") {
+              await user?.login(email.data, password.data).catch(() => {
+                setError("Invalid Email or Password");
+              });
+              setLoggingIn(false);
+              untrack(device.apState);
+            }
+          })
+        );
         await device.disconnectFromDeviceAP();
       } else {
         await user?.login(email.data, password.data).catch(() => {
           setError("Invalid Email or Password");
         });
+        setLoggingIn(false);
       }
     }
-    setLoggingIn(false);
   };
   const onInput = (event: Event) => {
     event.preventDefault();

@@ -8,7 +8,7 @@ import { CapacitorHttp } from "@capacitor/core";
 import { Filesystem } from "@capacitor/filesystem";
 import { Geolocation } from "@capacitor/geolocation";
 import { createContextProvider } from "@solid-primitives/context";
-import { ReactiveMap } from "@solid-primitives/map";
+import { ReactiveMap, ReactiveWeakMap } from "@solid-primitives/map";
 import { createStore } from "solid-js/store";
 import {
   debounce,
@@ -17,7 +17,9 @@ import {
 } from "@solid-primitives/scheduled";
 import { ReactiveSet } from "@solid-primitives/set";
 import {
+  createComputed,
   createEffect,
+  createMemo,
   createResource,
   createSignal,
   on,
@@ -33,6 +35,8 @@ import { useStorage } from "../Storage";
 import { isWithinRange } from "../Storage/location";
 import DeviceCamera from "./Camera";
 import { Effect, Schedule } from "effect";
+import { untrack } from "solid-js/web";
+import { debugSignal } from "@solid-devtools/logger";
 
 const WifiNetwork = z
   .object({
@@ -221,40 +225,45 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     await Promise.all([setCurrRecs(device), setCurrEvents(device)]);
   };
   const createDevice = async (url: string) => {
-    const infoRes = await Effect.runPromise(
-      Effect.retry(
-        Effect.tryPromise<HttpResponse>(() =>
-          CapacitorHttp.get({
-            url: `${url}/api/device-info`,
-            headers,
-            webFetchExtra: {
-              credentials: "include",
-            },
-          })
-        ),
-        { times: 3 }
-      )
-    );
-    if (infoRes.status !== 200) {
-      throw Error(`Could not get device info ${infoRes}`);
-    }
-    const info = DeviceInfoSchema.parse(JSON.parse(infoRes.data));
-    const id: DeviceId = info.deviceID.toString();
-    const type = info.type ? info.type : "pi";
+    try {
+      if (url === undefined) throw Error("No url to create device");
+      const infoRes = await Effect.runPromise(
+        Effect.retry(
+          Effect.tryPromise<HttpResponse>(() =>
+            CapacitorHttp.get({
+              url: `${url}/api/device-info`,
+              headers,
+              webFetchExtra: {
+                credentials: "include",
+              },
+            })
+          ),
+          { times: 3 }
+        )
+      );
+      if (!infoRes || infoRes?.status !== 200) {
+        throw Error(`Could not get device info ${infoRes}`);
+      }
+      const info = DeviceInfoSchema.parse(JSON.parse(infoRes.data));
+      const id: DeviceId = info.deviceID.toString();
+      const type = info.type ? info.type : "pi";
 
-    return {
-      id,
-      saltId: info.saltID,
-      name: info.devicename ? info.devicename : "New Device",
-      group: info.groupname,
-      type,
-      isProd: !info.serverURL.includes("test"),
-      locationSet: false,
-      timeFound: new Date(),
-      url,
-      isConnected: true,
-      lastUpdated: info.lastUpdated ? new Date(info.lastUpdated) : undefined,
-    } as const;
+      return {
+        id,
+        saltId: info.saltID,
+        name: info.devicename ? info.devicename : "New Device",
+        group: info.groupname,
+        type,
+        isProd: !info.serverURL.includes("test"),
+        locationSet: false,
+        timeFound: new Date(),
+        url,
+        isConnected: true,
+        lastUpdated: info.lastUpdated ? new Date(info.lastUpdated) : undefined,
+      } as const;
+    } catch (e) {
+      throw Error(`Could not get device info ${e}`);
+    }
   };
 
   const endpointToDevice = async (
@@ -264,6 +273,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     try {
       const [deviceName] = endpoint.split(".");
       const url = `http://${deviceName}.local`;
+      debugger;
       const device = await Promise.any([
         createDevice(url),
         createDevice(`http://${host}`),
@@ -284,31 +294,34 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   // Create an effect to always turning on modem for 5 minutes
   const modemOnIntervals = new ReactiveMap<DeviceId, NodeJS.Timeout>();
-  createEffect(() => {
-    for (const [, device] of devices) {
-      const interval = modemOnIntervals.get(device.id);
-      if (!interval) {
-        const id = setInterval(() => {
-          unbindAndRebind(() =>
-            DevicePlugin.turnOnModem({ url: device.url, minutes: "5" })
-          );
-        }, 300000);
-        modemOnIntervals.set(device.id, id);
-      } else {
-        if (!device.isConnected) {
-          clearInterval(interval);
-          modemOnIntervals.delete(device.id);
+  createEffect(
+    on(
+      () => devices,
+      (devices) => {
+        for (const [, device] of devices) {
+          const interval = modemOnIntervals.get(device.id);
+          if (!interval) {
+            const id = setInterval(() => {
+              unbindAndRebind(() =>
+                DevicePlugin.turnOnModem({ url: device.url, minutes: "5" })
+              );
+            }, 300000);
+            modemOnIntervals.set(device.id, id);
+          } else {
+            if (!device.isConnected) {
+              clearInterval(interval);
+              modemOnIntervals.delete(device.id);
+            }
+          }
         }
       }
-    }
-  });
+    )
+  );
 
   const [connectingToDevice, setConnectingToDevice] = createSignal<string[]>(
     []
   );
   const handleServiceResolved = async (newDevice: DeviceService) => {
-    debugger;
-    console.log("DEVICE FOUND:", newDevice, [...devices.values()]);
     if (!newDevice) return;
 
     const existingDevice = [...devices.values()].find(
@@ -350,7 +363,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
   };
   const addConnectedDevice = async (connectedDevice: ConnectedDevice) => {
-    console.log("ADD DEVICE", connectedDevice);
     // Remove any devices with the same saltId
     for (const device of devices.values()) {
       if (!device.isConnected && device.saltId === connectedDevice.saltId) {
@@ -363,61 +375,26 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     await clearUploaded(connectedDevice);
     await turnOnModem(connectedDevice.id);
   };
-  const checkDeviceIntervals = new Map();
-  createEffect(
-    on(
-      () => [...devices.values()],
-      (devices) => {
-        for (const device of devices) {
-          if (!device.isConnected) {
-            const interval = checkDeviceIntervals.get(device.id);
-            if (interval) {
-              clearInterval(interval);
-            }
-          } else {
-            if (checkDeviceIntervals.has(device.id)) return;
-            checkDeviceIntervals.set(
-              device.id,
-              setInterval(async () => {
-                const res = await DevicePlugin.checkDeviceConnection({
-                  url: device.url,
-                });
-                if (!res.success) {
-                  handleServiceLost({ endpoint: device.endpoint });
-                }
-              }, 5000)
-            );
-          }
-        }
-      }
-    )
-  );
-
-  const handleServiceLost = async (lostDevice: { endpoint: string }) => {
+  const handleServiceLost = (lostDevice: { endpoint: string }) => {
     const device = [...devices.values()].find(
-      (d) => d.endpoint === lostDevice.endpoint
+      (d) => d.endpoint === lostDevice.endpoint && d.isConnected
     );
     if (!device) return;
-
-    devices.set(device.id, { ...device, isConnected: false });
+    devices.set(device.id, {
+      ...device,
+      isConnected: false,
+    });
   };
 
   onMount(() => {
     const interval = setInterval(async () => {
-      if (apState() === "connected") {
-        const res = await DevicePlugin.checkIsAPConnected();
+      console.log("CHECKING AP", apState());
+      const res = await DevicePlugin.checkIsAPConnected();
 
-        if (!res.connected) {
-          setTimeout(() => {
-            setApState("default");
-          }, 5000);
-        }
-      } else if (apState() === "default") {
-        const res = await DevicePlugin.checkIsAPConnected();
-
-        if (res.connected) {
-          setApState("connected");
-        }
+      if (res.connected && apState() !== "loadingDisconnect") {
+        setApState("connected");
+      } else if (!res.connected && apState() !== "loadingConnect") {
+        setApState("default");
       }
     }, 10000);
     onCleanup(() => clearInterval(interval));
@@ -454,6 +431,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
       // Check device connections
       for (const device of devices.values()) {
+        debugger;
         const deviceInfo = await Effect.runPromise(
           Effect.retry(getDeviceInfo(device.url), { times: 3 })
         );
@@ -499,7 +477,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       "onServiceLost",
       handleServiceLost
     );
-    startDiscovery();
+    setListeners([serviceResolvedListener, serviceLostListener]);
+    setInterval(() => {
+      startDiscovery();
+    }, 20000);
 
     onCleanup(() => {
       serviceResolvedListener.remove();
@@ -1002,13 +983,14 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       return "denied";
     }
   });
-
-  const [devicesLocToUpdate, { refetch }] = createResource(
+  const [devicesLocToUpdate] = createResource(
     () => {
       return [[...devices.values()], permission()] as const;
     },
     async ([devices, permission]) => {
+      debugger;
       try {
+        devices = devices.filter(({ isConnected }) => isConnected);
         if (!devices || devices.length === 0 || !permission) return [];
         if (permission === "denied") return [];
         const pos = await Geolocation.getCurrentPosition({
@@ -1057,12 +1039,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       }
     }
   );
-  onMount(() => {
-    const interval = setInterval(() => {
-      refetch();
-    }, 10000);
-    onCleanup(() => clearInterval(interval));
-  });
 
   type DeviceLocationStatus =
     | "loading"
@@ -1406,7 +1382,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       console.log("Modem", res);
       return ConnectionRes.parse(JSON.parse(res.data)).connected;
     } catch (error) {
-      console.error(error);
+      console.error("Connection Error:", error);
       return false;
     }
   };
@@ -1460,7 +1436,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       });
       return res.status === 200 ? tc2ModemSchema.parse(res.data) : null;
     } catch (error) {
-      console.error(error);
+      console.error("Get Modem Error:", error);
       return null;
     }
   };
@@ -1473,7 +1449,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const res = await DevicePlugin.turnOnModem({ url, minutes: "5" });
       return res.success;
     } catch (error) {
-      console.error(error);
+      console.error("Turn On Error: ", error);
       return false;
     }
   };
@@ -1509,23 +1485,16 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return null;
       const { url } = device;
-      const res = await Effect.runPromise(
-        Effect.retry(
-          Effect.tryPromise(async () => {
-            const res = await CapacitorHttp.get({
-              url: `${url}/api/signal-strength`,
-              headers,
-              webFetchExtra: {
-                credentials: "include",
-              },
-            });
-            console.log("Modem Signal", res);
-            if (res.status !== 200) throw Error("No Modem");
-            return JSON.parse(res.data);
-          }),
-          { times: 3 }
-        )
-      );
+      let res = await CapacitorHttp.get({
+        url: `${url}/api/signal-strength`,
+        headers,
+        webFetchExtra: {
+          credentials: "include",
+        },
+      });
+      console.log("Modem Signal", res);
+      if (res.status !== 200) throw Error("No Modem");
+      res = JSON.parse(res.data);
       return res;
     } catch (error) {
       return null;
@@ -1587,28 +1556,29 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   // Access point
   const [apState, setApState] = createSignal<
-    "connected" | "disconnected" | "loading" | "default"
+    | "connected"
+    | "disconnected"
+    | "loadingDisconnect"
+    | "loadingConnect"
+    | "default"
   >("default");
 
-  createEffect(() => {
-    console.log("AP", apState());
-  });
-
   createEffect(
-    (prev: Device[]) => {
-      const currDevices = [...devices.values()];
-      if (prev.length > 0 && currDevices.length === 0) {
-        if (apState() === "connected") {
-          DevicePlugin.hasConnection().then((res) => {
-            if (!res.success) {
-              setApState("disconnected");
-            }
-          });
+    on(
+      () => [...devices.values()],
+      (currDevices, prev) => {
+        if ((prev?.length ?? 0) > 0 && currDevices.length === 0) {
+          if (apState() === "connected") {
+            DevicePlugin.hasConnection().then((res) => {
+              if (!res.success) {
+                setApState("disconnected");
+              }
+            });
+          }
         }
+        return currDevices;
       }
-      return currDevices;
-    },
-    [...devices.values()]
+    )
   );
 
   const host = `http://192.168.4.1`;
@@ -1616,7 +1586,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const connectToDeviceAP = leading(
     debounce,
     async () => {
-      setApState("loading");
+      setApState("loadingConnect");
       try {
         const res = await DevicePlugin.connectToDeviceAP();
         if (res.status === "connected") {
@@ -1637,10 +1607,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   );
   const disconnectFromDeviceAP = async () => {
     try {
-      setApState("loading");
+      setApState("loadingDisconnect");
       const res = await DevicePlugin.disconnectFromDeviceAP();
       searchDevice();
-      return true;
+      return res.success;
     } catch (error) {
       return false;
     }
