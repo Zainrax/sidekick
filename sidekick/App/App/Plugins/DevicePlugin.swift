@@ -166,7 +166,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     call.resolve(["status": "connected"])
                     return
                 }
-                self.configuration.joinOnce = true
+                self.configuration.joinOnce = false
                 
                 // If not connected, proceed with connection attempt
                 NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
@@ -185,11 +185,8 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func disconnectFromDeviceAP(_ call: CAPPluginCall) {
         guard let bridge = self.bridge else { return call.reject("Could not access bridge") }
         call.keepAlive = true
-        DispatchQueue.global().async {
-            
             // Attempt to remove the Wi-Fi configuration for the SSID "bushnet"
             NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
-            
             if #available(iOS 14.0, *) {
                 NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
                     if let currentSSID = currentConfiguration?.ssid, currentSSID == "bushnet" {
@@ -237,7 +234,6 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                 }
                 bridge.releaseCall(withID: call.callbackId)
             }
-        }
     }
 
     @objc private func checkCurrentConnection(completion: @escaping (Bool) -> Void) {
