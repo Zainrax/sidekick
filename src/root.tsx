@@ -4,6 +4,8 @@ import {
   ErrorBoundary,
   lazy,
   Match,
+  on,
+  onMount,
   Show,
   Suspense,
 } from "solid-js";
@@ -20,6 +22,10 @@ import NotificationPopup from "./components/NotificationPopup";
 import { BiSolidCopyAlt } from "solid-icons/bi";
 import BackgroundLogo from "./components/BackgroundLogo";
 import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
+import { LogsProvider, useLogsContext } from "./contexts/LogsContext";
+import * as Sentry from "@sentry/capacitor";
+import { Portal } from "solid-js/web";
+import ConsentPopup from "./components/ConsentPopup";
 
 const routes = [
   {
@@ -67,13 +73,27 @@ function LoadingScreen() {
 }
 
 const AppRoutes = () => {
+  const log = useLogsContext();
   const navigate = useNavigate();
-  createEffect(() => {
-    navigate("/devices", { replace: true });
-  });
   const context = useUserContext();
   const headerContext = useHeaderContext();
   const Routes = useRoutes(routes);
+
+  onMount(() => {
+    log.logEvent("app_load");
+    navigate("/devices", { replace: true });
+  });
+
+  createEffect(
+    on(context.data, (user) => {
+      if (user) {
+        log.logEvent("login", {
+          user_id: user.id,
+        });
+      }
+    })
+  );
+
   return (
     <Show when={!context?.data.loading} fallback={<LoadingScreen />}>
       <Show
@@ -87,7 +107,6 @@ const AppRoutes = () => {
     </Show>
   );
 };
-
 const writeToClipboard = async (err: unknown) => {
   await Clipboard.write({
     string: JSON.stringify(err),
@@ -101,21 +120,7 @@ export default function Root() {
         <ErrorBoundary
           fallback={(err) => {
             console.trace(err);
-            if (err instanceof Error) {
-              try {
-                StackTrace.fromError(err).then((stacktrace) => {
-                  const message = err.message;
-                  FirebaseCrashlytics.recordException({
-                    message,
-                    stacktrace,
-                  });
-                });
-              } catch (e) {
-                FirebaseCrashlytics.recordException({
-                  message: err.message,
-                });
-              }
-            }
+            Sentry.captureException(err);
             return (
               <div class="z-20 flex h-full w-screen flex-col items-center justify-center bg-white">
                 <h1 class="text-2xl font-bold">Something went wrong</h1>
@@ -144,14 +149,17 @@ export default function Root() {
           }}
         >
           <HeaderProvider>
-            <UserProvider>
-              <StorageProvider>
-                <DeviceProvider>
-                  <AppRoutes />
-                  <NotificationPopup />
-                </DeviceProvider>
-              </StorageProvider>
-            </UserProvider>
+            <LogsProvider>
+              <UserProvider>
+                <StorageProvider>
+                  <DeviceProvider>
+                    <AppRoutes />
+                    <NotificationPopup />
+                    <ConsentPopup />
+                  </DeviceProvider>
+                </StorageProvider>
+              </UserProvider>
+            </LogsProvider>
           </HeaderProvider>
         </ErrorBoundary>
       </Router>

@@ -37,6 +37,7 @@ import DeviceCamera from "./Camera";
 import { Effect, Schedule } from "effect";
 import { untrack } from "solid-js/web";
 import { debugSignal } from "@solid-devtools/logger";
+import { useLogsContext } from "../LogsContext";
 
 const WifiNetwork = z
   .object({
@@ -57,6 +58,41 @@ const WifiNetwork = z
     };
   });
 export type WifiNetwork = z.infer<typeof WifiNetwork>;
+export const asInt = z
+  .union([z.string(), z.number()])
+  .transform((val) => (typeof val === "string" ? parseInt(val) : val));
+export const tc2ModemSchema = z
+  .object({
+    modem: z.object({
+      connectedTime: z.string(),
+      manufacturer: z.string(),
+      model: z.string(),
+      name: z.string(),
+      netdev: z.string(),
+      serial: z.string(),
+      // parse as number even if it's a string
+      temp: asInt,
+      vendor: z.string(),
+      voltage: asInt,
+      apn: z.string().optional(),
+    }),
+    onOffReason: z.string(),
+    powered: z.boolean(),
+    signal: z.object({
+      accessTechnology: z.string(),
+      band: z.string(),
+      provider: z.string(),
+      strength: z.string(),
+    }),
+    simCard: z.object({
+      ICCID: z.string(),
+      provider: z.string(),
+      simCardStatus: z.string(),
+    }),
+    timestamp: z.string(),
+  })
+  .partial();
+export type Modem = z.infer<typeof tc2ModemSchema>;
 async function retryOperation<T>(
   operation: () => Promise<T>,
   retries = 3,
@@ -195,20 +231,23 @@ const DeviceInfoSchema = z.object({
   type: z.literal("pi").or(z.literal("tc2")).or(z.literal("")).nullish(),
   lastUpdated: z.string().optional(),
 });
+type DeviceInfo = z.infer<typeof DeviceInfoSchema>;
 
 const [DeviceProvider, useDevice] = createContextProvider(() => {
   const storage = useStorage();
+  const log = useLogsContext();
 
   const devices = new ReactiveMap<DeviceId, Device>();
   const deviceRecordings = new ReactiveMap<DeviceId, RecordingName[]>();
   const deviceEventKeys = new ReactiveMap<DeviceId, number[]>();
+  const [connectingToDevice, setConnectingToDevice] = createSignal<string[]>(
+    []
+  );
 
   const locationBeingSet = new ReactiveSet<string>();
   const devicesDownloading = new ReactiveSet<DeviceId>();
 
-  // Callback ID is used to determine if the device is currently discovering
-  const [callback, setCallback] =
-    createSignal<[PluginListenerHandle, PluginListenerHandle]>();
+  const [listeners, setListeners] = createSignal<PluginListenerHandle[]>([]);
   const [isDiscovering, setIsDiscovering] = createSignal(false);
 
   const setCurrRecs = async (device: ConnectedDevice) =>
@@ -224,9 +263,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     ]);
     await Promise.all([setCurrRecs(device), setCurrEvents(device)]);
   };
-  const createDevice = async (url: string) => {
+  // Function to fetch device info from a URL
+  const fetchDeviceInfo = async (url: string): Promise<DeviceInfo> => {
     try {
-      if (url === undefined) throw Error("No url to create device");
       const infoRes = await Effect.runPromise(
         Effect.retry(
           Effect.tryPromise<HttpResponse>(() =>
@@ -241,97 +280,126 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           { times: 3 }
         )
       );
-      if (!infoRes || infoRes?.status !== 200) {
-        throw Error(`Could not get device info ${infoRes}`);
+
+      if (!infoRes || infoRes.status !== 200) {
+        throw new Error(
+          `Could not get device info from ${url}, status: ${infoRes?.status}`
+        );
       }
+
       const info = DeviceInfoSchema.parse(JSON.parse(infoRes.data));
+      return info;
+    } catch (error) {
+      throw new Error(`Failed to fetch device info from ${url}: ${error}`);
+    }
+  };
+
+  // Function to create a device object from a URL
+  const createDevice = async (url: string) => {
+    if (!url) throw new Error("No URL provided to create device");
+
+    try {
+      const info = await fetchDeviceInfo(url);
       const id: DeviceId = info.deviceID.toString();
-      const type = info.type ? info.type : "pi";
+      const type = info.type || "pi";
 
       return {
         id,
         saltId: info.saltID,
-        name: info.devicename ? info.devicename : "New Device",
+        name: info.devicename || "New Device",
         group: info.groupname,
         type,
         isProd: !info.serverURL.includes("test"),
         locationSet: false,
         timeFound: new Date(),
         url,
-        isConnected: true,
+        isConnected: true as const,
         lastUpdated: info.lastUpdated ? new Date(info.lastUpdated) : undefined,
-      } as const;
-    } catch (e) {
-      throw Error(`Could not get device info ${e}`);
+      };
+    } catch (error) {
+      throw new Error(`Could not create device from URL ${url}: ${error}`);
     }
   };
 
+  // Function to convert an endpoint and host to a connected device
   const endpointToDevice = async (
     endpoint: string,
     host: string
   ): Promise<ConnectedDevice | undefined> => {
     try {
       const [deviceName] = endpoint.split(".");
-      const url = `http://${deviceName}.local`;
-      debugger;
+      const url1 = `http://${deviceName}.local`;
+      const url2 = `http://${host}`;
+
       const device = await Promise.any([
-        createDevice(url),
-        createDevice(`http://${host}`),
+        createDevice(url1),
+        createDevice(url2),
       ]);
-      if (!device) throw Error("Failed to conenct to device");
-      const batteryPercentage = await getBattery(device.url);
-      const connectedDevice: ConnectedDevice = {
+
+      if (!device) throw new Error("Failed to connect to device");
+
+      const batteryPercentage = await getBattery(device.url); // Assume getBattery is defined elsewhere
+
+      return {
         ...device,
         host,
         endpoint,
         batteryPercentage: batteryPercentage?.mainBattery,
       };
-      return connectedDevice;
     } catch (error) {
-      console.log("error", error);
+      console.error("Error in endpointToDevice:", error);
+      return undefined;
     }
   };
 
-  // Create an effect to always turning on modem for 5 minutes
-  const modemOnIntervals = new ReactiveMap<DeviceId, NodeJS.Timeout>();
-  createEffect(
-    on(
-      () => devices,
-      (devices) => {
-        for (const [, device] of devices) {
-          const interval = modemOnIntervals.get(device.id);
-          if (!interval) {
-            const id = setInterval(() => {
-              unbindAndRebind(() =>
-                DevicePlugin.turnOnModem({ url: device.url, minutes: "5" })
-              );
-            }, 300000);
-            modemOnIntervals.set(device.id, id);
-          } else {
-            if (!device.isConnected) {
-              clearInterval(interval);
-              modemOnIntervals.delete(device.id);
+  // Function to manage modem intervals for devices
+  const manageModemIntervals = () => {
+    const modemOnIntervals = new ReactiveMap<DeviceId, NodeJS.Timeout>();
+
+    createEffect(
+      on(
+        () => devices,
+        (devicesMap) => {
+          for (const device of devicesMap.values()) {
+            const interval = modemOnIntervals.get(device.id);
+
+            if (device.isConnected) {
+              if (!interval) {
+                const id = setInterval(() => {
+                  unbindAndRebind(() =>
+                    DevicePlugin.turnOnModem({ url: device.url, minutes: "5" })
+                  );
+                }, 300000); // Every 5 minutes
+                modemOnIntervals.set(device.id, id);
+              }
+            } else {
+              if (interval) {
+                clearInterval(interval);
+                modemOnIntervals.delete(device.id);
+              }
             }
           }
         }
-      }
-    )
-  );
+      )
+    );
+  };
 
-  const [connectingToDevice, setConnectingToDevice] = createSignal<string[]>(
-    []
-  );
-  const handleServiceResolved = async (newDevice: DeviceService) => {
-    if (!newDevice) return;
+  // Function to check if we should attempt to connect to a new device
+  const shouldConnectToDevice = (newDevice: DeviceService): boolean => {
+    if (!newDevice) return false;
 
     const existingDevice = [...devices.values()].find(
       (d) => d.endpoint === newDevice.endpoint && d.host === newDevice.host
     );
 
-    if (existingDevice && existingDevice.isConnected) return;
+    if (existingDevice && existingDevice.isConnected) return false;
+    if (connectingToDevice().includes(newDevice.endpoint)) return false;
 
-    if (connectingToDevice().includes(newDevice.endpoint)) return;
+    return true;
+  };
 
+  // Function to connect to a device
+  const connectToDevice = async (newDevice: DeviceService) => {
     setConnectingToDevice((prev) => [...prev, newDevice.endpoint]);
 
     try {
@@ -343,11 +411,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           { times: 3 }
         )
       );
+
       if (connectedDevice) {
-        addConnectedDevice(connectedDevice);
-        setConnectingToDevice((prev) =>
-          prev.filter((previous) => previous === connectedDevice.endpoint)
-        );
+        await addConnectedDevice(connectedDevice);
       }
     } catch (error) {
       logError({
@@ -362,33 +428,64 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       );
     }
   };
-  const addConnectedDevice = async (connectedDevice: ConnectedDevice) => {
-    // Remove any devices with the same saltId
+
+  // Function to handle when a service is resolved (device discovered)
+  const handleServiceResolved = async (newDevice: DeviceService) => {
+    if (shouldConnectToDevice(newDevice)) {
+      await connectToDevice(newDevice);
+    }
+  };
+
+  // Function to remove a device by its saltId
+  const removeDeviceBySaltId = (saltId: string) => {
     for (const device of devices.values()) {
-      if (!device.isConnected && device.saltId === connectedDevice.saltId) {
+      if (!device.isConnected && device.saltId === saltId) {
         devices.delete(device.id);
         break;
       }
     }
+  };
+
+  // Function to add a connected device to the devices map
+  const addConnectedDevice = async (connectedDevice: ConnectedDevice) => {
+    if (connectedDevice.saltId) {
+      removeDeviceBySaltId(connectedDevice.saltId);
+    }
     devices.set(connectedDevice.id, connectedDevice);
 
-    await clearUploaded(connectedDevice);
-    await turnOnModem(connectedDevice.id);
+    log.logEvent("device_found", {
+      name: connectedDevice.name,
+      saltId: connectedDevice.saltId,
+      group: connectedDevice.group,
+    });
+
+    await clearUploaded(connectedDevice); // Assume clearUploaded is defined elsewhere
+    await turnOnModem(connectedDevice.id); // Assume turnOnModem is defined elsewhere
   };
+
+  // Function to handle when a service is lost (device disconnected)
   const handleServiceLost = (lostDevice: { endpoint: string }) => {
     const device = [...devices.values()].find(
       (d) => d.endpoint === lostDevice.endpoint && d.isConnected
     );
-    if (!device) return;
-    devices.set(device.id, {
-      ...device,
-      isConnected: false,
-    });
+
+    if (device) {
+      devices.set(device.id, {
+        ...device,
+        isConnected: false,
+      });
+
+      log.logEvent("device_lost", {
+        name: device.name,
+        saltId: device.saltId,
+        group: device.group,
+      });
+    }
   };
 
-  onMount(() => {
+  // Function to monitor AP (Access Point) connection state
+  const monitorAPConnection = () => {
     const interval = setInterval(async () => {
-      console.log("CHECKING AP", apState());
       const res = await DevicePlugin.checkIsAPConnected();
 
       if (res.connected && apState() !== "loadingDisconnect") {
@@ -396,18 +493,90 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       } else if (!res.connected && apState() !== "loadingConnect") {
         setApState("default");
       }
-    }, 10000);
+    }, 10000); // Every 10 seconds
+
     onCleanup(() => clearInterval(interval));
-  });
+  };
 
-  const devicesConnectingToWifi = new ReactiveMap();
+  // Function to set up listeners for device discovery events
+  const setupListeners = async () => {
+    removeAllListeners();
 
+    const serviceResolvedListener = await DevicePlugin.addListener(
+      "onServiceResolved",
+      handleServiceResolved
+    );
+    const serviceLostListener = await DevicePlugin.addListener(
+      "onServiceLost",
+      handleServiceLost
+    );
+
+    setListeners([serviceResolvedListener, serviceLostListener]);
+  };
+
+  // Function to remove all event listeners
+  const removeAllListeners = () => {
+    listeners().forEach((listener) => listener.remove());
+    setListeners([]);
+  };
+
+  // Function to clean up listeners
+  const cleanupListeners = () => {
+    removeAllListeners();
+  };
+
+  // Function to clear old devices that haven't been connected for a while
+  const clearOldDevices = () => {
+    const now = Date.now();
+    for (const device of devices.values()) {
+      const timeDiff = now - device.timeFound.getTime();
+      if (!device.isConnected && timeDiff > 600000) {
+        // If the device hasn't been connected for more than 10 minutes
+        devices.delete(device.id);
+      }
+    }
+  };
+
+  // Function to get device info
   const getDeviceInfo = (url: string) =>
     Effect.tryPromise({
       try: () => DevicePlugin.getDeviceInfo({ url }),
       catch: (unknown) =>
         new Error(`Could not get device information: ${unknown}`),
     });
+
+  // Function to check if a device is still connected
+  const checkDeviceConnection = async (device: Device) => {
+    try {
+      const deviceInfo = await Effect.runPromise(
+        Effect.retry(getDeviceInfo(device.url), { times: 3 })
+      );
+
+      if (deviceInfo.success) {
+        const info = DeviceInfoSchema.safeParse(JSON.parse(deviceInfo.data));
+
+        if (info.success && info.data.deviceID.toString() === device.id) {
+          const battery = await getBattery(device.url); // Assume getBattery is defined elsewhere
+          const updatedDevice: ConnectedDevice = {
+            ...device,
+            batteryPercentage: battery?.mainBattery,
+            isConnected: true,
+          };
+          devices.set(device.id, updatedDevice);
+          await clearUploaded(updatedDevice); // Assume clearUploaded is defined elsewhere
+          return updatedDevice;
+        }
+      }
+
+      devices.set(device.id, { ...device, isConnected: false });
+      return undefined;
+    } catch (error) {
+      devices.set(device.id, { ...device, isConnected: false });
+      return undefined;
+    }
+  };
+
+  // Function to start device discovery
   const startDiscovery = async () => {
     try {
       await DevicePlugin.stopDiscoverDevices();
@@ -419,38 +588,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
 
     try {
-      const connectedDevices: ConnectedDevice[] = [];
-
-      // Clear old devices
-      for (const device of devices.values()) {
-        const timeDiff = new Date().getTime() - device.timeFound.getTime();
-        if (!device.isConnected && timeDiff > 600000) {
-          devices.delete(device.id);
-        }
-      }
+      clearOldDevices();
 
       // Check device connections
       for (const device of devices.values()) {
-        debugger;
-        const deviceInfo = await Effect.runPromise(
-          Effect.retry(getDeviceInfo(device.url), { times: 3 })
-        );
-        if (deviceInfo.success) {
-          const info = DeviceInfoSchema.safeParse(JSON.parse(deviceInfo.data));
-          if (info.success && info.data.deviceID.toString() === device.id) {
-            const battery = await getBattery(device.url);
-            const currDevice = {
-              ...device,
-              batteryPercentage: battery?.mainBattery,
-              isConnected: true,
-            } as ConnectedDevice;
-            devices.set(device.id, currDevice);
-            await clearUploaded(currDevice);
-            connectedDevices.push(currDevice);
-            continue;
-          }
-        }
-        devices.set(device.id, { ...device, isConnected: false });
+        await checkDeviceConnection(device);
       }
     } catch (error) {
       logError({
@@ -460,60 +602,48 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       });
     }
   };
-  const [listeners, setListeners] = createSignal<PluginListenerHandle[]>([]);
 
-  const removeAllListeners = () => {
-    listeners().forEach((listener) => listener.remove());
-    setListeners([]);
-  };
-
-  onMount(async () => {
-    removeAllListeners();
-    const serviceResolvedListener = await DevicePlugin.addListener(
-      "onServiceResolved",
-      handleServiceResolved
-    );
-    const serviceLostListener = await DevicePlugin.addListener(
-      "onServiceLost",
-      handleServiceLost
-    );
-    setListeners([serviceResolvedListener, serviceLostListener]);
-    setInterval(() => {
-      startDiscovery();
-    }, 20000);
-
-    onCleanup(() => {
-      serviceResolvedListener.remove();
-      serviceLostListener.remove();
-      removeAllListeners();
-    });
-  });
-
+  // Function to stop device discovery
   const stopDiscovery = async () => {
-    const id = callback();
-    console.log("Stopping discovery", id);
-    if (id?.length === 2) {
-      try {
-        await DevicePlugin.stopDiscoverDevices();
-        callback()?.forEach((cb) => cb.remove());
-      } catch (e) {
-        console.log(e);
-      }
-      setCallback();
+    try {
+      await DevicePlugin.stopDiscoverDevices();
+      removeAllListeners();
+    } catch (e) {
+      console.error("Error stopping discovery:", e);
     }
   };
 
+  // Function to search for devices, debounced to avoid excessive calls
   const searchDevice = leadingAndTrailing(
     debounce,
     async () => {
       await startDiscovery();
       for (const device of devices.values()) {
-        if (!device.isConnected) continue;
-        clearUploaded(device);
+        if (device.isConnected) {
+          await clearUploaded(device); // Assume clearUploaded is defined elsewhere
+        }
       }
     },
-    100000
+    100000 // Debounce interval in milliseconds
   );
+
+  // Initialize modem intervals management
+  manageModemIntervals();
+
+  // Set up component lifecycle
+  onMount(async () => {
+    await setupListeners();
+    monitorAPConnection();
+
+    const discoveryInterval = setInterval(() => {
+      startDiscovery();
+    }, 20000); // Every 20 seconds
+
+    onCleanup(() => {
+      clearInterval(discoveryInterval);
+      cleanupListeners();
+    });
+  });
 
   const Authorization = "Basic YWRtaW46ZmVhdGhlcnM=";
   const headers = { Authorization: Authorization };
@@ -988,7 +1118,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       return [[...devices.values()], permission()] as const;
     },
     async ([devices, permission]) => {
-      debugger;
       try {
         devices = devices.filter(({ isConnected }) => isConnected);
         if (!devices || devices.length === 0 || !permission) return [];
@@ -1123,6 +1252,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return false;
       const { url } = device;
+      log.logEvent("device_wifi_connect");
       const res = await CapacitorHttp.post({
         url: `${url}/api/network/wifi/save`,
         headers: { ...headers, "Content-Type": "application/json" },
@@ -1246,11 +1376,13 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
   };
 
+  const devicesConnectingToWifi = new ReactiveMap();
   const disconnectFromWifi = async (deviceId: DeviceId) => {
     try {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return false;
       const { url } = device;
+      log.logEvent("device_wifi_disconnect");
       const res = await CapacitorHttp.delete({
         url: `${url}/api/network/wifi/current`,
         headers,
@@ -1387,42 +1519,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
   };
 
-  const asInt = z
-    .union([z.string(), z.number()])
-    .transform((val) => (typeof val === "string" ? parseInt(val) : val));
-  const tc2ModemSchema = z
-    .object({
-      modem: z.object({
-        connectedTime: z.string(),
-        manufacturer: z.string(),
-        model: z.string(),
-        name: z.string(),
-        netdev: z.string(),
-        serial: z.string(),
-        // parse as number even if it's a string
-        temp: asInt,
-        vendor: z.string(),
-        voltage: asInt,
-        apn: z.string().optional(),
-      }),
-      onOffReason: z.string(),
-      powered: z.boolean(),
-      signal: z.object({
-        accessTechnology: z.string(),
-        band: z.string(),
-        provider: z.string(),
-        strength: z.string(),
-      }),
-      simCard: z.object({
-        ICCID: z.string(),
-        provider: z.string(),
-        simCardStatus: z.string(),
-      }),
-      timestamp: z.string(),
-    })
-    .partial();
-
-  const getModem = async (deviceId: DeviceId) => {
+  const getModem = async (deviceId: DeviceId): Promise<Modem | null> => {
     try {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return null;
@@ -1571,6 +1668,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           if (apState() === "connected") {
             DevicePlugin.hasConnection().then((res) => {
               if (!res.success) {
+                log.logEvent("AP_disconnect");
                 setApState("disconnected");
               }
             });
@@ -1588,11 +1686,14 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     async () => {
       setApState("loadingConnect");
       try {
+        log.logEvent("AP_connect");
         const res = await DevicePlugin.connectToDeviceAP();
         if (res.status === "connected") {
+          log.logEvent("AP_connected");
           setApState("connected");
           searchDevice();
         } else if (res.status === "error") {
+          log.logEvent("AP_failed");
           logWarning({
             message:
               "Please try again, or connect to 'bushnet' with password 'feathers' in your wifi settings. Alternatively, set up a hotspot named 'bushnet' password: 'feathers'.",
@@ -1600,6 +1701,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           setApState("default");
         }
       } catch (err) {
+        log.logEvent("AP_failed");
         setApState("default");
       }
     },
@@ -1882,20 +1984,47 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     if (lastCallOut?.includes("accepted?"))
       return "Contact support to accept your device.";
   };
+  const SaltStatusSchema = z.object({
+    RunningUpdate: z.boolean(), // Required field
 
-  const canUpdateDevice = async (deviceId: DeviceId) => {
+    // Optional fields
+    RunningArgs: z
+      .union([
+        z.string(), // Replace with the actual type if known
+        z.number(),
+        z.boolean(),
+        z.array(z.any()),
+        z.null(),
+      ])
+      .optional(),
+
+    LastCallOut: z.string().optional(),
+    LastCallSuccess: z.boolean().optional(),
+    LastCallNodegroup: z.string().optional(),
+    LastCallArgs: z.array(z.string()).optional(),
+
+    // Validate LastUpdate as a datetime string in ISO 8601 format
+    LastUpdate: z.string().datetime({ offset: true }).optional(),
+
+    UpdateProgressPercentage: z.number().int().min(0).max(100).optional(),
+    UpdateProgressStr: z.string().optional(),
+  });
+  const checkDeviceUpdate = async (deviceId: DeviceId) => {
     try {
+      debugger;
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return null;
       const { url } = device;
       const res = await CapacitorHttp.get({
-        url: `${url}/api/check-salt-connection`,
+        url: `${url}/api/salt-update`,
         headers: { ...headers },
         webFetchExtra: {
           credentials: "include",
         },
       });
-      return res.status === 200;
+      return res.status === 200
+        ? SaltStatusSchema.parse(JSON.parse(res.data))
+        : null;
     } catch (error) {
       console.log(error);
       return null;
@@ -2007,7 +2136,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     takeAudioRecording,
     getAudioFiles,
     // Update
-    canUpdateDevice,
+    checkDeviceUpdate,
     updateDevice,
     getUpdateError,
     isDeviceUpdating,

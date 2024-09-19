@@ -351,7 +351,7 @@ export default function Manual() {
               sequenceText="(Slow pulse)"
             />
             <LightStatus
-              sequence={["long"]}
+              sequence={[]}
               color="red"
               status="Device is Off/in standby"
               sequenceText="(Solid Light)"

@@ -1,8 +1,11 @@
 import { Dialog } from "@capacitor/dialog";
+import { Match, Switch } from "solid-js";
 import ActionContainer from "~/components/ActionContainer";
+import { TracingLevel, useLogsContext } from "~/contexts/LogsContext";
 import { useUserContext } from "~/contexts/User";
 
 function user() {
+  const log = useLogsContext();
   const userContext = useUserContext();
   const deleteAccount = async () => {
     const { value } = await Dialog.confirm({
@@ -21,6 +24,26 @@ function user() {
             Delete Account
           </button>
         </>
+      </ActionContainer>
+      <ActionContainer>
+        <Switch>
+          <Match when={log.tracingLevel() === TracingLevel.PERSONALIZED}>
+            <button
+              class="w-full text-xl text-blue-500"
+              onClick={log.revokeConsent}
+            >
+              Revoke Personal Tracing
+            </button>
+          </Match>
+          <Match when={log.tracingLevel() === TracingLevel.NON_PERSONALIZED}>
+            <button
+              class="w-full text-xl text-blue-500"
+              onClick={log.grantConsent}
+            >
+              Allow Personal Tracing
+            </button>
+          </Match>
+        </Switch>
       </ActionContainer>
     </div>
   );

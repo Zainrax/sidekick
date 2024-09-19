@@ -36,6 +36,7 @@ import { DeviceSettingsModal } from "~/components/DeviceSettings";
 import { useHeaderContext } from "~/components/Header";
 import SetupWizard from "~/components/SetupWizard";
 import { useDevice } from "~/contexts/Device";
+import { useLogsContext } from "~/contexts/LogsContext";
 import { useStorage } from "~/contexts/Storage";
 import { useUserContext } from "~/contexts/User";
 
@@ -51,6 +52,7 @@ interface DeviceDetailsProps {
 
 function DeviceDetails(props: DeviceDetailsProps) {
   const context = useDevice();
+  const log = useLogsContext();
   const storage = useStorage();
   const userContext = useUserContext();
   const savedRecs = () =>
@@ -83,8 +85,10 @@ function DeviceDetails(props: DeviceDetailsProps) {
           setupDevice: props.id,
           step: "wifiSetup",
         });
+        log.logEvent("device_setup", { device_id: props.id });
       } else {
         setParams({ deviceSettings: props.id });
+        log.logEvent("device_settings", { device_id: props.id });
       }
     },
     800
@@ -93,10 +97,6 @@ function DeviceDetails(props: DeviceDetailsProps) {
   const [showTooltip, setShowTooltip] = createSignal(false);
 
   const updateLocState = () => context.shouldDeviceUpdateLocation(props.id);
-
-  createEffect(() => {
-    console.log("BATTERY", props.batteryPercentage);
-  });
 
   return (
     <ActionContainer
@@ -418,6 +418,7 @@ function Devices() {
   );
 
   const findDevice = () => {
+    console.info("Find Device");
     setSearchParams({ step: "chooseDevice" });
   };
 

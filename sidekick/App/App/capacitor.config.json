@@ -31,6 +31,7 @@
 	"packageClassList": [
 		"KeepAwakePlugin",
 		"CapacitorSQLitePlugin",
+		"FirebaseAnalyticsPlugin",
 		"FirebaseCrashlyticsPlugin",
 		"AppPlugin",
 		"CAPBrowserPlugin",
@@ -41,6 +42,7 @@
 		"GeolocationPlugin",
 		"CAPNetworkPlugin",
 		"PreferencesPlugin",
+		"SentryCapacitor",
 		"NativeSettingsPlugin"
 	]
 }

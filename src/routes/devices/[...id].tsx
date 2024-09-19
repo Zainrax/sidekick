@@ -1,5 +1,5 @@
 import { useLocation, useNavigate, useParams } from "@solidjs/router";
-import { Show, onMount } from "solid-js";
+import { Show, createEffect, createMemo, onMount } from "solid-js";
 import { useHeaderContext } from "~/components/Header";
 import { useDevice } from "~/contexts/Device";
 import { App } from "@capacitor/app";
@@ -7,14 +7,14 @@ function DeviceSettings() {
   const params = useParams();
   const context = useDevice();
   const nav = useNavigate();
-  const device = () => {
+  const device = createMemo(() => {
     const device = context.devices.get(params.id);
     if (!device || !device.isConnected) {
       nav("/devices");
       return;
     }
     return device;
-  };
+  });
   const location = useLocation();
   const childPath = () => {
     const path = location.pathname.split("/");
@@ -23,9 +23,11 @@ function DeviceSettings() {
     const childPath = path.slice(path.indexOf(id) + 1)[0];
     return [parseInt(id), childPath] as const;
   };
-  const url = () =>
-    (childPath()[1] ? device()?.url + "/" + childPath()[1] : device()?.url) ??
-    "/devices";
+  const url = createMemo(
+    () =>
+      (childPath()[1] ? device()?.url + "/" + childPath()[1] : device()?.url) ??
+      "/devices"
+  );
   const headerContext = useHeaderContext();
   onMount(() => {
     headerContext?.headerMap.set(location.pathname, [
@@ -33,16 +35,11 @@ function DeviceSettings() {
       undefined,
       `/devices?deviceSettings=${childPath()[0]}`,
     ]);
-    App.addListener("appStateChange", async (state) => {
-      const currDevice = device();
-      if (state.isActive && currDevice && currDevice.isConnected) {
-        // App has been brought back to the foreground
-        const isConnected = await context.isDeviceConnected(currDevice);
-        if (!isConnected) {
-          nav("/devices");
-        }
-      }
-    });
+  });
+  createEffect(() => {
+    if (!device()?.isConnected) {
+      nav("/devices");
+    }
   });
   return (
     <>

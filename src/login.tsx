@@ -106,8 +106,14 @@ function Login() {
     if (password.success === false) {
       setPasswordError(password.error.message);
     }
+    const triggerLoginError = () =>
+      setError(
+        navigator.onLine
+          ? "Invalid Email or Password"
+          : "You are offline, or connected to the device."
+      );
     if (emailError() || passwordError()) {
-      setError("Invalid Email or Password");
+      triggerLoginError();
     }
     if (email.success && password.success) {
       if (device.apState() === "connected") {
@@ -116,7 +122,7 @@ function Login() {
             console.log("LOGGING IN", ap);
             if (ap === "disconnected" || ap === "default") {
               await user?.login(email.data, password.data).catch(() => {
-                setError("Invalid Email or Password");
+                triggerLoginError();
               });
               setLoggingIn(false);
               untrack(device.apState);
@@ -126,7 +132,7 @@ function Login() {
         await device.disconnectFromDeviceAP();
       } else {
         await user?.login(email.data, password.data).catch(() => {
-          setError("Invalid Email or Password");
+          triggerLoginError();
         });
         setLoggingIn(false);
       }

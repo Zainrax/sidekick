@@ -17,8 +17,8 @@ import {
   getLocationsForUser,
 } from "../CacophonyApi";
 import { DevicePlugin, unbindAndRebind, useDevice } from "../Device";
-import { logError, logSuccess, logSync, logWarning } from "../Notification";
 import { useUserContext } from "../User";
+import { useLogsContext } from "../LogsContext";
 
 const MIN_STATION_SEPARATION_METERS = 60;
 
@@ -81,10 +81,11 @@ export const isWithinRange = (
 };
 
 export function useLocationStorage() {
+  const log = useLogsContext();
   const userContext = useUserContext();
   type ServerLocation = ApiLocation & { isProd: boolean };
   const message =
-    "Could not to get locations. Please check your internet connection and you are logged in.";
+    "Could not to get locations. Please check your internet connection and you are log.logged in.";
   const getServerLocations = async (): Promise<ServerLocation[]> => {
     try {
       const user = await userContext.getUser();
@@ -95,7 +96,7 @@ export function useLocationStorage() {
         isProd: user.prod,
       }));
     } catch (error) {
-      logError({
+      log.logError({
         message,
         error,
       });
@@ -252,7 +253,7 @@ export function useLocationStorage() {
         await Promise.all(locationsToUpdate.map(updateLocation(db)));
         return syncLocations();
       } catch (error) {
-        logError({
+        log.logError({
           message: "Failed to sync locations",
           error,
         });
@@ -260,9 +261,6 @@ export function useLocationStorage() {
       }
     }
   );
-  createEffect(() => {
-    console.log("SAVED LOCATIONS", savedLocations());
-  });
 
   // Deletes ima
   const syncLocationDeletePhotos = async (location: Location) => {
@@ -354,18 +352,18 @@ export function useLocationStorage() {
         })
       );
       if (res.data.serverDeleted) {
-        logSuccess({
+        log.logSuccess({
           message: "Reference photo deleted",
         });
       } else if (!isImageToUpload) {
-        logWarning({
+        log.logWarning({
           message:
             "Reference photo deleted from app, but not from server. Try sync again through storage.",
         });
       }
       return true;
     } else {
-      logWarning({
+      log.logWarning({
         message:
           "Failed to delete reference photo for location. You can also delete it on the Cacophony website.",
         details: `${location.id} ${fileKey}: ${res.message}`,
@@ -393,7 +391,7 @@ export function useLocationStorage() {
         if (res.success) {
           location.name = newName;
           location.updateName = undefined;
-          logSuccess({
+          log.logSuccess({
             message: "Successfully updated location name",
           });
         } else {
@@ -436,7 +434,7 @@ export function useLocationStorage() {
               (imgPath: string) => imgPath !== newPhoto
             );
           }
-          logSuccess({
+          log.logSuccess({
             message: "Successfully updated location picture",
           });
         } else {
@@ -455,7 +453,7 @@ export function useLocationStorage() {
       await DevicePlugin.rebindConnection();
     } catch (e) {
       await DevicePlugin.rebindConnection();
-      logWarning({
+      log.logWarning({
         message: "Failed to update location picture",
         details: JSON.stringify(e),
       });
@@ -490,7 +488,7 @@ export function useLocationStorage() {
       updatedAt: new Date().toISOString(),
     });
     if (!newLocation.success) {
-      logWarning({
+      log.logWarning({
         message: "Failed to save location",
         details: JSON.stringify(newLocation.error),
       });
@@ -587,12 +585,6 @@ export function useLocationStorage() {
       uploadPhotos: uploadPhotos,
       referencePhotos: referencePhotos,
     });
-    console.log(
-      "UPLOADED PHOTOS",
-      uploadedPhotos,
-      uploadPhotos,
-      referencePhotos
-    );
     return [uploadPhotos, referencePhotos];
   };
 
@@ -659,7 +651,7 @@ export function useLocationStorage() {
           location.uploadPhotos = uploadPhotos;
 
           success = true;
-          logSuccess({
+          log.logSuccess({
             message: "Location created successfully",
           });
         } else if (res.message.includes("already exists") && tries < 3) {
@@ -670,7 +662,7 @@ export function useLocationStorage() {
       }
     }
     if (location.needsCreation) {
-      logWarning({
+      log.logWarning({
         message:
           "Unable to establish this location. Ensure you have access to the group and are online.",
       });
@@ -728,7 +720,7 @@ export function useLocationStorage() {
     try {
       await db.execute(createLocationSchema);
     } catch (error) {
-      logError({
+      log.logError({
         message,
         error,
       });

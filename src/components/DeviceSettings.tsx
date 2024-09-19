@@ -43,7 +43,7 @@ import {
 import { Portal } from "solid-js/web";
 import FieldWrapper from "~/components/Field";
 import { GoToPermissions } from "~/components/GoToPermissions";
-import { DeviceId, WifiNetwork, useDevice } from "~/contexts/Device";
+import { DeviceId, Modem, WifiNetwork, useDevice } from "~/contexts/Device";
 import { logError, logWarning } from "~/contexts/Notification";
 import { useStorage } from "~/contexts/Storage";
 import { BsWifi1, BsWifi2, BsWifi } from "solid-icons/bs";
@@ -51,6 +51,8 @@ import { useUserContext } from "~/contexts/User";
 import { Frame, Region, Track } from "~/contexts/Device/Camera";
 import { VsArrowSwap } from "solid-icons/vs";
 import DeviceSettings from "~/routes/devices/[...id]";
+import { useLogsContext } from "~/contexts/LogsContext";
+import { update } from "effect/Differ";
 type CameraCanvas = HTMLCanvasElement | undefined;
 const colours = ["#ff0000", "#00ff00", "#ffff00", "#80ffff"];
 type SettingProps = { deviceId: DeviceId };
@@ -1137,6 +1139,7 @@ export function LocationSettingsTab(props: SettingProps) {
 
 export function WifiSettingsTab(props: SettingProps) {
   const context = useDevice();
+  const log = useLogsContext();
   const id = () => props.deviceId;
   const device = () => context.devices.get(id());
   const [wifiNetworks, { refetch: refetchWifiNetowrks }] = createResource(
@@ -1265,7 +1268,6 @@ export function WifiSettingsTab(props: SettingProps) {
       });
     }
   });
-
   const disconnectFromWifi = async () => {
     setErrorConnecting(null);
     const res = await context.disconnectFromWifi(id());
@@ -1443,6 +1445,20 @@ export function WifiSettingsTab(props: SettingProps) {
 
   const [savingModem, setSavingModem] = createSignal<SaveState>(null);
 
+  createEffect(
+    on(
+      () => [modem, currentWifi] as const,
+      ([modem, wifi]) => {
+        if (!modem.loading && !wifi.loading) {
+          log.logEvent("device_connection", {
+            wifi: wifi()?.SSID ? "connected" : "disconnected",
+            modem: noSim() ? "no-sim" : modemConnectedToInternet(),
+          });
+        }
+      }
+    )
+  );
+
   const disableConnect = (ssid: string) =>
     (showPassword() && password().length < 8) || connecting() === ssid;
   const hasApn = () => modem()?.modem?.apn !== undefined;
@@ -1450,7 +1466,7 @@ export function WifiSettingsTab(props: SettingProps) {
   return (
     <div class="flex w-full flex-col space-y-2 px-2 py-2">
       <Show
-        when={hasNetworkEndpoints.loading}
+        when={hasNetworkEndpoints() === undefined}
         fallback={
           <Show when={hasNetworkEndpoints()} fallback={LinkToNetwork()}>
             <button
@@ -1982,6 +1998,7 @@ export function WifiSettingsTab(props: SettingProps) {
 }
 
 export function GroupSelect(props: SettingProps) {
+  const log = useLogsContext();
   const user = useUserContext();
   const context = useDevice();
   const id = () => props.deviceId;
@@ -2005,9 +2022,11 @@ export function GroupSelect(props: SettingProps) {
       if (!res.success) {
         throw new Error(res.messages.join("\n"));
       }
+      log.logEvent("group_create", { name: v });
     }
     const token = user.data()?.token;
     if (token) {
+      log.logEvent("group_change", { name: v });
       const res = await context.changeGroup(id(), v, token);
     }
   };
@@ -2074,12 +2093,26 @@ export function GeneralSettingsTab(props: SettingProps) {
   const id = () => props.deviceId;
   const saltId = () => device()?.saltId ?? "";
   const name = () => device()?.name ?? "";
+
   createEffect(() => {
     console.log("DEVICE", device());
   });
-  const [canUpdate, { refetch }] = createResource(async () => {
-    const res = await context.canUpdateDevice(id());
+
+  const [updateStatus, { refetch }] = createResource(async () => {
+    const res = await context.checkDeviceUpdate(id());
+    console.log("Salt Connection", res);
     return res;
+  });
+
+  const canUpdate = createMemo(() => {
+    const status = updateStatus();
+    if (
+      !status ||
+      status.RunningUpdate ||
+      status.UpdateProgressStr?.includes("No update")
+    )
+      return false;
+    return true;
   });
 
   const [lowPowerMode, setLowPowerMode] = createSignal<boolean | null>(null);
@@ -2102,11 +2135,11 @@ export function GeneralSettingsTab(props: SettingProps) {
   });
 
   createEffect(() => {
-    if (!canUpdate.loading) {
+    if (!updateStatus.loading) {
       if (!canUpdate()) {
         setTimeout(() => {
           refetch();
-        }, 5000);
+        }, 3000);
       }
     }
   });
@@ -2123,11 +2156,11 @@ export function GeneralSettingsTab(props: SettingProps) {
   };
 
   const softwareUpdateMessage = () => {
-    if (canUpdate.loading) return "Checking for update...";
+    console.log("can update", canUpdate());
     if (context.isDeviceUpdating(id())) return "Updating...";
     if (context.didDeviceUpdate(id()) === false) return "Failed to Update";
     if (context.didDeviceUpdate(id()) === true) return "Update Complete";
-    if (canUpdate()) return "Software Update";
+    if (canUpdate() || canUpdate() === undefined) return "Software Update";
     return "No Update Available";
   };
 
@@ -2150,12 +2183,15 @@ export function GeneralSettingsTab(props: SettingProps) {
       console.log(error);
     }
   };
-
+  const isUpdating = createMemo(() => updateStatus()?.RunningUpdate ?? false);
+  const showProgress = () =>
+    isUpdating() && (updateStatus()?.UpdateProgressPercentage ?? false);
   return (
     <div class="flex w-full flex-col space-y-2 px-2 py-4">
       <FieldWrapper type="text" value={name()} title="Name" />
       <GroupSelect deviceId={id()} />
       <FieldWrapper type="text" value={displayId()} title="ID" />
+
       <Show when={lowPowerMode() !== null}>
         <FieldWrapper type="custom" title={"Power Mode"}>
           <div class="flex w-full items-center gap-x-2 bg-gray-100 px-1">
@@ -2195,6 +2231,7 @@ export function GeneralSettingsTab(props: SettingProps) {
           </Switch>
         </div>
       </Show>
+
       <Show when={device()?.lastUpdated}>
         {(lastUpdated) => (
           <p class="flex gap-x-2 px-2">
@@ -2203,20 +2240,39 @@ export function GeneralSettingsTab(props: SettingProps) {
           </p>
         )}
       </Show>
+
       <Show when={updateError()}>
         {(error) => <p class="text-red-500">{error()}</p>}
       </Show>
-      <button
-        classList={{
-          "bg-blue-500 py-2 px-4 text-white rounded-md": Boolean(canUpdate?.()),
-          "bg-gray-400 py-2 px-4 text-gray-500 rounded-md": !canUpdate(),
-        }}
-        disabled={!canUpdate?.()}
-        class="flex w-full items-center justify-center space-x-2 rounded-md bg-blue-500 px-4 py-3 text-white "
-        onClick={() => context.updateDevice(id())}
-      >
-        {softwareUpdateMessage()}
-      </button>
+
+      <div>
+        <Show when={showProgress()}>
+          {(percentage) => (
+            <div class="relative h-4 w-full rounded-t-full bg-gray-200">
+              <div
+                class="transition-width h-4 rounded-t-full bg-blue-500 duration-500"
+                style={{ width: `${percentage()}%` }}
+              ></div>
+              <span class="absolute left-1/2 top-0 -translate-x-1/2 transform text-xs text-white">
+                {percentage()}%
+              </span>
+            </div>
+          )}
+        </Show>
+        <button
+          classList={{
+            "bg-blue-500 py-2 px-4 text-white ": canUpdate(),
+            "bg-gray-400 py-2 px-4 text-gray-500 ": !canUpdate(),
+            "rounded-md": !showProgress(),
+            "rounded-b-md": showProgress() !== false,
+          }}
+          disabled={!canUpdate?.()}
+          class="flex w-full items-center justify-center space-x-2 bg-blue-500 px-4 py-3 text-white "
+          onClick={() => context.updateDevice(id())}
+        >
+          {softwareUpdateMessage()}
+        </button>
+      </div>
       <A
         class="flex w-full items-center justify-center py-2 text-center text-lg text-blue-600"
         href={`/devices/${device()?.id}`}

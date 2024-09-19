@@ -665,7 +665,7 @@ function SetupWizard(): JSX.Element {
   const GroupSettings = () => {
     return (
       <>
-        <Title title="Group Setings" back="wifiSetup" />
+        <Title title="Group Settings" back="wifiSetup" />
         <div class="flex flex-col gap-y-2 px-8 text-center text-sm">
           Assign your device to a group so that you can view it in
           browse.cacophony.org.nz
