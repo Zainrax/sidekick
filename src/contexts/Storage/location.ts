@@ -27,6 +27,47 @@ const MIN_STATION_SEPARATION_METERS = 60;
 const MAX_DISTANCE_FROM_STATION_FOR_RECORDING =
   MIN_STATION_SEPARATION_METERS / 2;
 
+const asyncPool = async <T, R>(
+  poolLimit: number,
+  array: T[],
+  iteratorFn: (item: T) => Promise<R>
+): Promise<R[]> => {
+  const ret: R[] = [];
+  const executing: Promise<number>[] = [];
+
+  for (const item of array) {
+    const p = Promise.resolve().then(() =>
+      iteratorFn(item).then((res) => ret.push(res))
+    );
+    executing.push(p);
+
+    if (executing.length >= poolLimit) {
+      await Promise.race(executing);
+      executing.splice(
+        executing.findIndex((e) => e === p),
+        1
+      );
+    }
+  }
+
+  await Promise.all(executing);
+  return ret;
+};
+
+// Retry utility with exponential backoff
+const retry = async <T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  delay = 1000
+): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error) {
+    if (retries <= 0) throw error;
+    await new Promise((res) => setTimeout(res, delay));
+    return retry(fn, retries - 1, delay * 2);
+  }
+};
 export interface LatLng {
   lat: number;
   lng: number;
@@ -251,7 +292,9 @@ export function useLocationStorage() {
         const locationsToUpdate = getLocationsToUpdate(locations, dbLocations);
         await insertLocations(db)(locationsToInsert);
         await Promise.all(locationsToUpdate.map(updateLocation(db)));
-        return syncLocations();
+        const newLocations = await syncLocations();
+        console.log(newLocations);
+        return newLocations;
       } catch (error) {
         log.logError({
           message: "Failed to sync locations",
@@ -552,39 +595,108 @@ export function useLocationStorage() {
     location: Pick<Location, "id" | "uploadPhotos" | "referencePhotos">
   ): Promise<[string[], string[]]> => {
     const user = await userContext.getUser();
+    if (!user) {
+      log.logWarning({
+        message: "User not authenticated. Cannot sync photos.",
+      });
+      return [location.uploadPhotos ?? [], location.referencePhotos ?? []];
+    }
+
+    const isConnectedToDevice = await DevicePlugin.checkIsAPConnected();
+    if (isConnectedToDevice.connected) {
+      log.logSuccess({ message: "Device is connected. Sync deferred." });
+      return [location.uploadPhotos ?? [], location.referencePhotos ?? []];
+    }
+
     let uploadPhotos: string[] = location.uploadPhotos ?? [];
     let referencePhotos = location.referencePhotos ?? [];
-    const isConnectedToDevice = await DevicePlugin.checkIsAPConnected();
-    if (!user || isConnectedToDevice.connected)
-      return [uploadPhotos, referencePhotos];
-    const uploadedPhotos: [string, string][] = (
-      await Promise.all(
-        uploadPhotos.map(async (photo) => {
-          const res = await CacophonyPlugin.uploadReferencePhoto({
-            token: user.token,
-            station: location.id.toString(),
-            filename: photo,
-          });
-          if (res.success) {
-            return [photo, res.data];
-          }
-        })
-      )
-    ).filter((res): res is [string, string] => res !== undefined);
 
-    // remove uploaded photos from uploadPhotos
+    if (uploadPhotos.length === 0) {
+      return [uploadPhotos, referencePhotos];
+    }
+
+    const concurrencyLimit = 3; // Adjust based on your requirements
+    const uploadedPhotos: [string, string][] = [];
+
+    try {
+      const results = await asyncPool(
+        concurrencyLimit,
+        uploadPhotos,
+        async (photo) => {
+          try {
+            const res = await retry(
+              () =>
+                CacophonyPlugin.uploadReferencePhoto({
+                  token: user.token,
+                  station: location.id.toString(),
+                  filename: photo,
+                }),
+              3,
+              1000
+            );
+
+            if (res.success) {
+              log.logSuccess({ message: `Uploaded photo: ${photo}` });
+              return [photo, res.data] as [string, string];
+            } else {
+              log.logWarning({
+                message: `Failed to upload photo: ${photo}`,
+                details: res.message,
+              });
+              return null;
+            }
+          } catch (error) {
+            log.logError({
+              message: `Error uploading photo: ${photo}`,
+              error,
+            });
+            return null;
+          }
+        }
+      );
+
+      // Filter out failed uploads
+      const successfulUploads = results.filter(
+        (res): res is [string, string] => res !== null
+      );
+
+      uploadedPhotos.push(...successfulUploads);
+    } catch (error) {
+      log.logError({
+        message: "Unexpected error during photo uploads.",
+        error,
+      });
+    }
+
+    // Update uploadPhotos and referencePhotos
     uploadPhotos = uploadPhotos.filter(
       (image) => !uploadedPhotos.find((img) => img[0] === image)
     );
-    referencePhotos = referencePhotos.concat(
-      uploadedPhotos.map((img) => img[1])
-    );
-    await updateLocation(db)({
-      id: location.id,
-      isProd: user.prod ?? false,
-      uploadPhotos: uploadPhotos,
-      referencePhotos: referencePhotos,
-    });
+
+    referencePhotos = [
+      ...referencePhotos,
+      ...uploadedPhotos.map((img) => img[1]),
+    ];
+
+    try {
+      await updateLocation(db)({
+        id: location.id,
+        isProd: user.prod ?? false,
+        uploadPhotos: uploadPhotos,
+        referencePhotos: referencePhotos,
+      });
+
+      log.logSuccess({
+        message: "Photo synchronization completed.",
+        details: `Uploaded: ${uploadedPhotos.length}, Remaining: ${uploadPhotos.length}`,
+      });
+    } catch (dbError) {
+      log.logError({
+        message: "Failed to update location after photo sync.",
+        error: dbError,
+      });
+    }
+
     return [uploadPhotos, referencePhotos];
   };
 

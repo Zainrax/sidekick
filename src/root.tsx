@@ -87,7 +87,7 @@ const AppRoutes = () => {
   createEffect(
     on(context.data, (user) => {
       if (user) {
-        log.logEvent("login", {
+        console.info("login", {
           user_id: user.id,
         });
       }

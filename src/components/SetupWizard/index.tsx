@@ -137,7 +137,6 @@ export const LightSequence = (props: {
   color: ColorType;
 }) => {
   const { opacity, transition } = createLightAnimation(props.sequence);
-  debugger;
   return (
     <Motion
       class={`h-4 w-4 rounded-full ${colorClasses[props.color]}`}

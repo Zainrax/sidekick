@@ -263,14 +263,14 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
               log.logSuccess({ message: "Token refreshed successfully" });
               return updatedUser;
             } else {
-              if (result.message.includes("Failed")) {
+              if (result.message.includes("Failed") && navigator.onLine) {
                 await logout();
               }
               log.logWarning({
                 message: "Token validation failed",
                 details: result.message,
               });
-              return null;
+              return user;
             }
           });
           return refreshedUser;
@@ -449,6 +449,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     try {
       const cached = await Preferences.get({ key: "groups" });
       const parsed = GroupSchema.safeParse(JSON.parse(cached.value ?? "[]"));
+      console.info("Using cached groups", parsed);
       return parsed.success ? parsed.data : [];
     } catch (error) {
       log.logError({ message: "Failed to retrieve cached groups", error });
@@ -462,7 +463,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       try {
         const user = await getUser();
         if (!url || !user) {
-          log.logWarning({
+          console.warn({
             message: "Cannot fetch groups without server URL or user",
           });
           return await getCachedGroups();
@@ -484,7 +485,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
           !result.data.success ||
           result.data.groups.length === 0
         ) {
-          log.logWarning({
+          console.warn({
             message: "Failed to fetch groups, using cached data",
           });
           return await getCachedGroups();
@@ -494,7 +495,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
           key: "groups",
           value: JSON.stringify(result.data.groups),
         });
-        log.logSuccess({ message: "Groups fetched successfully" });
+        console.info("Groups fetched successfully");
         return result.data.groups;
       } catch (e) {
         log.logError({ message: "Error fetching groups", error: e });

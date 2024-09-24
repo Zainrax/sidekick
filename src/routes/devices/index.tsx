@@ -1,22 +1,18 @@
 import { Dialog as Prompt } from "@capacitor/dialog";
 import { debounce, leading } from "@solid-primitives/scheduled";
-import { useNavigate, useSearchParams } from "@solidjs/router";
+import { useSearchParams } from "@solidjs/router";
 import { AiOutlineUnorderedList } from "solid-icons/ai";
-import { BiRegularCurrentLocation, BiSolidBattery } from "solid-icons/bi";
-import { BsBattery, BsCameraVideoFill } from "solid-icons/bs";
+import { BiRegularCurrentLocation } from "solid-icons/bi";
+import { BsCameraVideoFill } from "solid-icons/bs";
 import {
   FaSolidBatteryFull,
   FaSolidSpinner,
   FaSolidStop,
 } from "solid-icons/fa";
 import { FiDownload } from "solid-icons/fi";
-import { ImCog, ImNotification, ImSearch } from "solid-icons/im";
+import { ImCog, ImSearch } from "solid-icons/im";
 import { RiDeviceRouterFill, RiArrowsArrowRightSLine } from "solid-icons/ri";
-import {
-  TbBatteryFilled,
-  TbCurrentLocation,
-  TbPlugConnectedX,
-} from "solid-icons/tb";
+import { TbCurrentLocation, TbPlugConnectedX } from "solid-icons/tb";
 import {
   For,
   Match,
@@ -31,7 +27,6 @@ import {
 import { Portal } from "solid-js/web";
 import ActionContainer from "~/components/ActionContainer";
 import BackgroundLogo from "~/components/BackgroundLogo";
-import CircleButton from "~/components/CircleButton";
 import { DeviceSettingsModal } from "~/components/DeviceSettings";
 import { useHeaderContext } from "~/components/Header";
 import SetupWizard from "~/components/SetupWizard";
@@ -283,6 +278,7 @@ function Devices() {
           {(state) => (
             <button
               onClick={async () => {
+                debugger;
                 if (state() === "connected") {
                   const dialog = await Prompt.confirm({
                     title: "Disconnect from Device",

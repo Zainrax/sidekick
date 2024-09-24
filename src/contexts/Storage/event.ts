@@ -2,7 +2,6 @@ import { createSignal, createMemo, onMount } from "solid-js";
 import { db } from ".";
 import { CacophonyPlugin } from "../CacophonyApi";
 import { DeviceId, DevicePlugin, unbindAndRebind } from "../Device";
-import { logWarning, logError } from "../Notification";
 import {
   type Event,
   createEventSchema,
@@ -13,8 +12,10 @@ import {
   updateEvent,
 } from "../../database/Entities/Event";
 import { useUserContext } from "../User";
+import { useLogsContext } from "../LogsContext";
 
 export function useEventStorage() {
+  const log = useLogsContext();
   const userContext = useUserContext();
   const [savedEvents, setSavedEvents] = createSignal<Event[]>([]);
   const uploadedEvents = createMemo(() =>
@@ -91,7 +92,7 @@ export function useEventStorage() {
           });
         } else {
           if (res.message.includes("AuthError")) {
-            logWarning({
+            log.logWarning({
               message: "Your account does not have access to upload events",
               details: res.message,
               warn: false,
@@ -104,7 +105,7 @@ export function useEventStorage() {
       }
     });
     if (errors.length > 0) {
-      logWarning({
+      log.logWarning({
         message: "Failed to upload events",
         details: errors.join(", "),
       });
@@ -132,7 +133,7 @@ export function useEventStorage() {
       const currEvents = await getSavedEvents();
       setSavedEvents(currEvents);
     } catch (error) {
-      logError({
+      log.logError({
         message: "Failed to delete events",
         error,
       });
@@ -146,7 +147,7 @@ export function useEventStorage() {
       await db.execute(createEventSchema);
       setSavedEvents(await getSavedEvents());
     } catch (error) {
-      logError({
+      log.logError({
         message: "Failed to get events",
         error,
       });

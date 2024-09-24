@@ -1,12 +1,13 @@
 import { KeepAwake } from "@capacitor-community/keep-awake";
 import { CapacitorSQLite, SQLiteConnection } from "@capacitor-community/sqlite";
 import { createContextProvider } from "@solid-primitives/context";
-import { createEffect, createResource, createSignal, on } from "solid-js";
+import { createResource, createSignal } from "solid-js";
 import { openConnection } from "../../database";
 import { useEventStorage } from "./event";
 import { useLocationStorage } from "./location";
 import { useRecordingStorage } from "./recording";
 import { Network } from "@capacitor/network";
+import { useLogsContext } from "../LogsContext";
 
 const DatabaseName = "Cacophony";
 
@@ -24,22 +25,32 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
   const recording = useRecordingStorage();
   const location = useLocationStorage();
   const event = useEventStorage();
+  const log = useLogsContext();
   const uploadItems = async () => {
-    if (isUploading()) return;
-    setIsUploading(true);
-    if (await KeepAwake.isSupported()) {
-      await KeepAwake.keepAwake();
+    try {
+      if (isUploading()) return;
+      setIsUploading(true);
+      if (await KeepAwake.isSupported()) {
+        await KeepAwake.keepAwake();
+      }
+      await event.uploadEvents();
+      await recording.uploadRecordings();
+      await location.resyncLocations();
+      if (await KeepAwake.isSupported()) {
+        await KeepAwake.allowSleep();
+      }
+      setIsUploading(false);
+    } catch (error) {
+      log.logError({
+        message: "Error during uploading events/recordings/locations",
+        error,
+      });
+      setIsUploading(false);
     }
-    await event.uploadEvents();
-    await recording.uploadRecordings();
-    await location.resyncLocations();
-    if (await KeepAwake.isSupported()) {
-      await KeepAwake.allowSleep();
-    }
-    setIsUploading(false);
   };
 
   const stopUploading = () => {
+    setIsUploading(false);
     recording.stopUploading();
     event.stopUploading();
   };

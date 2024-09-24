@@ -1,3 +1,6 @@
+// NsdHelper.kt
+package nz.org.cacophony.sidekick
+
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
@@ -8,7 +11,6 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.time.Duration.Companion.seconds
 
 abstract class NsdHelper(private val context: Context) {
     private val nsdManager: NsdManager by lazy {
@@ -19,6 +21,7 @@ abstract class NsdHelper(private val context: Context) {
     private val pendingNsdServices = ConcurrentLinkedQueue<NsdServiceInfo>()
     private val resolvedNsdServices = mutableListOf<NsdServiceInfo>()
     private val handler = Handler(Looper.getMainLooper())
+    private val timeoutMap = mutableMapOf<NsdServiceInfo, Runnable>()
 
     companion object {
         const val NSD_SERVICE_TYPE = "_cacophonator-management._tcp."
@@ -33,16 +36,24 @@ abstract class NsdHelper(private val context: Context) {
     }
 
     fun discoverServices() {
-        nsdManager.discoverServices(NSD_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+        try {
+            nsdManager.discoverServices(NSD_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+            Log.d(TAG, "Service discovery started")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start service discovery: ${e.message}")
+            onDiscoveryFailed(Exception("Failed to start service discovery: ${e.message}"))
+        }
     }
 
     fun stopDiscovery() {
         discoveryListener?.let {
             try {
                 nsdManager.stopServiceDiscovery(it)
+                Log.d(TAG, "Service discovery stopped")
             } catch (e: IllegalArgumentException) {
                 Log.e(TAG, "Error stopping discovery: ${e.message}")
             }
+            discoveryListener = null
         }
     }
 
@@ -64,10 +75,12 @@ abstract class NsdHelper(private val context: Context) {
 
             override fun onServiceLost(service: NsdServiceInfo) {
                 Log.d(TAG, "Service lost: $service")
-                pendingNsdServices.removeAll { it.serviceName == service.serviceName }
-                synchronized(resolvedNsdServices) {
-                    resolvedNsdServices.removeAll { it.serviceName == service.serviceName }
-                }
+                // Remove the service from pendingNsdServices
+                removeServiceFromQueue(pendingNsdServices, service)
+
+                // Remove the service from resolvedNsdServices
+                removeServiceFromResolved(service)
+
                 onNsdServiceLost(service)
             }
 
@@ -78,29 +91,34 @@ abstract class NsdHelper(private val context: Context) {
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                 Log.e(TAG, "Start Discovery failed: Error code: $errorCode")
                 stopDiscovery()
+                onDiscoveryFailed(Exception("Start Discovery failed with error code: $errorCode"))
             }
 
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
                 Log.e(TAG, "Stop Discovery failed: Error code: $errorCode")
-                nsdManager.stopServiceDiscovery(this)
+                stopDiscovery()
+                onDiscoveryFailed(Exception("Stop Discovery failed with error code: $errorCode"))
             }
         }
     }
 
     private fun resolveService(service: NsdServiceInfo, retryCount: Int = 0) {
+        val timeoutRunnable = Runnable {
+            if (resolveListenerBusy.get()) {
+                Log.w(TAG, "Resolution timeout for service: ${service.serviceName}")
+                resolveNextInQueue()
+            }
+        }
+
+        // Schedule the timeout
+        handler.postDelayed(timeoutRunnable, RESOLVE_TIMEOUT)
+        timeoutMap[service] = timeoutRunnable
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             resolveServiceModern(service, retryCount)
         } else {
             resolveServiceLegacy(service, retryCount)
         }
-
-        // Set a timeout for resolution
-        handler.postDelayed({
-            if (resolveListenerBusy.get()) {
-                Log.w(TAG, "Resolution timeout for service: ${service.serviceName}")
-                resolveNextInQueue()
-            }
-        }, RESOLVE_TIMEOUT)
     }
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -108,11 +126,15 @@ abstract class NsdHelper(private val context: Context) {
         val callback = object : NsdManager.ServiceInfoCallback {
             override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {
                 Log.e(TAG, "Service info callback registration failed: Error code: $errorCode")
+                timeoutMap[service]?.let { handler.removeCallbacks(it) }
+                timeoutMap.remove(service)
                 retryResolve(service, retryCount)
             }
 
             override fun onServiceUpdated(serviceInfo: NsdServiceInfo) {
                 Log.d(TAG, "Service updated: $serviceInfo")
+                timeoutMap[service]?.let { handler.removeCallbacks(it) }
+                timeoutMap.remove(service)
                 synchronized(resolvedNsdServices) {
                     resolvedNsdServices.add(serviceInfo)
                 }
@@ -123,6 +145,8 @@ abstract class NsdHelper(private val context: Context) {
 
             override fun onServiceLost() {
                 Log.d(TAG, "Service lost during resolution")
+                timeoutMap[service]?.let { handler.removeCallbacks(it) }
+                timeoutMap.remove(service)
                 onNsdServiceLost(service)
                 resolveNextInQueue()
             }
@@ -132,7 +156,14 @@ abstract class NsdHelper(private val context: Context) {
             }
         }
 
-        nsdManager.registerServiceInfoCallback(service, context.mainExecutor, callback)
+        try {
+            nsdManager.registerServiceInfoCallback(service, context.mainExecutor, callback)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register ServiceInfoCallback: ${e.message}")
+            timeoutMap[service]?.let { handler.removeCallbacks(it) }
+            timeoutMap.remove(service)
+            retryResolve(service, retryCount)
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -140,6 +171,8 @@ abstract class NsdHelper(private val context: Context) {
         nsdManager.resolveService(service, object : NsdManager.ResolveListener {
             override fun onServiceResolved(resolvedService: NsdServiceInfo) {
                 Log.d(TAG, "Service resolved: $resolvedService")
+                timeoutMap[service]?.let { handler.removeCallbacks(it) }
+                timeoutMap.remove(service)
                 synchronized(resolvedNsdServices) {
                     resolvedNsdServices.add(resolvedService)
                 }
@@ -149,6 +182,8 @@ abstract class NsdHelper(private val context: Context) {
 
             override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
                 Log.e(TAG, "Resolve failed: $serviceInfo - Error code: $errorCode")
+                timeoutMap[service]?.let { handler.removeCallbacks(it) }
+                timeoutMap.remove(service)
                 retryResolve(service, retryCount)
             }
         })
@@ -175,6 +210,31 @@ abstract class NsdHelper(private val context: Context) {
         }
     }
 
+    private fun removeServiceFromQueue(queue: ConcurrentLinkedQueue<NsdServiceInfo>, service: NsdServiceInfo) {
+        val iterator = queue.iterator()
+        while (iterator.hasNext()) {
+            val currentService = iterator.next()
+            if (currentService.serviceName == service.serviceName) {
+                iterator.remove()
+                break // Assuming service names are unique
+            }
+        }
+    }
+
+    private fun removeServiceFromResolved(service: NsdServiceInfo) {
+        synchronized(resolvedNsdServices) {
+            val iterator = resolvedNsdServices.iterator()
+            while (iterator.hasNext()) {
+                val currentService = iterator.next()
+                if (currentService.serviceName == service.serviceName) {
+                    iterator.remove()
+                    break // Assuming service names are unique
+                }
+            }
+        }
+    }
+
     abstract fun onNsdServiceResolved(service: NsdServiceInfo)
     abstract fun onNsdServiceLost(service: NsdServiceInfo)
+    abstract fun onDiscoveryFailed(e: Exception)
 }

@@ -13,9 +13,9 @@ import {
 import { db } from ".";
 import { CacophonyPlugin } from "../CacophonyApi";
 import { DeviceDetails, DevicePlugin, unbindAndRebind } from "../Device";
-import { logError, logWarning } from "../Notification";
 import { createMemo, createSignal, onMount } from "solid-js";
 import { useUserContext } from "../User";
+import { useLogsContext } from "../LogsContext";
 
 type RecordingFile = {
   filename: string;
@@ -25,6 +25,7 @@ type RecordingFile = {
 };
 
 export function useRecordingStorage() {
+  const log = useLogsContext();
   const userContext = useUserContext();
   const [savedRecordings, setSavedRecordings] = createSignal<Recording[]>([]);
   const uploadedRecordings = createMemo(
@@ -48,7 +49,7 @@ export function useRecordingStorage() {
       recordingPath: recording.name,
     });
     if (!res.success) {
-      logWarning({
+      log.logWarning({
         message: "Failed to delete recording",
         details: res.message,
       });
@@ -61,7 +62,7 @@ export function useRecordingStorage() {
   const deleteRecordings = async () => {
     const res = await DevicePlugin.deleteRecordings();
     if (!res.success) {
-      logWarning({
+      log.logWarning({
         message: "Failed to delete recordings",
         details: res.message,
       });
@@ -108,7 +109,7 @@ export function useRecordingStorage() {
         }
       } else {
         if (res.message.includes("AuthError")) {
-          logWarning({
+          log.logWarning({
             message: "Your account does not have access to upload recordings",
             details: res.message,
           });
@@ -117,7 +118,7 @@ export function useRecordingStorage() {
           );
           recordings = otherRecordings;
         } else {
-          logWarning({
+          log.logWarning({
             message: "Failed to upload recording",
             details: res.message,
           });
@@ -172,7 +173,7 @@ export function useRecordingStorage() {
       return savedRecording;
     } catch (e) {
       if (e instanceof Error) {
-        logError({
+        log.logError({
           message: "Failed to save recording",
           details: e.message,
           error: e,
@@ -191,7 +192,7 @@ export function useRecordingStorage() {
       await db.execute(createRecordingSchema);
       setSavedRecordings(await getSavedRecordings());
     } catch (error) {
-      logError({
+      log.logError({
         message: "Failed to create recording schema",
         error,
       });

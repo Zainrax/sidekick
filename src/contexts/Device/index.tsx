@@ -8,7 +8,7 @@ import { CapacitorHttp } from "@capacitor/core";
 import { Filesystem } from "@capacitor/filesystem";
 import { Geolocation } from "@capacitor/geolocation";
 import { createContextProvider } from "@solid-primitives/context";
-import { ReactiveMap, ReactiveWeakMap } from "@solid-primitives/map";
+import { ReactiveMap } from "@solid-primitives/map";
 import { createStore } from "solid-js/store";
 import {
   debounce,
@@ -17,9 +17,7 @@ import {
 } from "@solid-primitives/scheduled";
 import { ReactiveSet } from "@solid-primitives/set";
 import {
-  createComputed,
   createEffect,
-  createMemo,
   createResource,
   createSignal,
   on,
@@ -30,13 +28,10 @@ import { z } from "zod";
 import { GoToPermissions } from "~/components/GoToPermissions";
 import { Coords, Location } from "~/database/Entities/Location";
 import { Result, URL } from "..";
-import { logError, logSuccess, logWarning } from "../Notification";
 import { useStorage } from "../Storage";
 import { isWithinRange } from "../Storage/location";
 import DeviceCamera from "./Camera";
 import { Effect, Schedule } from "effect";
-import { untrack } from "solid-js/web";
-import { debugSignal } from "@solid-devtools/logger";
 import { useLogsContext } from "../LogsContext";
 
 const WifiNetwork = z
@@ -160,6 +155,14 @@ export interface DevicePlugin {
     callback: (res: DeviceService) => void
   ): Promise<PluginListenerHandle>;
   addListener(
+    call: "onServiceResolveFailed",
+    callback: (res: {
+      endpoint: string;
+      message: string;
+      errorCode: string;
+    }) => void
+  ): Promise<PluginListenerHandle>;
+  addListener(
     call: "onServiceLost",
     callback: (res: { endpoint: string }) => void
   ): Promise<PluginListenerHandle>;
@@ -214,12 +217,13 @@ export const DevicePlugin = registerPlugin<DevicePlugin>("Device");
  * @param callback The callback to execute between unbinding and rebinding.
  * @returns The return value from the callback.
  */
-export function unbindAndRebind<T>(callback: () => Promise<T>): Promise<T> {
-  return DevicePlugin.unbindConnection()
-    .then(() => callback())
-    .then((result) => {
-      return DevicePlugin.rebindConnection().then(() => result);
-    });
+export async function unbindAndRebind<T>(
+  callback: () => Promise<T>
+): Promise<T> {
+  await DevicePlugin.unbindConnection();
+  const result_1 = await callback();
+  await DevicePlugin.rebindConnection();
+  return result_1;
 }
 
 const DeviceInfoSchema = z.object({
@@ -416,7 +420,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         await addConnectedDevice(connectedDevice);
       }
     } catch (error) {
-      logError({
+      log.logError({
         error,
         message: `Unable to connect to discovered device: ${JSON.stringify(
           newDevice
@@ -431,6 +435,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   // Function to handle when a service is resolved (device discovered)
   const handleServiceResolved = async (newDevice: DeviceService) => {
+    debugger;
+    console.log("Found Device", newDevice);
     if (shouldConnectToDevice(newDevice)) {
       await connectToDevice(newDevice);
     }
@@ -453,7 +459,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
     devices.set(connectedDevice.id, connectedDevice);
 
-    log.logEvent("device_found", {
+    console.log("device_found", {
       name: connectedDevice.name,
       saltId: connectedDevice.saltId,
       group: connectedDevice.group,
@@ -483,6 +489,20 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
   };
 
+  const handleServiceResolvedFailed = (service: {
+    errorCode: string;
+    endpoint: string;
+    message: string;
+  }) => {
+    console.log("FAILED SERVICE", service);
+    log.logWarning({
+      message:
+        "Found device but was unable to connect. Please restart the device or contact support if it persists.",
+      details: `${service.endpoint} - Error Code: ${service.errorCode} - Details: ${service.message}`,
+      warn: true,
+    });
+  };
+
   // Function to monitor AP (Access Point) connection state
   const monitorAPConnection = () => {
     const interval = setInterval(async () => {
@@ -500,18 +520,24 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   // Function to set up listeners for device discovery events
   const setupListeners = async () => {
-    removeAllListeners();
-
     const serviceResolvedListener = await DevicePlugin.addListener(
       "onServiceResolved",
       handleServiceResolved
+    );
+    const serviceResolveFailedListener = await DevicePlugin.addListener(
+      "onServiceResolveFailed",
+      handleServiceResolvedFailed
     );
     const serviceLostListener = await DevicePlugin.addListener(
       "onServiceLost",
       handleServiceLost
     );
 
-    setListeners([serviceResolvedListener, serviceLostListener]);
+    setListeners([
+      serviceResolvedListener,
+      serviceLostListener,
+      serviceResolveFailedListener,
+    ]);
   };
 
   // Function to remove all event listeners
@@ -579,7 +605,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   // Function to start device discovery
   const startDiscovery = async () => {
     try {
-      await DevicePlugin.stopDiscoverDevices();
       await DevicePlugin.discoverDevices();
       setIsDiscovering(true);
     } catch (e) {
@@ -595,7 +620,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         await checkDeviceConnection(device);
       }
     } catch (error) {
-      logError({
+      log.logError({
         error,
         message: "Error during device discovery",
         warn: false,
@@ -607,7 +632,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const stopDiscovery = async () => {
     try {
       await DevicePlugin.stopDiscoverDevices();
-      removeAllListeners();
     } catch (e) {
       console.error("Error stopping discovery:", e);
     }
@@ -617,6 +641,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const searchDevice = leadingAndTrailing(
     debounce,
     async () => {
+      await stopDiscovery();
       await startDiscovery();
       for (const device of devices.values()) {
         if (device.isConnected) {
@@ -624,7 +649,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         }
       }
     },
-    100000 // Debounce interval in milliseconds
+    1000 // Debounce interval in milliseconds
   );
 
   // Initialize modem intervals management
@@ -632,11 +657,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   // Set up component lifecycle
   onMount(async () => {
+    debugger;
     await setupListeners();
     monitorAPConnection();
 
     const discoveryInterval = setInterval(() => {
-      startDiscovery();
+      searchDevice();
     }, 20000); // Every 20 seconds
 
     onCleanup(() => {
@@ -661,7 +687,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const res = await DevicePlugin.getRecordings({ url });
       return res.success ? res.data : [];
     } catch (error) {
-      logError({
+      log.logError({
         message: "Could not get recordings",
         error,
       });
@@ -695,12 +721,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       }
     } catch (error) {
       if (error instanceof Error) {
-        logError({
+        log.logError({
           message: "Could not delete recordings",
           error,
         });
       } else {
-        logWarning({
+        log.logWarning({
           message: "Could not delete recordings",
           details: JSON.stringify(error),
         });
@@ -723,7 +749,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         recordingPath: rec,
       });
       if (!res.success) {
-        logWarning({
+        log.logWarning({
           message: "Could not download recording",
           details: res.message,
           warn: false,
@@ -750,7 +776,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       return events;
     } catch (error) {
       if (error instanceof Error) {
-        logError({
+        log.logError({
           message: "Could not get events",
           details: error.message,
           error,
@@ -787,7 +813,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       ];
       await storage.deleteEvents({ events: deletedEvents });
     } catch (error) {
-      logError({
+      log.logError({
         message: "Could not delete events",
         error,
       });
@@ -830,7 +856,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       );
       return eventsWithDevice;
     } catch (error) {
-      logError({
+      log.logError({
         message: "Could not get events",
         error,
       });
@@ -909,7 +935,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const location = locationSchema.safeParse({ ...coords, timestamp });
       if (!location.success) {
         locationBeingSet.delete(device.id);
-        logWarning({
+        log.logWarning({
           message: LOCATION_ERROR,
           details: location.error.message,
         });
@@ -925,7 +951,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           ...device,
           locationSet: true,
         });
-        logSuccess({
+        log.logSuccess({
           message: `Successfully set location for ${device.name}.`,
           timeout: 6000,
         });
@@ -933,7 +959,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       locationBeingSet.delete(device.id);
     } catch (error) {
       if (error instanceof Error) {
-        logWarning({
+        log.logWarning({
           message: LOCATION_ERROR,
           details: error.message,
         });
@@ -1079,13 +1105,13 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           )[0];
         } catch (error) {
           if (error instanceof Error) {
-            logError({
+            log.logError({
               message: "Could not get location",
               details: error.message,
               error,
             });
           } else {
-            logWarning({
+            log.logWarning({
               message: "Could not get location",
               details: `${error}`,
             });
@@ -1152,13 +1178,13 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         return devicesToUpdate;
       } catch (error) {
         if (error instanceof Error) {
-          logWarning({
+          log.logWarning({
             message:
               "Could not update device locations. Check location permissions and try again.",
             action: <GoToPermissions />,
           });
         } else if (typeof error === "string") {
-          logWarning({
+          log.logWarning({
             message: "Could not update device locations",
             details: error,
           });
@@ -1216,7 +1242,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
             }, [] as WifiNetwork[])
         : [];
     } catch (e) {
-      console.log(e);
+      console.error(e);
       return [];
     }
   };
@@ -1263,7 +1289,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       });
       return res.status === 200;
     } catch (error) {
-      console.log(error);
+      console.error(error);
       return false;
     }
   };
@@ -1283,24 +1309,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       });
       return res.status === 200;
     } catch (error) {
-      console.log(error);
+      console.error(error);
       return false;
     }
   };
 
-  function generateLimeVoltageArray(
-    start: number = 30.0,
-    end: number = 42.0,
-    step: number = 0.1
-  ): number[] {
-    const count = Math.floor((end - start) / step) + 1;
-    return Array.from({ length: count }, (_, i) =>
-      Number((start + i * step).toFixed(1))
-    );
-  }
-  function generateLimePercentArray(count: number = 101): number[] {
-    return Array.from({ length: count }, (_, i) => i);
-  }
   const LimePercent = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
     21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
@@ -1460,7 +1473,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
               clearInterval(interval);
             }
           } catch (e) {
-            console.log(e);
+            console.error(e);
           }
         }, 5000);
       });
@@ -1494,7 +1507,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           : false;
       return connection;
     } catch (error) {
-      console.log(error);
+      console.error(error);
       return false;
     }
   };
@@ -1511,7 +1524,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
-      console.log("Modem", res);
       return ConnectionRes.parse(JSON.parse(res.data)).connected;
     } catch (error) {
       console.error("Connection Error:", error);
@@ -1570,7 +1582,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           { times: 3 }
         )
       );
-      console.log("HAS ENDPOINT", res);
       return res.status === 200;
     } catch (error) {
       return false;
@@ -1589,7 +1600,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
-      console.log("Modem Signal", res);
       if (res.status !== 200) throw Error("No Modem");
       res = JSON.parse(res.data);
       return res;
@@ -1646,7 +1656,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const interfaces = InterfaceSchema.array().parse(JSON.parse(res.data));
       return res.status === 200 ? interfaces : [];
     } catch (error) {
-      console.log(error);
+      console.error(error);
       return [];
     }
   };
@@ -1694,7 +1704,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           searchDevice();
         } else if (res.status === "error") {
           log.logEvent("AP_failed");
-          logWarning({
+          log.logWarning({
             message:
               "Please try again, or connect to 'bushnet' with password 'feathers' in your wifi settings. Alternatively, set up a hotspot named 'bushnet' password: 'feathers'.",
           });
@@ -1884,106 +1894,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const res = await DevicePlugin.updateRecordingWindow({ url, on, off });
       return res.success;
     } catch (error) {
-      console.log(error);
       return null;
     }
   };
 
-  const [updatingDevice, setUpdatingDevice] = createStore<
-    {
-      id: DeviceId;
-      isUpdating: boolean;
-      interval: NodeJS.Timeout;
-      success: boolean | null;
-      lastCallOut?: string;
-    }[]
-  >([]);
-  // Update
-  const updateDevice = async (deviceId: DeviceId) => {
-    try {
-      const device = devices.get(deviceId);
-      if (!device || !device.isConnected) return null;
-      const { url } = device;
-      const res = await CapacitorHttp.post({
-        url: `${url}/api/salt-update`,
-        headers: { ...headers, "Content-Type": "application/json" },
-        webFetchExtra: {
-          credentials: "include",
-        },
-      });
-      if (res.status === 200) {
-        const existing = updatingDevice.find((d) => d.id === deviceId);
-        if (existing) {
-          if (existing.isUpdating) return null;
-          setUpdatingDevice((prev) => prev.filter((d) => d.id !== deviceId));
-        }
-        const interval = setInterval(async () => {
-          const res = await CapacitorHttp.get({
-            url: `${url}/api/salt-update`,
-            headers: { ...headers, "Content-Type": "application/json" },
-            webFetchExtra: {
-              credentials: "include",
-            },
-          });
-          if (res.status === 200) {
-            const data = UpdateStatusSchema.parse(JSON.parse(res.data));
-            console.log("UPDATE STATUS", data);
-            if (data.RunningUpdate === false) {
-              clearInterval(interval);
-              setUpdatingDevice((prev) =>
-                prev.map((d) =>
-                  d.id === deviceId
-                    ? {
-                        ...d,
-                        isUpdating: false,
-                        lastCallOut: data.LastCallOut,
-                        success: data.LastCallSuccess ?? false,
-                      }
-                    : d
-                )
-              );
-            }
-          }
-        }, 5000);
-        setUpdatingDevice((prev) => [
-          ...prev,
-          { id: deviceId, isUpdating: true, interval, success: null },
-        ]);
-        setTimeout(() => {
-          const existing = updatingDevice.find((d) => d.id === deviceId);
-          if (existing && existing.isUpdating) {
-            clearInterval(existing.interval);
-            setUpdatingDevice((prev) =>
-              prev.map((d) =>
-                d.id === deviceId
-                  ? { ...d, isUpdating: false, success: false }
-                  : d
-              )
-            );
-            setTimeout(() => {
-              setUpdatingDevice((prev) =>
-                prev.filter((d) => d.id !== deviceId)
-              );
-            }, 8000);
-          }
-        }, 5 * 60 * 1000);
-
-        return true;
-      }
-    } catch (error) {
-      console.log(error);
-    }
-    return false;
-  };
-
-  const getUpdateError = (deviceId: DeviceId) => {
-    const device = devices.get(deviceId);
-    if (!device || !device.isConnected) return null;
-    const existing = updatingDevice.find((d) => d.id === deviceId);
-    const lastCallOut = existing?.lastCallOut;
-    if (lastCallOut?.includes("accepted?"))
-      return "Contact support to accept your device.";
-  };
   const SaltStatusSchema = z.object({
     RunningUpdate: z.boolean(), // Required field
 
@@ -2009,9 +1923,93 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     UpdateProgressPercentage: z.number().int().min(0).max(100).optional(),
     UpdateProgressStr: z.string().optional(),
   });
+  type SaltStatus = z.infer<typeof SaltStatusSchema>;
+  const [updatingDevice, setUpdatingDevice] = createStore<
+    ({
+      id: DeviceId;
+      interval: NodeJS.Timeout;
+    } & SaltStatus)[]
+  >([]);
+  // Update
+  const updateDevice = async (deviceId: DeviceId) => {
+    try {
+      const device = devices.get(deviceId);
+      if (!device || !device.isConnected) return null;
+      const { url } = device;
+      const res = await CapacitorHttp.post({
+        url: `${url}/api/salt-update`,
+        headers: { ...headers, "Content-Type": "application/json" },
+        webFetchExtra: {
+          credentials: "include",
+        },
+      });
+      if (res.status === 200) {
+        const existing = updatingDevice.find((d) => d.id === deviceId);
+
+        if (existing) {
+          if (existing.RunningUpdate) return null;
+          setUpdatingDevice((prev) => prev.filter((d) => d.id !== deviceId));
+        }
+        const res = await CapacitorHttp.get({
+          url: `${url}/api/salt-update`,
+          headers: { ...headers, "Content-Type": "application/json" },
+          webFetchExtra: {
+            credentials: "include",
+          },
+        });
+        const data = SaltStatusSchema.parse(JSON.parse(res.data));
+        console.log("Check Updating", data);
+        const interval = setInterval(async () => {
+          const res = await CapacitorHttp.get({
+            url: `${url}/api/salt-update`,
+            headers: { ...headers, "Content-Type": "application/json" },
+            webFetchExtra: {
+              credentials: "include",
+            },
+          });
+          if (res.status === 200) {
+            const data = SaltStatusSchema.parse(JSON.parse(res.data));
+            console.log("Check Updating", data);
+            if (data.RunningUpdate === false) {
+              clearInterval(interval);
+              setUpdatingDevice((prev) =>
+                prev.map((d) =>
+                  d.id === deviceId
+                    ? {
+                        ...d,
+                        ...data,
+                      }
+                    : d
+                )
+              );
+            }
+          }
+        }, 5000);
+        setUpdatingDevice((prev) => [
+          ...prev,
+          { id: deviceId, interval, ...data },
+        ]);
+
+        return true;
+      }
+    } catch (error) {
+      console.error(error);
+    }
+    return false;
+  };
+
+  const getUpdateError = (deviceId: DeviceId) => {
+    const device = devices.get(deviceId);
+    if (!device || !device.isConnected) return null;
+    const existing = updatingDevice.find((d) => d.id === deviceId);
+    if (!existing?.RunningUpdate) return null;
+    const lastCallOut = existing?.LastCallOut;
+    if (lastCallOut?.includes("accepted?"))
+      return "Contact support to accept your device.";
+  };
+
   const checkDeviceUpdate = async (deviceId: DeviceId) => {
     try {
-      debugger;
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return null;
       const { url } = device;
@@ -2022,28 +2020,31 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
-      return res.status === 200
-        ? SaltStatusSchema.parse(JSON.parse(res.data))
-        : null;
+      const data =
+        res.status === 200
+          ? SaltStatusSchema.parse(JSON.parse(res.data))
+          : null;
+      console.log("Check For Update", data);
+      return data;
     } catch (error) {
-      console.log(error);
+      console.error(error);
       return null;
     }
   };
 
-  const UpdateStatusSchema = z.object({
-    RunningUpdate: z.boolean(),
-    LastCallOut: z.string().optional(),
-    LastCallSuccess: z.boolean().optional(),
-  });
-
   const isDeviceUpdating = (deviceId: DeviceId) => {
-    return updatingDevice.find((d) => d.id === deviceId)?.isUpdating ?? false;
+    const device = updatingDevice.find((d) => d.id === deviceId);
+    console.log("Check Updating", device);
+    return device?.RunningUpdate && device?.LastCallSuccess !== false;
   };
 
   const didDeviceUpdate = (deviceId: DeviceId): boolean | null => {
     const foundDevice = updatingDevice.find((d) => d.id === deviceId);
-    return foundDevice?.success ?? null;
+    return foundDevice?.LastCallSuccess ?? null;
+  };
+
+  const getDeviceUpdating = (deviceId: DeviceId) => {
+    return updatingDevice.find((d) => d.id === deviceId);
   };
 
   const setLowPowerMode = async (deviceId: DeviceId, enabled: boolean) => {
@@ -2056,11 +2057,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         section: "thermal-recorder",
         config: JSON.stringify({ "use-low-power-mode": enabled }),
       });
-      console.log("LOW POWER", res);
 
       return res.success ? enabled : !enabled;
     } catch (error) {
-      console.log(error);
+      console.error(error);
       return null;
     }
   };
@@ -2079,7 +2079,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       });
       return res.status === 200;
     } catch (error) {
-      console.log(error);
+      console.error(error);
       return null;
     }
   };
@@ -2138,6 +2138,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     // Update
     checkDeviceUpdate,
     updateDevice,
+    getDeviceUpdating,
     getUpdateError,
     isDeviceUpdating,
     didDeviceUpdate,

@@ -11,10 +11,12 @@ import {
   createResource,
 } from "solid-js";
 import * as Sentry from "@sentry/capacitor";
+import * as SentryBrowser from "@sentry/browser";
 import { User, useUserContext } from "./User"; // Import User context
 import { useLocation } from "@solidjs/router"; // Import router location
 import { Preferences } from "@capacitor/preferences";
 import { createRequire } from "module";
+import { replayCanvasIntegration } from "@sentry/browser";
 
 export enum TracingLevel {
   NON_PERSONALIZED = "non_personalized",
@@ -68,15 +70,16 @@ function isErrorLog(log: AnyLog): log is ErrorLog {
   return log.type === "error" && "error" in log;
 }
 
-Sentry.init({
-  dsn: "https://0af3453887927768a693178c3604d01f@o4507970723971072.ingest.us.sentry.io/4507970755493888",
-  integrations: [],
-  tracesSampleRate: 0.2,
-});
 // Create LogsProvider using createContextProvider
 const [LogsProvider, useLogsContext] = createContextProvider(() => {
   // Import user context to get current user
   const [userData, setUser] = createSignal<User | null>();
+  onMount(() => {
+    Sentry.init({
+      dsn: "https://0af3453887927768a693178c3604d01f@o4507970723971072.ingest.us.sentry.io/4507970755493888",
+      tracesSampleRate: 0.2,
+    });
+  });
 
   // Notifications state
   const [notifications, setNotifications] = createSignal<Notification[]>([]);

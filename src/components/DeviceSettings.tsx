@@ -43,16 +43,13 @@ import {
 import { Portal } from "solid-js/web";
 import FieldWrapper from "~/components/Field";
 import { GoToPermissions } from "~/components/GoToPermissions";
-import { DeviceId, Modem, WifiNetwork, useDevice } from "~/contexts/Device";
-import { logError, logWarning } from "~/contexts/Notification";
+import { DeviceId, WifiNetwork, useDevice } from "~/contexts/Device";
 import { useStorage } from "~/contexts/Storage";
 import { BsWifi1, BsWifi2, BsWifi } from "solid-icons/bs";
 import { useUserContext } from "~/contexts/User";
 import { Frame, Region, Track } from "~/contexts/Device/Camera";
 import { VsArrowSwap } from "solid-icons/vs";
-import DeviceSettings from "~/routes/devices/[...id]";
 import { useLogsContext } from "~/contexts/LogsContext";
-import { update } from "effect/Differ";
 type CameraCanvas = HTMLCanvasElement | undefined;
 const colours = ["#ff0000", "#00ff00", "#ffff00", "#80ffff"];
 type SettingProps = { deviceId: DeviceId };
@@ -119,11 +116,7 @@ export function CameraSettingsTab(props: SettingProps) {
   const [config, { refetch }] = createResource(id, async (id) => {
     if (!id) return null;
     const res = await context.getDeviceConfig(id);
-    console.log("Config", res);
     return res;
-  });
-  createEffect(() => {
-    console.log(config());
   });
   const [recording, setRecording] = createSignal(false);
   const [result, setResult] = createSignal<"failed" | "success" | null>(null);
@@ -346,7 +339,6 @@ export function CameraSettingsTab(props: SettingProps) {
   };
 
   const isCustom = () => {
-    console.log(isDefault(), is24Hours());
     return config.loading ? false : !isDefault() && !is24Hours();
   };
 
@@ -358,7 +350,7 @@ export function CameraSettingsTab(props: SettingProps) {
       const res = await context.setRecordingWindow(id(), on, off);
       refetch();
     } catch (error) {
-      console.log(error);
+      console.error(error);
     }
   };
 
@@ -372,7 +364,7 @@ export function CameraSettingsTab(props: SettingProps) {
       const res = await context.setRecordingWindow(id(), on, off);
       refetch();
     } catch (error) {
-      console.log(error);
+      console.error(error);
     }
   };
 
@@ -415,11 +407,10 @@ export function CameraSettingsTab(props: SettingProps) {
       setSaving(true);
       const res = await context.setRecordingWindow(id(), on, off);
       if (res) {
-        console.log("Success");
         refetch();
       }
     } catch (error) {
-      console.log(error);
+      console.error(error);
     }
     setSaving(false);
   };
@@ -554,7 +545,7 @@ export function CameraSettingsTab(props: SettingProps) {
         </Show>
         <Show when={showCustom()}>
           <div>
-            <div class="flex items-center justify-center space-x-2 py-2 py-4">
+            <div class="flex items-center justify-center space-x-2 py-2">
               <input
                 id="lower"
                 name="upper"
@@ -573,7 +564,7 @@ export function CameraSettingsTab(props: SettingProps) {
                   setLowerTime(upper);
                   setUpperTime(lower);
                 }}
-                class="flex h-8 w-8 items-center justify-center rounded-full border border-2 border-slate-50 shadow-md"
+                class="flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-50 shadow-md"
               >
                 <div class="p-2">
                   <VsArrowSwap size={18} />
@@ -610,6 +601,7 @@ export function CameraSettingsTab(props: SettingProps) {
 }
 
 export function LocationSettingsTab(props: SettingProps) {
+  const log = useLogsContext();
   const context = useDevice();
   const storage = useStorage();
   const [showLocationSettings, setShowLocationSettings] = createSignal(false);
@@ -621,7 +613,6 @@ export function LocationSettingsTab(props: SettingProps) {
 
   createEffect((prev) => {
     const currUpdateLocState = shouldUpdateLocState();
-    console.log("currUpdateLocState", currUpdateLocState);
     if (
       currUpdateLocState === "current" &&
       prev !== "current" &&
@@ -701,7 +692,7 @@ export function LocationSettingsTab(props: SettingProps) {
         setPhotoIndex(photos().length - 1);
       }
     } catch (error) {
-      logWarning({
+      log.logWarning({
         message: "Photo upload failed. Please check your device permissions.",
         action: <GoToPermissions />,
       });
@@ -759,7 +750,7 @@ export function LocationSettingsTab(props: SettingProps) {
             curr.filter((photo) => photo.file !== file)
           );
         } catch (error) {
-          logError({
+          log.logError({
             message: "Could not save location photo",
             details: `Could not save photo ${file} for location ${loc}`,
             error,
@@ -1227,7 +1218,6 @@ export function WifiSettingsTab(props: SettingProps) {
     setConnecting(wifi.SSID);
     const res = await context.connectToWifi(id(), wifi.SSID, password());
     setConnecting(null);
-    debugger;
     if (res) {
       setPassword("");
       setOpenedNetwork(null);
@@ -2106,11 +2096,8 @@ export function GeneralSettingsTab(props: SettingProps) {
 
   const canUpdate = createMemo(() => {
     const status = updateStatus();
-    if (
-      !status ||
-      status.RunningUpdate ||
-      status.UpdateProgressStr?.includes("No update")
-    )
+    console.log("Status", status);
+    if (!status || status.UpdateProgressStr?.includes("No update"))
       return false;
     return true;
   });
@@ -2183,9 +2170,9 @@ export function GeneralSettingsTab(props: SettingProps) {
       console.log(error);
     }
   };
-  const isUpdating = createMemo(() => updateStatus()?.RunningUpdate ?? false);
   const showProgress = () =>
-    isUpdating() && (updateStatus()?.UpdateProgressPercentage ?? false);
+    context.isDeviceUpdating(id()) &&
+    context.getDeviceUpdating(id())?.UpdateProgressPercentage;
   return (
     <div class="flex w-full flex-col space-y-2 px-2 py-4">
       <FieldWrapper type="text" value={name()} title="Name" />
@@ -2303,16 +2290,10 @@ export function DeviceSettingsModal() {
   const deviceName = () => {
     const device = context.devices.get(params.deviceSettings);
     const deviceName = device?.name ?? device?.id;
-    console.log("Device Name");
-    console.log(deviceName);
-    console.log(device);
     return deviceName;
   };
 
   const show = () => deviceName() && !params.step && params.deviceSettings;
-  createEffect(() => {
-    console.log("SHOW", show());
-  });
 
   const clearParams = () => {
     setParams({ deviceSettings: null, tab: null });

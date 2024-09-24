@@ -1,7 +1,7 @@
 import { BsCameraVideoFill } from "solid-icons/bs";
 import { ImLocation, ImNotification } from "solid-icons/im";
 import { RiArrowsArrowRightSLine } from "solid-icons/ri";
-import { Show, onMount } from "solid-js";
+import { Match, Show, Switch, onMount } from "solid-js";
 import { A } from "@solidjs/router";
 import ActionContainer from "~/components/ActionContainer";
 import CircleButton from "~/components/CircleButton";
@@ -10,7 +10,7 @@ import { useStorage } from "~/contexts/Storage";
 import { FaRegularTrashCan, FaSolidStop } from "solid-icons/fa";
 import { Dialog } from "@capacitor/dialog";
 import { useUserContext } from "~/contexts/User";
-import { FiUploadCloud } from "solid-icons/fi";
+import { FiPause, FiUploadCloud } from "solid-icons/fi";
 
 export default function Storage() {
   const storage = useStorage();
@@ -163,14 +163,21 @@ export default function Storage() {
         <button
           class="flex items-center justify-center space-x-2 rounded-md bg-white px-4 py-4"
           onClick={toggleUpload}
-          disabled={false}
         >
-          <div class="text-blue-500">
-            <FiUploadCloud size={28} />
-          </div>
-          <Show when={!storage.isUploading()} fallback={<p>Uploading...</p>}>
-            <p>Upload</p>
-          </Show>
+          <Switch>
+            <Match when={!storage.isUploading()}>
+              <div class="text-blue-500">
+                <FiUploadCloud size={28} />
+              </div>
+              <p>Upload</p>
+            </Match>
+            <Match when={storage.isUploading()}>
+              <div class="text-red-500">
+                <FaSolidStop size={28} />
+              </div>
+              <p>Pause Upload</p>
+            </Match>
+          </Switch>
         </button>
       </div>
     </section>
