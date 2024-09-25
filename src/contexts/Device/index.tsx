@@ -1,5 +1,6 @@
 import { KeepAwake } from "@capacitor-community/keep-awake";
 import {
+  Capacitor,
   HttpResponse,
   PluginListenerHandle,
   registerPlugin,
@@ -26,12 +27,12 @@ import {
 } from "solid-js";
 import { z } from "zod";
 import { GoToPermissions } from "~/components/GoToPermissions";
-import { Coords, Location } from "~/database/Entities/Location";
+import { Location } from "~/database/Entities/Location";
 import { Result, URL } from "..";
 import { useStorage } from "../Storage";
 import { isWithinRange } from "../Storage/location";
 import DeviceCamera from "./Camera";
-import { Effect, Schedule } from "effect";
+import { Effect } from "effect";
 import { useLogsContext } from "../LogsContext";
 
 const WifiNetwork = z
@@ -88,26 +89,37 @@ export const tc2ModemSchema = z
   })
   .partial();
 export type Modem = z.infer<typeof tc2ModemSchema>;
-async function retryOperation<T>(
-  operation: () => Promise<T>,
-  retries = 3,
-  delay = 1000
-): Promise<T> {
-  try {
-    return await operation();
-  } catch (error) {
-    if (retries > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      return retryOperation(operation, retries - 1, delay * 2);
-    }
-    throw error;
-  }
-}
+
+const AudioModeSchema = z.union([
+  z.literal("Disabled" as const),
+  z.literal("AudioOnly" as const),
+  z.literal("AudioOrThermal" as const),
+  z.literal("AudioAndThermal" as const),
+]);
+
+const AudioStatusSchema = z.union([
+  z.literal(1).transform(() => "ready" as const),
+  z.literal(2).transform(() => "pending" as const),
+  z.literal(3).transform(() => "recording" as const),
+]);
+const AudioModeResSchema = z.object({
+  ["audio-mode"]: AudioModeSchema,
+});
+const AudioStatusResSchema = z.object({
+  mode: z.union([
+    z.literal(0).transform(() => "Disabled" as const),
+    z.literal(1).transform(() => "AudioOnly" as const),
+    z.literal(2).transform(() => "AudioOrThermal" as const),
+    z.literal(3).transform(() => "AudioAndThermal" as const),
+  ]),
+  status: AudioStatusSchema,
+});
+export type AudioMode = z.infer<typeof AudioModeSchema>;
 export type DeviceId = string;
 export type DeviceName = string;
 export type DeviceHost = string;
 export type DeviceType = "pi" | "tc2";
-export type DeviceUrl = { url: URL };
+export type DeviceUrl = { url: string };
 export type RecordingName = string;
 
 export type DeviceDetails = {
@@ -120,7 +132,7 @@ export type DeviceDetails = {
   isProd: boolean;
   timeFound: Date;
   locationSet: boolean;
-  url: URL;
+  url: string;
   type: "pi" | "tc2";
   lastUpdated?: Date;
   batteryPercentage?: string;
@@ -435,7 +447,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   // Function to handle when a service is resolved (device discovered)
   const handleServiceResolved = async (newDevice: DeviceService) => {
-    debugger;
     console.log("Found Device", newDevice);
     if (shouldConnectToDevice(newDevice)) {
       await connectToDevice(newDevice);
@@ -579,7 +590,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       );
 
       if (deviceInfo.success) {
-        const info = DeviceInfoSchema.safeParse(JSON.parse(deviceInfo.data));
+        const data = JSON.parse(deviceInfo.data);
+        const info = DeviceInfoSchema.safeParse(data);
+        console.info("DEVICE INFO", data, info);
 
         if (info.success && info.data.deviceID.toString() === device.id) {
           const battery = await getBattery(device.url); // Assume getBattery is defined elsewhere
@@ -589,7 +602,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
             isConnected: true,
           };
           devices.set(device.id, updatedDevice);
-          await clearUploaded(updatedDevice); // Assume clearUploaded is defined elsewhere
           return updatedDevice;
         }
       }
@@ -600,6 +612,18 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       devices.set(device.id, { ...device, isConnected: false });
       return undefined;
     }
+  };
+
+  const hasAudioCapabilities = async (deviceId: string) => {
+    try {
+      debugger;
+      const res = await getAudioMode(deviceId);
+      if (res !== null) return true;
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+    return false;
   };
 
   // Function to start device discovery
@@ -637,10 +661,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
   };
 
+  let isSearching = false;
   // Function to search for devices, debounced to avoid excessive calls
-  const searchDevice = leadingAndTrailing(
-    debounce,
-    async () => {
+  const searchDevice = async () => {
+    if (isSearching) return;
+    try {
+      isSearching = true;
       await stopDiscovery();
       await startDiscovery();
       for (const device of devices.values()) {
@@ -648,22 +674,24 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           await clearUploaded(device); // Assume clearUploaded is defined elsewhere
         }
       }
-    },
-    1000 // Debounce interval in milliseconds
-  );
+    } catch (e) {
+      console.error(e);
+    } finally {
+      isSearching = false;
+    }
+  };
 
   // Initialize modem intervals management
   manageModemIntervals();
 
   // Set up component lifecycle
   onMount(async () => {
-    debugger;
     await setupListeners();
     monitorAPConnection();
 
     const discoveryInterval = setInterval(() => {
       searchDevice();
-    }, 20000); // Every 20 seconds
+    }, 30000); // Every 20 seconds
 
     onCleanup(() => {
       clearInterval(discoveryInterval);
@@ -1021,61 +1049,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         message: "Could not get location",
       };
     }
-  };
-
-  const MIN_STATION_SEPARATION_METERS = 60;
-  // The radius of the station is half the max distance between stations: any recording inside the radius can
-  // be considered to belong to that station.
-  const MAX_DISTANCE_FROM_STATION_FOR_RECORDING =
-    MIN_STATION_SEPARATION_METERS / 2;
-
-  function haversineDistance(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number
-  ): number {
-    const R = 6371e3; // Earth's radius in meters
-    const φ1 = (lat1 * Math.PI) / 180; // Convert latitude from degrees to radians
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-    const a =
-      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c; // Returns the distance in meters
-  }
-
-  function isWithinRadius(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number,
-    radius: number
-  ): boolean {
-    const distance = haversineDistance(lat1, lon1, lat2, lon2);
-    return distance <= radius;
-  }
-
-  const withinRange = (
-    loc: Coords,
-    deviceCoords: DeviceCoords<number>,
-    accuracy: number,
-    range = MAX_DISTANCE_FROM_STATION_FOR_RECORDING
-  ) => {
-    const { latitude, longitude } = deviceCoords;
-    const { lat, lng } = loc;
-    const inRange = isWithinRadius(
-      lat,
-      lng,
-      latitude,
-      longitude,
-      range + accuracy
-    );
-    return inRange;
   };
 
   const getLocationByDevice = (deviceId: DeviceId) =>
@@ -1602,8 +1575,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       });
       if (res.status !== 200) throw Error("No Modem");
       res = JSON.parse(res.data);
-      return res;
+      return tc2ModemSchema.parse(res);
     } catch (error) {
+      console.error(error);
       return null;
     }
   };
@@ -1629,6 +1603,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         )
         .parse(JSON.parse(savedNetworks.data));
     } catch (error) {
+      console.error(error);
       return [];
     }
   };
@@ -1689,8 +1664,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     )
   );
 
-  const host = `http://192.168.4.1`;
-  const checkPolicy = Schedule.addDelay(Schedule.recurs(4), () => 1000);
   const connectToDeviceAP = leading(
     debounce,
     async () => {
@@ -1751,8 +1724,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return false;
       const { url } = device;
-      const res = await CapacitorHttp.post({
-        url: `${url}/api/audio/record`,
+      const res = await CapacitorHttp.put({
+        url: `${url}/api/audio/test-recording`,
         headers: { ...headers, "Content-Type": "application/json" },
         webFetchExtra: {
           credentials: "include",
@@ -1764,13 +1737,77 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
   };
 
+  const getAudioMode = async (deviceId: DeviceId) => {
+    try {
+      const device = devices.get(deviceId);
+      if (!device || !device.isConnected) return null;
+      const { url } = device;
+      const res = await CapacitorHttp.get({
+        url: `${url}/api/audiorecording`,
+        headers: { ...headers, "Content-Type": "application/json" },
+        webFetchExtra: {
+          credentials: "include",
+        },
+      });
+      debugger;
+      return res.status === 200
+        ? AudioModeResSchema.parse(JSON.parse(res.data))["audio-mode"]
+        : null;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  };
+
+  const getAudioStatus = async (deviceId: DeviceId) => {
+    try {
+      const device = devices.get(deviceId);
+      if (!device || !device.isConnected) return null;
+      const { url } = device;
+      const res = await CapacitorHttp.get({
+        url: `${url}/api/audio/audio-status`,
+        headers: { ...headers, "Content-Type": "application/json" },
+        webFetchExtra: {
+          credentials: "include",
+        },
+      });
+      console.log("Audio status", res);
+      return res.status === 200
+        ? AudioStatusResSchema.parse(JSON.parse(res.data))
+        : null;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  };
+
+  const setAudioMode = async (deviceId: DeviceId, type: AudioMode) => {
+    try {
+      const device = devices.get(deviceId);
+      if (!device || !device.isConnected) return false;
+      const { url } = device;
+      const res = await CapacitorHttp.post({
+        url: `${url}/api/audiorecording?audio-mode=${type}`,
+        headers: { ...headers, "Content-Type": "application/json" },
+        webFetchExtra: {
+          credentials: "include",
+        },
+      });
+      debugger;
+      return res.status === 200;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  };
+
   const getAudioFiles = async (deviceId: DeviceId) => {
     try {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return [];
       const { url } = device;
       const res = await CapacitorHttp.get({
-        url: `${url}/api/audio/files`,
+        url: `${url}/api/audio/recordings`,
         headers: { ...headers, "Content-Type": "application/json" },
         webFetchExtra: {
           credentials: "include",
@@ -1778,6 +1815,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       });
       return res.status === 200 ? JSON.parse(res.data) : [];
     } catch (error) {
+      console.error(error);
       return [];
     }
   };
@@ -2133,8 +2171,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     getDeviceCamera,
     setLowPowerMode,
     //Audio
+    getAudioMode,
+    getAudioStatus,
+    setAudioMode,
     takeAudioRecording,
     getAudioFiles,
+    hasAudioCapabilities,
     // Update
     checkDeviceUpdate,
     updateDevice,

@@ -3,6 +3,7 @@ import { Dialog as Prompt } from "@capacitor/dialog";
 import { A, useSearchParams } from "@solidjs/router";
 import { AiFillEdit, AiOutlineInfoCircle } from "solid-icons/ai";
 import {
+  BiRegularNoSignal,
   BiRegularSave,
   BiRegularSignal1,
   BiRegularSignal2,
@@ -10,7 +11,7 @@ import {
   BiRegularSignal4,
   BiRegularSignal5,
 } from "solid-icons/bi";
-import { BsCameraVideoFill, BsWifiOff } from "solid-icons/bs";
+import { BsCameraVideoFill, BsCaretDown, BsWifiOff } from "solid-icons/bs";
 import {
   FaRegularEye,
   FaRegularEyeSlash,
@@ -25,7 +26,10 @@ import {
 } from "solid-icons/fa";
 import { FiCloudOff, FiMapPin } from "solid-icons/fi";
 import { ImArrowLeft, ImArrowRight, ImCog, ImCross } from "solid-icons/im";
-import { RiArrowsArrowRightSLine } from "solid-icons/ri";
+import {
+  RiArrowsArrowDownSLine,
+  RiArrowsArrowRightSLine,
+} from "solid-icons/ri";
 import { TbCameraPlus, TbPlugConnectedX } from "solid-icons/tb";
 import {
   For,
@@ -43,7 +47,7 @@ import {
 import { Portal } from "solid-js/web";
 import FieldWrapper from "~/components/Field";
 import { GoToPermissions } from "~/components/GoToPermissions";
-import { DeviceId, WifiNetwork, useDevice } from "~/contexts/Device";
+import { AudioMode, DeviceId, WifiNetwork, useDevice } from "~/contexts/Device";
 import { useStorage } from "~/contexts/Storage";
 import { BsWifi1, BsWifi2, BsWifi } from "solid-icons/bs";
 import { useUserContext } from "~/contexts/User";
@@ -59,47 +63,267 @@ export function AudioSettingsTab(props: SettingProps) {
   const context = useDevice();
   const id = () => props.deviceId;
 
-  const [audioFiles, { refetch }] = createResource(id, async (id) => {
-    if (!id) return null;
-    const res = await context.getAudioFiles(id);
-    return res;
-  });
+  const [audioFiles, { refetch: refetchAudioFiles }] = createResource(
+    id,
+    async (id) => {
+      if (!id) return null;
+      const res = await context.getAudioFiles(id);
+      console.log("Audio Files", res);
+      return res;
+    }
+  );
+  const [audioStatus, { refetch: refetchAudioStatus }] = createResource(
+    id,
+    async (id) => {
+      if (!id) return null;
+      const res = await context.getAudioStatus(id);
+      console.log("CURRENT AUDIO STATUS", res, id);
+      return res;
+    }
+  );
+  const [audioMode, { refetch: refetchAudioMode }] = createResource(
+    id,
+    async (id) => {
+      if (!id) return null;
+      const res = await context.getAudioMode(id);
+      console.log("STATUS", res);
+      debugger;
+      return res;
+    }
+  );
   const [recording, setRecording] = createSignal(false);
   const [result, setResult] = createSignal<"failed" | "success" | null>(null);
   const createTestRecording = async () => {
-    setRecording(true);
+    debugger;
     const res = await context.takeAudioRecording(id());
     setResult(res ? "success" : "failed");
-    setRecording(false);
-    refetch();
-    setTimeout(() => setResult(null), 2000);
+    refetchAudioStatus();
+    const interval = setInterval(() => {
+      if (audioStatus()?.status === "ready") {
+        clearInterval(interval);
+        if (!audioFiles.loading) {
+          refetchAudioFiles();
+        }
+      } else {
+        refetchAudioStatus();
+      }
+    }, 5000);
   };
 
+  const [config] = createResource(id, async (id) => {
+    if (!id) return null;
+    const res = await context.getDeviceConfig(id);
+    console.log("Audio config", res);
+    return res;
+  });
+
+  function timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(":").map(Number);
+    return hours * 60 + minutes;
+  }
+  type PercentageRange = [number, number];
+  function timeToPercentage(time: string): number {
+    const [hours, minutes] = time.split(":").map(Number);
+    const totalMinutes = hours * 60 + minutes;
+    return parseFloat(((totalMinutes / (24 * 60)) * 100).toFixed(2));
+  }
+  function calculateTimePercentagePoints(
+    startTime: string,
+    endTime: string
+  ): [PercentageRange, PercentageRange | null] {
+    const startPercentage = timeToPercentage(startTime);
+    const endPercentage = timeToPercentage(endTime);
+
+    if (startPercentage <= endPercentage) {
+      return [[startPercentage, endPercentage], null];
+    } else {
+      return [
+        [0, endPercentage],
+        [startPercentage, 100],
+      ];
+    }
+  }
+  const thermalMode = (): [PercentageRange, PercentageRange | null] | null => {
+    const windowConfig = config()?.values.windows;
+    const windowDefaultConfig = config()?.defaults.windows;
+    if (!windowConfig) return null;
+    const startTime =
+      (windowConfig.StartRecording
+        ? windowConfig.StartRecording
+        : windowDefaultConfig?.StartRecording) ?? "-30m";
+    const stopTime =
+      (windowConfig.StopRecording
+        ? windowConfig.StopRecording
+        : windowDefaultConfig?.StopRecording) ?? "+30m";
+    debugger;
+    if (startTime === "-30m" || startTime === "+30m")
+      return [
+        [0, 33],
+        [66, 100],
+      ] as const;
+    const res = calculateTimePercentagePoints(startTime, stopTime);
+    return res;
+  };
+  const calcWidth = (range: PercentageRange) => {
+    const [start, end] = range;
+    const value = end - start;
+    if (value === 0) return 100;
+    return value;
+  };
+  const calcAudioWidth = (range: [PercentageRange, PercentageRange | null]) => {
+    const [start, end] = range;
+    let endWidth = 0;
+    if (end) {
+      endWidth = calcWidth(end);
+    }
+    debugger;
+    let startWidth = calcWidth(start);
+    const value = 100 - startWidth - endWidth;
+    return value;
+  };
   return (
-    <section>
-      <div class="flex items-center space-x-2 pl-2">
-        <p class="text-sm text-slate-400">Audio Files:</p>
-        <p>{audioFiles()?.length}</p>
+    <section class="space-y-2  px-2 py-4">
+      <div class="flex items-center  text-gray-800">
+        <p class="pl-2">
+          Audio recordings are made 32 times a day for one minute at random
+          intervals.
+        </p>
       </div>
+      <h1 class="pl-2 font-medium text-gray-500">Settings</h1>
+      <FieldWrapper type="custom" title="Audio Mode">
+        <div class="flex w-full items-center">
+          <select
+            onChange={async (e) => {
+              const value = e.currentTarget.value;
+              await context.setAudioMode(id(), value as AudioMode);
+              refetchAudioMode();
+            }}
+            value={audioMode() ?? "Disabled"}
+            class="h-full w-full appearance-none bg-white pl-2"
+          >
+            <option value="Disabled">Disabled</option>
+            <option value="AudioOnly">Audio Only</option>
+            <option value="AudioAndThermal">Audio and Thermal</option>
+            <option value="AudioOrThermal">Audio or Thermal</option>
+          </select>
+          <RiArrowsArrowDownSLine size={32} />
+        </div>
+      </FieldWrapper>
+      <div class="flex flex-col">
+        <div class="flex items-center space-x-2 px-2">
+          <Show when={thermalMode()}>
+            {(thermalMode) => (
+              <>
+                <h2 class="w-20 text-gray-500">Thermal:</h2>
+                <div class="relative flex h-5 w-full items-center rounded-full bg-gray-200 py-1">
+                  <Show when={audioMode() !== "AudioOnly"}>
+                    <div
+                      class="absolute h-3 rounded-full bg-green-300"
+                      style={{
+                        left: thermalMode()[0] + "%",
+                        width: calcWidth(thermalMode()[0]) + "%",
+                      }}
+                    />
+                    <Show when={thermalMode()[1]}>
+                      {(thermalMode) => (
+                        <div
+                          class="absolute h-3 rounded-full bg-green-300"
+                          style={{
+                            left: thermalMode()[0] + "%",
+                            width: calcWidth(thermalMode()) + "%",
+                          }}
+                        />
+                      )}
+                    </Show>
+                  </Show>
+                </div>
+              </>
+            )}
+          </Show>
+        </div>
+        <div class="flex items-center space-x-2 px-2">
+          <Show when={thermalMode()}>
+            {(thermalMode) => (
+              <>
+                <h2 class="w-20 text-gray-500">Audio:</h2>
+                <div class="relative flex h-5 w-full items-center rounded-full bg-gray-200 py-1">
+                  <Switch>
+                    <Match
+                      when={
+                        audioMode() === "AudioOnly" ||
+                        audioMode() === "AudioAndThermal"
+                      }
+                    >
+                      <div
+                        class="absolute h-3 rounded-full bg-green-300"
+                        style={{
+                          width: "100%",
+                        }}
+                      />
+                    </Match>
+                    <Match when={audioMode() === "AudioOrThermal"}>
+                      <div
+                        class="absolute h-3 rounded-full bg-green-300"
+                        style={{
+                          left: thermalMode()[0][1] + "%",
+                          width: calcAudioWidth(thermalMode()) + "%",
+                        }}
+                      />
+                    </Match>
+                  </Switch>
+                </div>
+              </>
+            )}
+          </Show>
+        </div>
+      </div>
+      <Show when={audioMode() !== "Disabled"}>
+        <div class="flex items-center  rounded-md border-2 border-slate-200 p-2 pl-2 text-slate-500">
+          <AiOutlineInfoCircle class="mr-2" size={18} />
+          <Switch>
+            <Match when={audioMode() === "AudioOnly"}>
+              <p>
+                Records audio in a 24 hour window, and disables thermal
+                recording.
+              </p>
+            </Match>
+            <Match when={audioMode() === "AudioOrThermal"}>
+              <p>Records audio outside of the thermal recording window.</p>
+            </Match>
+            <Match when={audioMode() === "AudioAndThermal"}>
+              <p>
+                Records audio in a 24 hour window, however the camera cannot
+                record during the 1 minute of audio recording.
+              </p>
+            </Match>
+          </Switch>
+        </div>
+      </Show>
       <button
+        classList={{
+          "bg-blue-500": audioMode() !== "Disabled",
+          "bg-gray-300": audioMode() === "Disabled",
+        }}
         class="flex w-full items-center justify-center space-x-2 rounded-lg bg-blue-500 py-3 text-white"
         onClick={() => createTestRecording()}
-        disabled={recording()}
+        disabled={recording() || audioMode() === "Disabled"}
       >
-        <Switch>
-          <Match when={recording()}>
+        <Switch
+          fallback={
+            <>
+              <FaSolidSpinner class="animate-spin" size={24} />
+            </>
+          }
+        >
+          <Match when={audioStatus()?.status === "pending"}>
+            <p>Setting up...</p>
+            <FaSolidSpinner class="animate-spin" size={24} />
+          </Match>
+          <Match when={audioStatus()?.status === "recording"}>
             <p>Recording...</p>
             <FaSolidSpinner class="animate-spin" size={24} />
           </Match>
-          <Match when={result() === "success"}>
-            <p>Success!</p>
-            <FaSolidCheck size={24} />
-          </Match>
-          <Match when={result() === "failed"}>
-            <p>Failed</p>
-            <ImCross size={12} />
-          </Match>
-          <Match when={!recording() && !result()}>
+          <Match when={audioStatus()?.status === "ready"}>
             <p>Test Recording</p>
             <FaSolidFileAudio size={24} />
           </Match>
@@ -1222,6 +1446,7 @@ export function WifiSettingsTab(props: SettingProps) {
       setPassword("");
       setOpenedNetwork(null);
     } else {
+      log.logEvent("Failed to connect to wifi");
       setErrorConnecting("Could not connect to wifi. Please try again.");
       setTimeout(() => {
         context.devicesConnectingToWifi.delete(device()?.id);
@@ -1351,11 +1576,33 @@ export function WifiSettingsTab(props: SettingProps) {
   const modemSignalStrength = () => {
     const currModem = modem();
     const currSignal = modemSignal();
-    if (currModem === null && currSignal === null) return 0;
-    return Math.max(
-      currSignal ?? 0,
-      parseInt(currModem?.signal?.strength ?? "0") / 30
-    );
+    if (currModem === null && currSignal === null) return null;
+
+    let signalStrength = null;
+
+    // Try to get the signal strength from currModem
+    if (currModem?.signal?.strength) {
+      const signal = parseInt(currModem.signal.strength);
+      if (signal !== 99) {
+        signalStrength = signal;
+      }
+    }
+
+    // If currSignal is available, use it
+    if (currSignal !== null && currSignal !== undefined) {
+      signalStrength = currSignal;
+    }
+
+    // Handle unknown signal strength
+    if (signalStrength === null || signalStrength === 99) {
+      return null; // Signal strength is unknown
+    }
+
+    // Normalize the signal strength (ASU value from 0 to 31)
+    const normalizedSignal = signalStrength / 31;
+
+    // Ensure the normalized value is between 0 and 1
+    return Math.min(Math.max(normalizedSignal, 0), 1);
   };
 
   const noSim = () => {
@@ -1541,6 +1788,9 @@ export function WifiSettingsTab(props: SettingProps) {
                           </Match>
                         </Switch>
                       )}
+                    </Show>
+                    <Show when={modemSignalStrength() === null}>
+                      <BiRegularNoSignal size={28} />
                     </Show>
                   </div>
                   <Show when={hasApn()}>
@@ -2276,9 +2526,17 @@ export function DeviceSettingsModal() {
   const user = useUserContext();
   const [params, setParams] = useSearchParams();
   const currTab = () => params.tab ?? "Camera";
+  const [hasAudioCapabilities] = createResource(
+    () => params.deviceSettings,
+    async (id) => {
+      const res = await context.hasAudioCapabilities(id);
+      console.log("HAS AUDIO", res);
+      return res;
+    }
+  );
   const navItems = () => {
     const items = ["Camera", "General", "Network", "Location"] as const;
-    if (user.dev()) {
+    if (hasAudioCapabilities()) {
       return [...items, "Audio"] as const;
     } else {
       return items;
@@ -2352,7 +2610,7 @@ export function DeviceSettingsModal() {
               <Match when={currTab() === "Camera"}>
                 <CameraSettingsTab deviceId={id()} />
               </Match>
-              <Match when={currTab() === "Audio" && user.dev()}>
+              <Match when={currTab() === "Audio" && hasAudioCapabilities()}>
                 <AudioSettingsTab deviceId={id()} />
               </Match>
             </Switch>

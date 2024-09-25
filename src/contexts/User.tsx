@@ -178,17 +178,11 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
           });
           throw new Error(`Failed to switch to ${server} server`);
         }
-        log.logSuccess({
+        console.info({
           message: `Switched to ${server} server successfully`,
         });
       } catch (error) {
-        if (error instanceof Error) {
-          log.logError({ message: "Error changing server", error });
-        } else {
-          log.logError({
-            message: "Unknown error occurred while changing server",
-          });
-        }
+        log.logError({ message: "Error changing server", error });
       }
     }
   );
@@ -260,7 +254,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
                 key: "user",
                 value: JSON.stringify(updatedUser),
               });
-              log.logSuccess({ message: "Token refreshed successfully" });
+              console.info({ message: "Token refreshed successfully" });
               return updatedUser;
             } else {
               if (result.message.includes("Failed") && navigator.onLine) {
@@ -344,13 +338,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       log.logSuccess({ message: "Group created successfully" });
       return parsed.data;
     } catch (error) {
-      if (error instanceof Error) {
-        log.logError({ message: "Error creating group", error });
-      } else {
-        log.logError({
-          message: "Unknown error occurred while creating group",
-        });
-      }
+      log.logError({ message: "Error creating group", error });
       throw error;
     }
   }

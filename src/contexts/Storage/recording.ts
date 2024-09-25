@@ -45,6 +45,7 @@ export function useRecordingStorage() {
   }): Promise<Recording[]> => getRecordings(db)(options);
 
   const deleteRecording = async (recording: Recording) => {
+    debugger;
     const res = await DevicePlugin.deleteRecording({
       recordingPath: recording.name,
     });
@@ -76,6 +77,7 @@ export function useRecordingStorage() {
   };
 
   const uploadRecordings = async () => {
+    debugger;
     setShouldUpload(true);
     let recordings = unuploadedRecordings().filter(
       (rec) => rec.isProd === userContext.isProd()
@@ -85,14 +87,12 @@ export function useRecordingStorage() {
       const user = await userContext.getUser();
       if (!user) return;
       const recording = recordings[i];
-      const res = await unbindAndRebind(() =>
-        CacophonyPlugin.uploadRecording({
-          token: user.token,
-          type: "thermalRaw",
-          device: recording.device,
-          filename: recording.name,
-        })
-      );
+      const res = await CacophonyPlugin.uploadRecording({
+        token: user.token,
+        type: "thermalRaw",
+        device: recording.device,
+        filename: recording.name,
+      });
 
       if (res.success) {
         recording.isUploaded = true;

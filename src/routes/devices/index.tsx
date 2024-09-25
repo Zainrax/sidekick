@@ -80,10 +80,10 @@ function DeviceDetails(props: DeviceDetailsProps) {
           setupDevice: props.id,
           step: "wifiSetup",
         });
-        log.logEvent("device_setup", { device_id: props.id });
+        console.info("device_setup", { device_id: props.id });
       } else {
         setParams({ deviceSettings: props.id });
-        log.logEvent("device_settings", { device_id: props.id });
+        console.info("device_settings", { device_id: props.id });
       }
     },
     800

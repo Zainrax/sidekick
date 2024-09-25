@@ -203,21 +203,18 @@ class DevicePlugin : Plugin() {
     @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
     fun disconnectFromDeviceAP(call: PluginCall) {
         try {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            wifiManager.disconnect()
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 cm?.bindProcessToNetwork(null)
                 currNetworkCallback?.let { cm?.unregisterNetworkCallback(it) }
-                val result = JSObject()
-                result.put("success", true)
-                result.put("data", "Disconnected from device AP")
-                call.resolve(result)
-            } else {
-                val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                wifiManager.disconnect()
-                val result = JSObject()
-                result.put("success", true)
-                result.put("message", "Failed to disconnect from device AP")
-                call.resolve(result)
             }
+
+            val result = JSObject()
+            result.put("success", true)
+            result.put("message", "Disconnected from device AP")
+            call.resolve(result)
         } catch (e: Exception) {
             val result = JSObject()
             result.put("success", false)

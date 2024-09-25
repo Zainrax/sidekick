@@ -506,42 +506,54 @@ function SetupWizard(): JSX.Element {
       </defs>
     </svg>
   );
+  const devices = () => [...deviceContext.devices.values()];
+
   const ChooseDeviceStep = () => (
     <>
-      <div class="mb-4 flex items-center justify-between">
+      <div class="mb-2 flex items-center justify-between">
         <h2 class="pl-4 text-xl font-bold">Choose your Device</h2>
         <CloseButton onClick={() => navigate("/devices")} />
       </div>
-      <p class="mb-4 text-center">
-        Turn on your device and choose the device that matches
-      </p>
-      <div class="flex justify-center space-x-4">
-        <button
-          class="flex flex-col items-center rounded-lg bg-green-200 p-4"
-          onClick={() => {
-            setStore("deviceType", "DOC AI Cam / Bird Monitor");
-            setStep("directConnect");
-          }}
-        >
-          <AIDocSVG />
-          <span>DOC AI Cam/ Bird Monitor</span>
-        </button>
-        <button
-          class="flex flex-col items-center rounded-lg bg-gray-200 p-4"
-          onClick={() => {
-            setStore("deviceType", "Classic");
-            setStep("directConnect");
-          }}
-        >
-          <ClassicSVG />
-          <span>Classic Thermal Camera</span>
-        </button>
+      <Show when={devices().length}>
+        <div class="mb-2">
+          <h1 class="text-md font-medium text-slate-700">Existing Devices</h1>
+          <FoundDevices />
+        </div>
+      </Show>
+      <div>
+        <h2 class="text-md pl-1  font-medium text-slate-700">
+          Connect To Device
+        </h2>
+        <p class="mb-4 text-center">
+          Turn on your device and choose the device that matches
+        </p>
+        <div class="flex justify-center space-x-4">
+          <button
+            class="flex flex-col items-center rounded-lg bg-green-200 p-4"
+            onClick={() => {
+              setStore("deviceType", "DOC AI Cam / Bird Monitor");
+              setStep("directConnect");
+            }}
+          >
+            <AIDocSVG />
+            <span>DOC AI Cam/ Bird Monitor</span>
+          </button>
+          <button
+            class="flex flex-col items-center rounded-lg bg-gray-200 p-4"
+            onClick={() => {
+              setStore("deviceType", "Classic");
+              setStep("directConnect");
+            }}
+          >
+            <ClassicSVG />
+            <span>Classic Thermal Camera</span>
+          </button>
+        </div>
       </div>
       <Additional />
     </>
   );
 
-  const devices = () => [...deviceContext.devices.values()];
   const openDevice = async (device: Device) => {
     if (device.group !== "new") {
       setSearchParams({
@@ -556,6 +568,33 @@ function SetupWizard(): JSX.Element {
       });
     }
   };
+  const FoundDevices = () => (
+    <div class="space-y-1 rounded-lg bg-gray-200 p-1">
+      <Show when={!!devices()} fallback={<div>No devices found...</div>}>
+        <For each={devices().filter((device) => device.isConnected)}>
+          {(device) => (
+            <button
+              onClick={() => openDevice(device)}
+              class="flex w-full items-center justify-between rounded-md border-2 border-blue-400 bg-white p-2 text-blue-400"
+            >
+              <div class="flex items-center gap-x-2">
+                <BsCameraVideoFill /> <span>{device.name}</span>
+              </div>
+              <Show
+                when={device.group === "new"}
+                fallback={<RiArrowsArrowRightSLine size={24} />}
+              >
+                <div class="flex">
+                  <span>Setup</span>
+                  <RiArrowsArrowRightSLine size={24} />
+                </div>
+              </Show>
+            </button>
+          )}
+        </For>
+      </Show>
+    </div>
+  );
   const SearchingDeviceStep = () => (
     <>
       <Title title="Searching For Device" />
@@ -564,31 +603,7 @@ function SetupWizard(): JSX.Element {
         the “bushnet” network in your WiFi settings, if not join the network
         with password “feathers”
       </p>
-      <div class="space-y-1 rounded-lg bg-gray-200 p-1">
-        <Show when={!!devices()} fallback={<div>No devices found...</div>}>
-          <For each={devices().filter((device) => device.isConnected)}>
-            {(device) => (
-              <button
-                onClick={() => openDevice(device)}
-                class="flex w-full items-center justify-between rounded-md border-2 border-blue-400 bg-white p-2 text-blue-400"
-              >
-                <div class="flex items-center gap-x-2">
-                  <BsCameraVideoFill /> <span>{device.name}</span>
-                </div>
-                <Show
-                  when={device.group === "new"}
-                  fallback={<RiArrowsArrowRightSLine size={24} />}
-                >
-                  <div class="flex">
-                    <span>Setup</span>
-                    <RiArrowsArrowRightSLine size={24} />
-                  </div>
-                </Show>
-              </button>
-            )}
-          </For>
-        </Show>
-      </div>
+      <FoundDevices />
       <Additional />
     </>
   );

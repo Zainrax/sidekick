@@ -40,6 +40,16 @@ function DeviceSettings() {
     if (!device()?.isConnected) {
       nav("/devices");
     }
+    App.addListener("appStateChange", async (state) => {
+      const currDevice = device();
+      if (state.isActive && currDevice && currDevice.isConnected) {
+        // App has been brought back to the foreground
+        const isConnected = context.apState() === "connected";
+        if (!isConnected) {
+          nav("/devices");
+        }
+      }
+    });
   });
   return (
     <>
