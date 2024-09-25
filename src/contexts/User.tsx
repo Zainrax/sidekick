@@ -61,6 +61,11 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
             message: "An unknown error occurred while fetching user data",
           });
         }
+        const user = UserSchema.parse(JSON.parse(storedUser.value));
+        setServer(user.prod ? "prod" : "test");
+        getValidUser(user);
+
+        return user;
       }
       return null;
     }
@@ -281,7 +286,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
               details:
                 "You're currently offline. Some features may be unavailable.",
             });
-            return user;
+            return mutateUser(() => user);
           } else {
             // Token expired and cannot refresh
             await logout();
@@ -289,7 +294,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
           }
         }
       } else {
-        return user;
+        return mutateUser(() => user);
       }
     } catch (error) {
       log.logError({ message: "Error validating current token", error });
