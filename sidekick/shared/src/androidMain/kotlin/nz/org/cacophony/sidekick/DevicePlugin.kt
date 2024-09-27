@@ -38,14 +38,14 @@ class DevicePlugin : Plugin() {
     private var wifiNetwork: Network? = null
     var currNetworkCallback: ConnectivityManager.NetworkCallback? = null
     private var cm: ConnectivityManager? = null
-    private lateinit var multicastLock: WifiManager.MulticastLock
+//    private lateinit var multicastLock: WifiManager.MulticastLock
     private var isDiscovering: Boolean = false
 
     override fun load() {
         super.load()
         device = DeviceInterface(context.applicationContext.filesDir.absolutePath)
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        multicastLock = wifi.createMulticastLock("multicastLock")
+//        multicastLock = wifi.createMulticastLock("multicastLock")
     }
 
     enum class CallType {
@@ -59,7 +59,7 @@ class DevicePlugin : Plugin() {
         }
 
         isDiscovering = true
-        multicastLock.acquire()
+//        multicastLock.acquire()
 
         nsdHelper = object : NsdHelper(context.applicationContext) {
             override fun onNsdServiceResolved(service: NsdServiceInfo) {
@@ -82,7 +82,7 @@ class DevicePlugin : Plugin() {
 
             override fun onDiscoveryFailed(e: Exception) {
                 val error = JSObject()
-                multicastLock.release()
+//                multicastLock.release()
                 try {
                     error.put("message", e.message ?: "Unknown error during discovery")
                 } catch (je: JSONException) {
@@ -116,7 +116,7 @@ class DevicePlugin : Plugin() {
             return
         }
         try {
-            multicastLock.release()
+//            multicastLock.release()
             nsdHelper.stopDiscovery()
             isDiscovering = false
             result.put("success", true)
