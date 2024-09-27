@@ -13,12 +13,14 @@ const ConsentPopup = () => {
         <div class="w-11/12 max-w-md rounded-lg bg-white p-6 shadow-lg">
           <div class="mb-4 flex items-center">
             <BiSolidInfoCircle size={24} class="mr-2 text-blue-500" />
-            <h2 class="text-xl font-semibold">Personalized Tracing Consent</h2>
+            <h2 class="text-lg font-semibold">
+              Help Us Improve Your Experience
+            </h2>
           </div>
           <p class="mb-4 text-gray-700">
-            We use personalized tracing to enhance your experience by collecting
-            data about your interactions. This helps us improve features and
-            provide better support. Do you consent to personalized tracing?
+            We use your email address to help identify and resolve issues you
+            may encounter within our application. This allows us to provide you
+            with better support and enhance your overall experience.
           </p>
           <div class="flex justify-end space-x-4">
             <button

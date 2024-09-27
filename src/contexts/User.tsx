@@ -155,42 +155,34 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       mutateSkip(false);
       log.logSuccess({ message: "Login successful" });
     } catch (error) {
-      if (error instanceof Error) {
-        log.logError({ message: "Login process failed", error });
-      } else {
-        log.logError({ message: "An unknown error occurred during login" });
-      }
-      throw error; // Re-throw to allow further handling if necessary
+      log.logError({ message: "Login process failed", error });
     }
   }
 
   const [server, setServer] = createSignal<"test" | "prod">("prod");
   const isProd = () => server() === "prod";
 
-  const [changeServer, { error: serverError }] = createResource(
-    server,
-    async (server) => {
-      try {
-        const res =
-          server === "prod"
-            ? await CacophonyPlugin.setToProductionServer()
-            : await CacophonyPlugin.setToTestServer();
+  const [changeServer] = createResource(server, async (server) => {
+    try {
+      const res =
+        server === "prod"
+          ? await CacophonyPlugin.setToProductionServer()
+          : await CacophonyPlugin.setToTestServer();
 
-        if (!res.success) {
-          log.logWarning({
-            message: "Server switch failed",
-            details: res.message,
-          });
-          throw new Error(`Failed to switch to ${server} server`);
-        }
-        console.info({
-          message: `Switched to ${server} server successfully`,
+      if (!res.success) {
+        log.logWarning({
+          message: "Server switch failed",
+          details: res.message,
         });
-      } catch (error) {
-        log.logError({ message: "Error changing server", error });
+        throw new Error(`Failed to switch to ${server} server`);
       }
+      console.info({
+        message: `Switched to ${server} server successfully`,
+      });
+    } catch (error) {
+      log.logError({ message: "Error changing server", error });
     }
-  );
+  });
 
   interface JwtTokenPayload<
     T =
@@ -263,12 +255,13 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
               return updatedUser;
             } else {
               if (result.message.includes("Failed") && navigator.onLine) {
+                log.logWarning({
+                  message: "Token validation failed",
+                  details: result.message,
+                });
                 await logout();
               }
-              log.logWarning({
-                message: "Token validation failed",
-                details: result.message,
-              });
+              console.warn("Failed to refresh token");
               return user;
             }
           });

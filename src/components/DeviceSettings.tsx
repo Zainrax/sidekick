@@ -144,6 +144,7 @@ export function AudioSettingsTab(props: SettingProps) {
     }
   }
   const thermalMode = (): [PercentageRange, PercentageRange | null] | null => {
+    debugger;
     const windowConfig = config()?.values.windows;
     const windowDefaultConfig = config()?.defaults.windows;
     if (!windowConfig) return null;
@@ -155,7 +156,6 @@ export function AudioSettingsTab(props: SettingProps) {
       (windowConfig.StopRecording
         ? windowConfig.StopRecording
         : windowDefaultConfig?.StopRecording) ?? "+30m";
-    debugger;
     if (startTime === "-30m" || startTime === "+30m")
       return [
         [0, 33],
@@ -209,72 +209,83 @@ export function AudioSettingsTab(props: SettingProps) {
           <RiArrowsArrowDownSLine size={32} />
         </div>
       </FieldWrapper>
-      <div class="flex flex-col">
+      <div>
         <div class="flex items-center space-x-2 px-2">
-          <Show when={thermalMode()}>
-            {(thermalMode) => (
-              <>
-                <h2 class="w-20 text-gray-500">Thermal:</h2>
-                <div class="relative flex h-5 w-full items-center rounded-full bg-gray-200 py-1">
-                  <Show when={audioMode() !== "AudioOnly"}>
-                    <div
-                      class="absolute h-3 rounded-full bg-green-300"
-                      style={{
-                        left: thermalMode()[0] + "%",
-                        width: calcWidth(thermalMode()[0]) + "%",
-                      }}
-                    />
-                    <Show when={thermalMode()[1]}>
-                      {(thermalMode) => (
+          <div class="w-20"></div>
+          <div class="flex w-full justify-between text-xs text-gray-500">
+            <div>00:00</div>
+            <div>12:00</div>
+            <div>24:00</div>
+          </div>
+        </div>
+        <div class="flex flex-col">
+          <div class="flex items-center space-x-2 px-2">
+            <Show when={thermalMode()}>
+              {(thermalMode) => (
+                <>
+                  <h2 class="w-20 text-gray-500">Thermal:</h2>
+                  <div class="relative flex h-5 w-full items-center rounded-full bg-gray-200 py-1">
+                    <Show when={audioMode() !== "AudioOnly"}>
+                      <div
+                        class="absolute h-3 rounded-full bg-green-300"
+                        style={{
+                          left: thermalMode()[0] + "%",
+                          width: calcWidth(thermalMode()[0]) + "%",
+                        }}
+                      />
+                      <Show when={thermalMode()[1]}>
+                        {(thermalMode) => (
+                          <div
+                            class="absolute h-3 rounded-full bg-green-300"
+                            style={{
+                              left: thermalMode()[0] + "%",
+                              width: calcWidth(thermalMode()) + "%",
+                            }}
+                          />
+                        )}
+                      </Show>
+                    </Show>
+                  </div>
+                </>
+              )}
+            </Show>
+          </div>
+
+          <div class="flex items-center space-x-2 px-2">
+            <Show when={thermalMode()}>
+              {(thermalMode) => (
+                <>
+                  <h2 class="w-20 text-gray-500">Audio:</h2>
+                  <div class="relative flex h-5 w-full items-center rounded-full bg-gray-200 py-1">
+                    <Switch>
+                      <Match
+                        when={
+                          audioMode() === "AudioOnly" ||
+                          audioMode() === "AudioAndThermal"
+                        }
+                      >
                         <div
                           class="absolute h-3 rounded-full bg-green-300"
                           style={{
-                            left: thermalMode()[0] + "%",
-                            width: calcWidth(thermalMode()) + "%",
+                            width: "100%",
                           }}
                         />
-                      )}
-                    </Show>
-                  </Show>
-                </div>
-              </>
-            )}
-          </Show>
-        </div>
-        <div class="flex items-center space-x-2 px-2">
-          <Show when={thermalMode()}>
-            {(thermalMode) => (
-              <>
-                <h2 class="w-20 text-gray-500">Audio:</h2>
-                <div class="relative flex h-5 w-full items-center rounded-full bg-gray-200 py-1">
-                  <Switch>
-                    <Match
-                      when={
-                        audioMode() === "AudioOnly" ||
-                        audioMode() === "AudioAndThermal"
-                      }
-                    >
-                      <div
-                        class="absolute h-3 rounded-full bg-green-300"
-                        style={{
-                          width: "100%",
-                        }}
-                      />
-                    </Match>
-                    <Match when={audioMode() === "AudioOrThermal"}>
-                      <div
-                        class="absolute h-3 rounded-full bg-green-300"
-                        style={{
-                          left: thermalMode()[0][1] + "%",
-                          width: calcAudioWidth(thermalMode()) + "%",
-                        }}
-                      />
-                    </Match>
-                  </Switch>
-                </div>
-              </>
-            )}
-          </Show>
+                      </Match>
+                      <Match when={audioMode() === "AudioOrThermal"}>
+                        <div
+                          class="absolute h-3 rounded-full bg-green-300"
+                          style={{
+                            left: thermalMode()[0][1] + "%",
+                            width: calcAudioWidth(thermalMode()) + "%",
+                          }}
+                        />
+                      </Match>
+                    </Switch>
+                  </div>
+                </>
+              )}
+            </Show>
+          </div>
         </div>
       </div>
       <Show when={audioMode() !== "Disabled"}>
@@ -574,7 +585,7 @@ export function CameraSettingsTab(props: SettingProps) {
       const res = await context.setRecordingWindow(id(), on, off);
       refetch();
     } catch (error) {
-      console.error(error);
+      console.error("Set 24 Hour Error: ", error);
     }
   };
 
@@ -1363,7 +1374,6 @@ export function WifiSettingsTab(props: SettingProps) {
       console.log("Fetching Wifi Networks for ", currDevice);
       if (!currDevice?.isConnected) return null;
       const wifiNetworks = await context.getWifiNetworks(currDevice.id);
-      console.log("Fetched Wifi Networks", wifiNetworks);
       return wifiNetworks;
     }
   );
@@ -2328,6 +2338,7 @@ export function GroupSelect(props: SettingProps) {
 
 export function GeneralSettingsTab(props: SettingProps) {
   const user = useUserContext();
+  const log = useLogsContext();
   const context = useDevice();
   const device = () => context.devices.get(props.deviceId);
   const id = () => props.deviceId;
@@ -2395,8 +2406,12 @@ export function GeneralSettingsTab(props: SettingProps) {
   const softwareUpdateMessage = () => {
     console.log("can update", canUpdate());
     if (context.isDeviceUpdating(id())) return "Updating...";
-    if (context.didDeviceUpdate(id()) === false) return "Failed to Update";
-    if (context.didDeviceUpdate(id()) === true) return "Update Complete";
+    if (context.didDeviceUpdate(id()) === false) {
+      return "Failed to Update";
+    }
+    if (context.didDeviceUpdate(id()) === true) {
+      return "Update Complete";
+    }
     if (canUpdate() || canUpdate() === undefined) return "Software Update";
     return "No Update Available";
   };
@@ -2422,7 +2437,7 @@ export function GeneralSettingsTab(props: SettingProps) {
   };
   const showProgress = () =>
     context.isDeviceUpdating(id()) &&
-    context.getDeviceUpdating(id())?.UpdateProgressPercentage;
+    context.getDeviceUpdating(id())?.UpdateProgressPercentage !== undefined;
   return (
     <div class="flex w-full flex-col space-y-2 px-2 py-4">
       <FieldWrapper type="text" value={name()} title="Name" />
@@ -2485,13 +2500,17 @@ export function GeneralSettingsTab(props: SettingProps) {
       <div>
         <Show when={showProgress()}>
           {(percentage) => (
-            <div class="relative h-4 w-full rounded-t-full bg-gray-200">
+            <div class="relative flex h-6 w-full items-center rounded-t-md bg-gray-400">
               <div
-                class="transition-width h-4 rounded-t-full bg-blue-500 duration-500"
-                style={{ width: `${percentage()}%` }}
+                class="transition-width m-1 h-4 rounded-full bg-blue-500 duration-500"
+                style={{
+                  width: `${
+                    context.getDeviceUpdating(id())?.UpdateProgressPercentage
+                  }%`,
+                }}
               ></div>
-              <span class="absolute left-1/2 top-0 -translate-x-1/2 transform text-xs text-white">
-                {percentage()}%
+              <span class="absolute left-1/2 top-1 -translate-x-1/2 transform text-xs text-white">
+                {context.getDeviceUpdating(id())?.UpdateProgressPercentage}%
               </span>
             </div>
           )}

@@ -470,7 +470,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
     devices.set(connectedDevice.id, connectedDevice);
 
-    console.log("device_found", {
+    log.logEvent("device_found", {
       name: connectedDevice.name,
       saltId: connectedDevice.saltId,
       group: connectedDevice.group,
@@ -1882,7 +1882,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       .object({
         UseLowPowerMode: z.boolean(),
       })
-      .partial(),
+      .partial()
+      .optional(),
   });
 
   // Make optional version of configDefaultsSchema
@@ -1912,10 +1913,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return null;
       const { url } = device;
+      debugger;
       const res = await DevicePlugin.getDeviceConfig({ url });
       if (!res.success) return null;
       return configSchema.parse(JSON.parse(res.data));
     } catch (error) {
+      console.error("Get Config Error", error);
       return null;
     }
   };
@@ -1962,19 +1965,19 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     UpdateProgressStr: z.string().optional(),
   });
   type SaltStatus = z.infer<typeof SaltStatusSchema>;
-  const [updatingDevice, setUpdatingDevice] = createStore<
-    ({
-      id: DeviceId;
+  const updatingDevice = new ReactiveMap<
+    DeviceId,
+    {
       interval: NodeJS.Timeout;
-    } & SaltStatus)[]
-  >([]);
-  // Update
-  const updateDevice = async (deviceId: DeviceId) => {
-    try {
-      const device = devices.get(deviceId);
-      if (!device || !device.isConnected) return null;
-      const { url } = device;
-      const res = await CapacitorHttp.post({
+    } & SaltStatus
+  >();
+  const runUpdateCheck = (deviceId: DeviceId) => {
+    if (updatingDevice.has(deviceId)) return;
+    const device = devices.get(deviceId);
+    if (!device || !device.isConnected) return;
+    const { url } = device;
+    const interval = setInterval(async () => {
+      const res = await CapacitorHttp.get({
         url: `${url}/api/salt-update`,
         headers: { ...headers, "Content-Type": "application/json" },
         webFetchExtra: {
@@ -1982,56 +1985,48 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         },
       });
       if (res.status === 200) {
-        const existing = updatingDevice.find((d) => d.id === deviceId);
-
-        if (existing) {
-          if (existing.RunningUpdate) return null;
-          setUpdatingDevice((prev) => prev.filter((d) => d.id !== deviceId));
-        }
-        const res = await CapacitorHttp.get({
-          url: `${url}/api/salt-update`,
-          headers: { ...headers, "Content-Type": "application/json" },
-          webFetchExtra: {
-            credentials: "include",
-          },
-        });
         const data = SaltStatusSchema.parse(JSON.parse(res.data));
         console.log("Check Updating", data);
-        const interval = setInterval(async () => {
-          const res = await CapacitorHttp.get({
-            url: `${url}/api/salt-update`,
-            headers: { ...headers, "Content-Type": "application/json" },
-            webFetchExtra: {
-              credentials: "include",
-            },
-          });
-          if (res.status === 200) {
-            const data = SaltStatusSchema.parse(JSON.parse(res.data));
-            console.log("Check Updating", data);
-            if (data.RunningUpdate === false) {
-              clearInterval(interval);
-              setUpdatingDevice((prev) =>
-                prev.map((d) =>
-                  d.id === deviceId
-                    ? {
-                        ...d,
-                        ...data,
-                      }
-                    : d
-                )
-              );
-            }
-          }
-        }, 5000);
-        setUpdatingDevice((prev) => [
-          ...prev,
-          { id: deviceId, interval, ...data },
-        ]);
+        updatingDevice.set(deviceId, { interval, ...data });
+        if (data.RunningUpdate === false) {
+          clearInterval(interval);
+          updatingDevice.delete(deviceId);
+        }
+      }
+    }, 5000);
+  };
+  // Update
+  const updateDevice = async (deviceId: DeviceId) => {
+    try {
+      const device = devices.get(deviceId);
+      if (!device || !device.isConnected) return null;
+      const { url } = device;
+      const existing = updatingDevice.get(deviceId);
 
+      if (existing) {
+        if (existing.RunningUpdate) return null;
+        clearInterval(existing.interval);
+        updatingDevice.delete(deviceId);
+      }
+      const res = await CapacitorHttp.post({
+        url: `${url}/api/salt-update`,
+        headers: { ...headers, "Content-Type": "application/json" },
+        webFetchExtra: {
+          credentials: "include",
+        },
+        data: { force: true },
+      });
+      console.log("Update Device", res);
+      if (res.status === 200) {
+        runUpdateCheck(deviceId);
+        log.logEvent("Trigged update for device", {
+          id: device.id,
+        });
         return true;
       }
     } catch (error) {
       console.error(error);
+      log.logError({ message: "Failed to update for device", error });
     }
     return false;
   };
@@ -2039,7 +2034,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const getUpdateError = (deviceId: DeviceId) => {
     const device = devices.get(deviceId);
     if (!device || !device.isConnected) return null;
-    const existing = updatingDevice.find((d) => d.id === deviceId);
+    const existing = updatingDevice.get(deviceId);
     if (!existing?.RunningUpdate) return null;
     const lastCallOut = existing?.LastCallOut;
     if (lastCallOut?.includes("accepted?"))
@@ -2053,7 +2048,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const { url } = device;
       const res = await CapacitorHttp.get({
         url: `${url}/api/salt-update`,
-        headers: { ...headers },
+        headers,
         webFetchExtra: {
           credentials: "include",
         },
@@ -2063,6 +2058,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           ? SaltStatusSchema.parse(JSON.parse(res.data))
           : null;
       console.log("Check For Update", data);
+      if (data?.RunningUpdate && !updatingDevice.has(deviceId)) {
+        runUpdateCheck(deviceId);
+      }
       return data;
     } catch (error) {
       console.error(error);
@@ -2071,18 +2069,17 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   };
 
   const isDeviceUpdating = (deviceId: DeviceId) => {
-    const device = updatingDevice.find((d) => d.id === deviceId);
-    console.log("Check Updating", device);
+    const device = updatingDevice.get(deviceId);
     return device?.RunningUpdate && device?.LastCallSuccess !== false;
   };
 
   const didDeviceUpdate = (deviceId: DeviceId): boolean | null => {
-    const foundDevice = updatingDevice.find((d) => d.id === deviceId);
+    const foundDevice = updatingDevice.get(deviceId);
     return foundDevice?.LastCallSuccess ?? null;
   };
 
   const getDeviceUpdating = (deviceId: DeviceId) => {
-    return updatingDevice.find((d) => d.id === deviceId);
+    return updatingDevice.get(deviceId);
   };
 
   const setLowPowerMode = async (deviceId: DeviceId, enabled: boolean) => {

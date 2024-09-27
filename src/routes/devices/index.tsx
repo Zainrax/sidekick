@@ -255,6 +255,7 @@ function Devices() {
   const [groupPromptCancelled, setGroupCancelledPrompt] = createSignal(false);
   const [locPromptCancelled, setPromptCancel] = createSignal(false);
   const headerContext = useHeaderContext();
+  const log = useLogsContext();
 
   onMount(() => {
     // Add delete button to header
@@ -414,7 +415,7 @@ function Devices() {
   );
 
   const findDevice = () => {
-    console.info("Find Device");
+    log.logEvent("Find Device");
     setSearchParams({ step: "chooseDevice" });
   };
 

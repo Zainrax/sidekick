@@ -17,6 +17,7 @@ import { useLocation } from "@solidjs/router"; // Import router location
 import { Preferences } from "@capacitor/preferences";
 import { createRequire } from "module";
 import { replayCanvasIntegration } from "@sentry/browser";
+import { Primitive } from "zod";
 
 export enum TracingLevel {
   NON_PERSONALIZED = "non_personalized",
@@ -255,14 +256,12 @@ const [LogsProvider, useLogsContext] = createContextProvider(() => {
     logAction({ ...loadingLog, type: "loading" });
 
   // Function to log custom events
-  const logEvent = (name: string, params?: { [key: string]: any }) => {
+  const logEvent = (name: string, tags?: { [key: string]: Primitive }) => {
     setSentryUser(); // Ensure user context is up-to-date
     Sentry.captureEvent({
       message: name,
       level: "info",
-      contexts: {
-        event: params || {},
-      },
+      tags,
     });
   };
 

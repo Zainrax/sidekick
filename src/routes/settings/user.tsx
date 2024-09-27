@@ -32,7 +32,7 @@ function user() {
               class="w-full text-xl text-blue-500"
               onClick={log.revokeConsent}
             >
-              Revoke Personal Tracing
+              Revoke User Tracking
             </button>
           </Match>
           <Match when={log.tracingLevel() === TracingLevel.NON_PERSONALIZED}>
@@ -40,7 +40,7 @@ function user() {
               class="w-full text-xl text-blue-500"
               onClick={log.grantConsent}
             >
-              Allow Personal Tracing
+              Allow User Tracking
             </button>
           </Match>
         </Switch>
