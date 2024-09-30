@@ -1,14 +1,15 @@
+---
 name: Android CI/CD
 
 on:
   push:
     branches:
       - next
+    tags:
+      - "v*.*.*"
   pull_request:
     branches:
       - next
-  tags:
-    - "v*.*.*"
 
 jobs:
   build:
@@ -58,7 +59,9 @@ jobs:
         env:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
-          openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -d -in signing.tar.enc -out signing.tar -pass pass:"$SIGNING_KEY_PASSWORD"
+          openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
+            -d -in signing.tar.enc -out signing.tar \
+            -pass pass:"$SIGNING_KEY_PASSWORD"
           tar xvf signing.tar
 
       - name: Configure Keystore
@@ -72,7 +75,8 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper/
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          key: >
+            ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
@@ -128,7 +132,9 @@ jobs:
         env:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
-          openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -d -in signing.tar.enc -out signing.tar -pass pass:"$SIGNING_KEY_PASSWORD"
+          openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
+            -d -in signing.tar.enc -out signing.tar \
+            -pass pass:"$SIGNING_KEY_PASSWORD"
           tar xvf signing.tar
 
       - name: Configure Keystore
