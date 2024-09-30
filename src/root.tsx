@@ -1,14 +1,5 @@
 // @refresh reload
-import {
-  createEffect,
-  ErrorBoundary,
-  lazy,
-  Match,
-  on,
-  onMount,
-  Show,
-  Suspense,
-} from "solid-js";
+import { createEffect, ErrorBoundary, lazy, on, onMount, Show } from "solid-js";
 import { Router, useNavigate, useRoutes } from "@solidjs/router";
 import { Clipboard } from "@capacitor/clipboard";
 import NavBar from "./components/NavBar";
@@ -20,12 +11,9 @@ import { DeviceProvider } from "./contexts/Device";
 import { StorageProvider } from "./contexts/Storage";
 import NotificationPopup from "./components/NotificationPopup";
 import { BiSolidCopyAlt } from "solid-icons/bi";
-import BackgroundLogo from "./components/BackgroundLogo";
-import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
 import { LogsProvider, useLogsContext } from "./contexts/LogsContext";
 import * as Sentry from "@sentry/solid";
 import { withSentryRouterRouting } from "@sentry/solid/solidrouter";
-import { Portal } from "solid-js/web";
 import ConsentPopup from "./components/ConsentPopup";
 
 const routes = [
