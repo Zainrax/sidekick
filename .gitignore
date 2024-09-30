@@ -114,3 +114,12 @@ fastlane/test_output
 
 iOSInjectionProject/
 /build
+
+# Sentry Config File
+.env.sentry-build-plugin
+
+# Ignore unencrypted signing files
+signing.tar
+android-keystore.jks
+api.json
+keystore.properties

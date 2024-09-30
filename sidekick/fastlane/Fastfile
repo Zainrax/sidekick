@@ -16,31 +16,34 @@
 default_platform(:android)
 
 platform :android do
-  desc "Runs all the tests"
-  lane :test do
-    gradle(task: "test")
-  end
-
-
-
-  desc "Submit a new Beta Build to Playstore"
+  desc "Build and upload the app to Google Play Alpha track"
   lane :alpha do
-    gradle(task: 'bundle', build_type: 'Release')
+    # Load keystore properties
+    keystore_properties = {}
+    File.open("keystore.properties") do |file|
+      file.each_line do |line|
+        key, value = line.strip.split('=')
+        keystore_properties[key] = value
+      end
+    end
+
+    # Configure signing
+    gradle(
+      task: "assemble",
+      build_type: "Release",
+      properties: {
+        "android.injected.signing.store.file" => keystore_properties["storeFile"],
+        "android.injected.signing.store.password" => keystore_properties["storePassword"],
+        "android.injected.signing.key.alias" => keystore_properties["keyAlias"],
+        "android.injected.signing.key.password" => keystore_properties["keyPassword"]
+      }
+    )
+
+    # Upload to Google Play
     upload_to_play_store(
       track: 'alpha',
-      skip_upload_apk:true
+      aab: 'app/build/outputs/bundle/release/app-release.aab',
+      json_key: "api.json"
     )
   end
-
-  desc "Update meta data on playstore"
-  lane :update_meta do
-    upload_to_play_store(
-      skip_upload_metadata: false,
-      skip_upload_images: false,
-      skip_upload_screenshots: false,
-      skip_upload_apk: true,
-      skip_upload_aab: true,
-    )
-  end
-
 end
