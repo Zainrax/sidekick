@@ -23,7 +23,8 @@ import { BiSolidCopyAlt } from "solid-icons/bi";
 import BackgroundLogo from "./components/BackgroundLogo";
 import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
 import { LogsProvider, useLogsContext } from "./contexts/LogsContext";
-import * as Sentry from "@sentry/capacitor";
+import * as Sentry from "@sentry/solid";
+import { withSentryRouterRouting } from "@sentry/solid/solidrouter";
 import { Portal } from "solid-js/web";
 import ConsentPopup from "./components/ConsentPopup";
 
@@ -114,13 +115,14 @@ const writeToClipboard = async (err: unknown) => {
 };
 
 export default function Root() {
+  const SentryRouter = withSentryRouterRouting(Router);
+  const SentryErrorBoundary = Sentry.withSentryErrorBoundary(ErrorBoundary);
   return (
     <main class="h-screen bg-gray-200">
-      <Router>
-        <ErrorBoundary
+      <SentryRouter>
+        <SentryErrorBoundary
           fallback={(err) => {
             console.trace(err);
-            Sentry.captureException(err);
             return (
               <div class="z-20 flex h-full w-screen flex-col items-center justify-center bg-white">
                 <h1 class="text-2xl font-bold">Something went wrong</h1>
@@ -161,8 +163,8 @@ export default function Root() {
               </UserProvider>
             </LogsProvider>
           </HeaderProvider>
-        </ErrorBoundary>
-      </Router>
+        </SentryErrorBoundary>
+      </SentryRouter>
     </main>
   );
 }

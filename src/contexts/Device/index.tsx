@@ -567,8 +567,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     const now = Date.now();
     for (const device of devices.values()) {
       const timeDiff = now - device.timeFound.getTime();
-      if (!device.isConnected && timeDiff > 600000) {
-        // If the device hasn't been connected for more than 10 minutes
+      // If the device hasn't been connected for more than 3 minutes
+      if (!device.isConnected && timeDiff > 60 * 1000 * 3) {
         devices.delete(device.id);
       }
     }
@@ -689,12 +689,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     await setupListeners();
     monitorAPConnection();
 
-    const discoveryInterval = setInterval(() => {
-      searchDevice();
-    }, 30000); // Every 20 seconds
+    //const discoveryInterval = setInterval(() => {
+    //  searchDevice();
+    //}, 30000); // Every 20 seconds
 
     onCleanup(() => {
-      clearInterval(discoveryInterval);
+      // clearInterval(discoveryInterval);
       cleanupListeners();
     });
   });

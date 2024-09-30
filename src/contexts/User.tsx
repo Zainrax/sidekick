@@ -61,11 +61,13 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
             message: "An unknown error occurred while fetching user data",
           });
         }
-        const user = UserSchema.parse(JSON.parse(storedUser.value));
-        setServer(user.prod ? "prod" : "test");
-        getValidUser(user);
-
-        return user;
+        const storedUser = await Preferences.get({ key: "user" });
+        if (storedUser.value) {
+          const user = UserSchema.parse(JSON.parse(storedUser.value));
+          setServer(user.prod ? "prod" : "test");
+          getValidUser(user);
+          return user;
+        }
       }
       return null;
     }
@@ -385,13 +387,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       log.logSuccess({ message: "Account deletion requested successfully" });
       return value;
     } catch (error) {
-      if (error instanceof Error) {
-        log.logError({ message: "Failed to request account deletion", error });
-      } else {
-        log.logError({
-          message: "Unknown error during account deletion request",
-        });
-      }
+      log.logError({ message: "Failed to request account deletion", error });
       throw error;
     }
   }
@@ -443,52 +439,54 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   };
 
-  const [groups, { refetch: refetchGroups }] = createResource(
-    () => [data(), getServerUrl()] as const,
-    async ([_, url]) => {
-      try {
-        const user = await getUser();
-        if (!url || !user) {
-          console.warn({
-            message: "Cannot fetch groups without server URL or user",
-          });
-          return await getCachedGroups();
-        }
+  const [groups, { refetch: refetchGroups, mutate: mutateGroups }] =
+    createResource(
+      () => [data(), getServerUrl()] as const,
+      async ([_, url]) => {
+        try {
+          const user = await getUser();
+          const groups = await getCachedGroups();
+          if (!url || !user) {
+            console.warn({
+              message: "Cannot fetch groups without server URL or user",
+            });
+            return groups;
+          }
 
-        const res = await unbindAndRebind(async () => {
-          return await CapacitorHttp.request({
+          CapacitorHttp.request({
             method: "GET",
             url: `${url}/api/v1/groups`,
             headers: {
               Authorization: user.token,
             },
-          });
-        });
+          }).then(async (res) => {
+            const result = GroupsResSchema.safeParse(res.data);
+            if (
+              !result.success ||
+              !result.data.success ||
+              result.data.groups.length === 0
+            ) {
+              console.warn({
+                message: "Failed to fetch groups, using cached data",
+              });
+              return;
+            }
+            mutateGroups(result.data.groups);
 
-        const result = GroupsResSchema.safeParse(res.data);
-        if (
-          !result.success ||
-          !result.data.success ||
-          result.data.groups.length === 0
-        ) {
-          console.warn({
-            message: "Failed to fetch groups, using cached data",
+            await Preferences.set({
+              key: "groups",
+              value: JSON.stringify(result.data.groups),
+            });
           });
+
+          console.info("Groups fetched successfully");
+          return groups;
+        } catch (e) {
+          log.logError({ message: "Error fetching groups", error: e });
           return await getCachedGroups();
         }
-
-        await Preferences.set({
-          key: "groups",
-          value: JSON.stringify(result.data.groups),
-        });
-        console.info("Groups fetched successfully");
-        return result.data.groups;
-      } catch (e) {
-        log.logError({ message: "Error fetching groups", error: e });
-        return await getCachedGroups();
       }
-    }
-  );
+    );
 
   async function hasAccessToGroup(name: string): Promise<boolean> {
     try {
