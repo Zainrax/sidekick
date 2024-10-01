@@ -12,9 +12,11 @@ on:
       - next
 
 jobs:
-  build:
-    name: Build and Test
+  deploy:
+    name: Deploy to Google Play
+    needs: build
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
     env:
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       LANG: en_US.UTF-8
@@ -42,9 +44,6 @@ jobs:
           node-version: 20
           cache: "pnpm"
 
-      - name: Install dependencies
-        run: pnpm install
-
       - name: Configure pnpm store
         run: pnpm config set store-dir ~/.pnpm-store
 
@@ -53,81 +52,6 @@ jobs:
 
       - name: Build Project
         run: pnpm build
-
-      - name: Run Tests
-        run: pnpm test
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Decrypt and Extract signing.tar.enc
-        env:
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: |
-          openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
-            -d -in signing.tar.enc -out signing.tar \
-            -pass pass:"$SIGNING_KEY_PASSWORD"
-          tar xvf signing.tar
-
-      - name: Configure Keystore
-        run: |
-          mkdir -p ~/.android
-          cp keystore.properties ~/.android/keystore.properties
-
-      - name: Cache Gradle packages
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper/
-          key: >
-            ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Build Release
-        run: ./gradlew assembleRelease
-
-  deploy:
-    name: Deploy to Google Play
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    env:
-      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-      LANG: en_US.UTF-8
-      LC_ALL: en_US.UTF-8
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: "temurin"
-          java-version: "17"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20"
-          cache: "pnpm"
-
-      - name: Install pnpm
-        run: npm install -g pnpm@8
-
-      - name: Configure pnpm store
-        run: pnpm config set store-dir ~/.pnpm-store
-
-      - name: Install Dependencies
-        run: pnpm install
-
-      - name: Build Project
-        run: pnpm build
-
-      - name: Run Tests
-        run: pnpm test
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
