@@ -142,14 +142,12 @@ jobs:
           cp keystore.properties ~/.android/keystore.properties
           cp android-keystore.jks ~/.android/android-keystore.jks
 
-      - name: Install Ruby and Bundler
-        run: |
-          gem install bundler
-
-      - name: Install Fastlane Dependencies
-        working-directory: sidekick # If your Gemfile is in 'sidekick'
-        run: bundle install
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.0"
+          bundler-cache: true
 
       - name: Build and Deploy with Fastlane
-        working-directory: sidekick # If your 'fastlane' directory is in 'sidekick'
+        working-directory: sidekick # Adjust if your Fastfile is elsewhere
         run: bundle exec fastlane alpha
