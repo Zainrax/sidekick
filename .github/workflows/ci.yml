@@ -131,26 +131,25 @@ jobs:
         env:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
-          cd sidekick
           openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
-            -d -in signing.tar.enc -out signing.tar \
+            -d -in sidekick/signing.tar.enc -out signing.tar \
             -pass pass:"$SIGNING_KEY_PASSWORD"
           tar xvf signing.tar
 
       - name: Configure Keystore
         run: |
           mkdir -p ~/.android
-          cp sidekick/keystore.properties ~/.android/keystore.properties
+          cp keystore.properties ~/.android/keystore.properties
+          cp android-keystore.jks ~/.android/android-keystore.jks
 
-      - name: Install Fastlane
-        run: sudo gem install fastlane
-
-      - name: Set up Fastlane Environment Variables
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/api.json
+      - name: Install Ruby and Bundler
         run: |
-          echo "GOOGLE_PLAY_JSON_KEY=api.json" >> $GITHUB_ENV
+          gem install bundler
+
+      - name: Install Fastlane Dependencies
+        working-directory: sidekick # If your Gemfile is in 'sidekick'
+        run: bundle install
 
       - name: Build and Deploy with Fastlane
-        run: |
-          fastlane alpha
+        working-directory: sidekick # If your 'fastlane' directory is in 'sidekick'
+        run: bundle exec fastlane alpha
