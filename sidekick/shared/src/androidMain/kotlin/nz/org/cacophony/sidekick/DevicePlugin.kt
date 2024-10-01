@@ -38,14 +38,18 @@ class DevicePlugin : Plugin() {
     private var wifiNetwork: Network? = null
     var currNetworkCallback: ConnectivityManager.NetworkCallback? = null
     private var cm: ConnectivityManager? = null
-//    private lateinit var multicastLock: WifiManager.MulticastLock
+    private lateinit var multicastLock: WifiManager.MulticastLock
     private var isDiscovering: Boolean = false
+
+    // Add a flag to keep track of whether to use the multicast lock
+    private var useMulticastLock = false
+    private var multicastLockUsedInCurrentDiscovery = false
 
     override fun load() {
         super.load()
         device = DeviceInterface(context.applicationContext.filesDir.absolutePath)
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-//        multicastLock = wifi.createMulticastLock("multicastLock")
+        multicastLock = wifi.createMulticastLock("multicastLock")
     }
 
     enum class CallType {
@@ -59,7 +63,14 @@ class DevicePlugin : Plugin() {
         }
 
         isDiscovering = true
-//        multicastLock.acquire()
+
+        // Set the flag for the current discovery
+        multicastLockUsedInCurrentDiscovery = useMulticastLock
+
+        // Acquire the multicast lock if needed
+        if (useMulticastLock) {
+            multicastLock.acquire()
+        }
 
         nsdHelper = object : NsdHelper(context.applicationContext) {
             override fun onNsdServiceResolved(service: NsdServiceInfo) {
@@ -82,7 +93,10 @@ class DevicePlugin : Plugin() {
 
             override fun onDiscoveryFailed(e: Exception) {
                 val error = JSObject()
-//                multicastLock.release()
+                // Release the multicast lock if it was used
+                if (multicastLockUsedInCurrentDiscovery && multicastLock.isHeld) {
+                    multicastLock.release()
+                }
                 try {
                     error.put("message", e.message ?: "Unknown error during discovery")
                 } catch (je: JSONException) {
@@ -96,15 +110,11 @@ class DevicePlugin : Plugin() {
         nsdHelper.initializeNsd()
         nsdHelper.discoverServices()
 
+        // Flip the flag for the next discovery attempt
+        useMulticastLock = !useMulticastLock
+
         // Resolve the call
         call.resolve()
-    }
-
-    private fun hasLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
     @PluginMethod
@@ -116,7 +126,10 @@ class DevicePlugin : Plugin() {
             return
         }
         try {
-//            multicastLock.release()
+            // Release the multicast lock if it was used
+            if (multicastLockUsedInCurrentDiscovery && multicastLock.isHeld) {
+                multicastLock.release()
+            }
             nsdHelper.stopDiscovery()
             isDiscovering = false
             result.put("success", true)

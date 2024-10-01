@@ -11,13 +11,12 @@ import {
   createResource,
 } from "solid-js";
 import * as Sentry from "@sentry/capacitor";
-import * as SentryBrowser from "@sentry/browser";
+import * as SentrySolid from "@sentry/solid";
 import { User, useUserContext } from "./User"; // Import User context
 import { useLocation } from "@solidjs/router"; // Import router location
 import { Preferences } from "@capacitor/preferences";
-import { createRequire } from "module";
-import { replayCanvasIntegration } from "@sentry/browser";
 import { Primitive } from "zod";
+import { browserTracingIntegration } from "@sentry/capacitor";
 
 export enum TracingLevel {
   NON_PERSONALIZED = "non_personalized",
@@ -77,6 +76,10 @@ const [LogsProvider, useLogsContext] = createContextProvider(() => {
   const [userData, setUser] = createSignal<User | null>();
   onMount(() => {
     Sentry.init({
+      integrations: [
+        SentrySolid.browserTracingIntegration(),
+        SentrySolid.replayIntegration(),
+      ],
       dsn: "https://0af3453887927768a693178c3604d01f@o4507970723971072.ingest.us.sentry.io/4507970755493888",
       tracesSampleRate: 0.2,
     });

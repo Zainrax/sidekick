@@ -667,69 +667,80 @@ export function CameraSettingsTab(props: SettingProps) {
     return true;
   };
 
+  const [isAudio] = createResource(() => context.getAudioMode(id()));
+
   return (
     <section>
       <Show
-        when={isRecieving()}
+        when={isAudio.loading || isAudio() !== "AudioOnly"}
         fallback={
-          <div
-            style={{
-              height: "269px",
-            }}
-            class="flex h-full items-center justify-center gap-x-2 bg-slate-50"
-          >
-            <FaSolidSpinner class="animate-spin" size={32} />
-            <p>Starting Camera...</p>
-          </div>
+          <p class="w-full p-8 text-center text-2xl text-neutral-600">
+            Preview not available in audio only mode.
+          </p>
         }
       >
-        <div class="relative">
-          <canvas
-            ref={frameCanvas}
-            id="frameCanvas"
-            width="160"
-            height="120"
-            class="w-full"
-          />
-          <canvas
-            ref={trackCanvas}
-            id="trackCanvas"
-            width="160"
-            height="120"
-            class="absolute left-0 top-0 z-10 w-full"
-          />
-        </div>
+        <Show
+          when={isRecieving()}
+          fallback={
+            <div
+              style={{
+                height: "269px",
+              }}
+              class="flex h-full items-center justify-center gap-x-2 bg-slate-50"
+            >
+              <FaSolidSpinner class="animate-spin" size={32} />
+              <p>Starting Camera...</p>
+            </div>
+          }
+        >
+          <div class="relative">
+            <canvas
+              ref={frameCanvas}
+              id="frameCanvas"
+              width="160"
+              height="120"
+              class="w-full"
+            />
+            <canvas
+              ref={trackCanvas}
+              id="trackCanvas"
+              width="160"
+              height="120"
+              class="absolute left-0 top-0 z-10 w-full"
+            />
+          </div>
+        </Show>
+        <button
+          ref={triggerTrap}
+          style="position: relative;display: none"
+          type="button"
+        >
+          Trigger trap
+        </button>
+        <button
+          class="flex w-full items-center justify-center space-x-2 rounded-b-lg bg-blue-500 py-3 text-white"
+          onClick={() => createTestRecording()}
+          disabled={recording()}
+        >
+          <Switch>
+            <Match when={recording()}>
+              <p>Recording...</p>
+              <FaSolidSpinner class="animate-spin" size={24} />
+            </Match>
+            <Match when={result() === "success"}>
+              <p>Success!</p>
+              <FaSolidCheck size={24} />
+            </Match>
+            <Match when={result() === "failed"}>
+              <ImCross size={12} />
+            </Match>
+            <Match when={!recording() && !result()}>
+              <p>Test Recording</p>
+              <FaSolidVideo size={24} />
+            </Match>
+          </Switch>
+        </button>
       </Show>
-      <button
-        ref={triggerTrap}
-        style="position: relative;display: none"
-        type="button"
-      >
-        Trigger trap
-      </button>
-      <button
-        class="flex w-full items-center justify-center space-x-2 rounded-b-lg bg-blue-500 py-3 text-white"
-        onClick={() => createTestRecording()}
-        disabled={recording()}
-      >
-        <Switch>
-          <Match when={recording()}>
-            <p>Recording...</p>
-            <FaSolidSpinner class="animate-spin" size={24} />
-          </Match>
-          <Match when={result() === "success"}>
-            <p>Success!</p>
-            <FaSolidCheck size={24} />
-          </Match>
-          <Match when={result() === "failed"}>
-            <ImCross size={12} />
-          </Match>
-          <Match when={!recording() && !result()}>
-            <p>Test Recording</p>
-            <FaSolidVideo size={24} />
-          </Match>
-        </Switch>
-      </button>
       <div class="px-6 py-2">
         <h1 class="font-semibold text-gray-800">Recording Window</h1>
         <div class="flex w-full justify-between">
@@ -2549,7 +2560,6 @@ export function DeviceSettingsModal() {
     () => params.deviceSettings,
     async (id) => {
       const res = await context.hasAudioCapabilities(id);
-      console.log("HAS AUDIO", res);
       return res;
     }
   );
@@ -2561,6 +2571,18 @@ export function DeviceSettingsModal() {
       return items;
     }
   };
+
+  const textSizeClass = createMemo(() => {
+    const numItems = navItems().length;
+    if (numItems <= 4) {
+      return "text-base";
+    } else if (numItems === 5) {
+      return "text-sm";
+    } else if (numItems >= 6) {
+      return "text-xs";
+    }
+  });
+
   const isConnected = () =>
     context.devices.get(params.deviceSettings)?.isConnected;
 
@@ -2600,7 +2622,7 @@ export function DeviceSettingsModal() {
                 <ImCross size={12} />
               </button>
             </header>
-            <nav class="flex w-full justify-between">
+            <nav class={`flex w-full justify-between ${textSizeClass()}`}>
               <For each={navItems()}>
                 {(nav) => (
                   <button

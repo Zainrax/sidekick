@@ -42,7 +42,7 @@ include ':capacitor-preferences'
 project(':capacitor-preferences').projectDir = new File('../node_modules/.pnpm/@capacitor+preferences@6.0.1_@capacitor+core@6.1.1/node_modules/@capacitor/preferences/android')
 
 include ':sentry-capacitor'
-project(':sentry-capacitor').projectDir = new File('../node_modules/.pnpm/@sentry+capacitor@0.19.0_@capacitor+core@6.1.1/node_modules/@sentry/capacitor/android')
+project(':sentry-capacitor').projectDir = new File('../node_modules/.pnpm/@sentry+capacitor@1.0.0_@capacitor+core@6.1.1/node_modules/@sentry/capacitor/android')
 
 include ':capacitor-native-settings'
 project(':capacitor-native-settings').projectDir = new File('../node_modules/.pnpm/capacitor-native-settings@6.0.0_@capacitor+core@6.1.1/node_modules/capacitor-native-settings/android')
