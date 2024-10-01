@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build and Test
+    name: Deploy
     runs-on: ubuntu-latest
     env:
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
@@ -48,19 +48,6 @@ jobs:
 
       - name: Build Project
         run: pnpm build
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Decrypt and Extract signing.tar.enc
-        env:
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: |
-          cd sidekick
-          openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
-            -d -in signing.tar.enc -out signing.tar \
-            -pass pass:"$SIGNING_KEY_PASSWORD"
-          tar xvf signing.tar
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
