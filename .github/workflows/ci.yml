@@ -62,10 +62,23 @@ jobs:
             -pass pass:"$SIGNING_KEY_PASSWORD"
           tar xvf signing.tar
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Decrypt and Extract signing.tar.enc
+        run: |
+          openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
+            -d -in signing.tar.enc -out signing.tar \
+            -pass pass:"$SIGNING_KEY_PASSWORD"
+          tar xvf signing.tar --strip-components=1
+        working-directory: sidekick
+
       - name: Configure Keystore
         run: |
           mkdir -p ~/.android
-          cp sidekick/keystore.properties ~/.android/keystore.properties
+          cp keystore.properties ~/.android/keystore.properties
+          cp android-keystore.jks ~/.android/android-keystore.jks
+        working-directory: sidekick
 
       - name: Cache Gradle packages
         uses: actions/cache@v3
@@ -78,76 +91,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Build Release
-        run: |
-          cd sidekick
-          ./gradlew assembleRelease
-
-  deploy:
-    name: Deploy to Google Play
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    env:
-      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-      LANG: en_US.UTF-8
-      LC_ALL: en_US.UTF-8
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: "temurin"
-          java-version: "17"
-
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          version: 9
-          run_install: false
-
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: "pnpm"
-
-      - name: Configure pnpm store
-        run: pnpm config set store-dir ~/.pnpm-store
-
-      - name: Install Dependencies
-        run: pnpm install
-
-      - name: Build Project
-        run: pnpm build
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Decrypt and Extract signing.tar.enc
-        env:
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: |
-          openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
-            -d -in sidekick/signing.tar.enc -out signing.tar \
-            -pass pass:"$SIGNING_KEY_PASSWORD"
-          tar xvf signing.tar
-
-      - name: Configure Keystore
-        run: |
-          mkdir -p ~/.android
-          cp keystore.properties ~/.android/keystore.properties
-          cp android-keystore.jks ~/.android/android-keystore.jks
+      - name: Make gradlew Executable
+        run: chmod +x ./gradlew
+        working-directory: sidekick
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.0"
-          bundler-cache: true
+          ruby-version: "3.0" # Specify the Ruby version you need
+          bundler-cache: true # Automatically caches gems
 
       - name: Build and Deploy with Fastlane
-        working-directory: sidekick # Adjust if your Fastfile is elsewhere
+        working-directory: sidekick # Directory containing Fastfile
         run: bundle exec fastlane alpha

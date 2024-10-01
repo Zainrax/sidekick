@@ -33,7 +33,7 @@ platform :android do
     # Upload to Google Play
     upload_to_play_store(
       track: 'alpha',
-      aab: 'app/build/outputs/bundle/release/app-release.aab',
+      aab: 'app/build/outputs/bundle/release/app-release.aab',   # Correct relative path
       json_key: ENV['GOOGLE_PLAY_JSON_KEY']
     )
   end
