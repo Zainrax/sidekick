@@ -72,7 +72,7 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
-                      -d -in sidekick/signing.tar.enc -out signing.tar \
+                      -d -in signing.tar.enc -out signing.tar \
                       -pass pass:"$SIGNING_KEY_PASSWORD"
           tar xvf signing.tar
         working-directory: sidekick
