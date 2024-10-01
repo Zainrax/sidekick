@@ -153,5 +153,4 @@ jobs:
 
       - name: Build and Deploy with Fastlane
         run: |
-          cd sidekick
           fastlane alpha
