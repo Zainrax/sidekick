@@ -70,7 +70,7 @@ jobs:
       - name: Configure Keystore
         run: |
           mkdir -p ~/.android
-          cp keystore.properties ~/.android/keystore.properties
+          cp sidekick/keystore.properties ~/.android/keystore.properties
 
       - name: Cache Gradle packages
         uses: actions/cache@v3
@@ -84,7 +84,9 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: Build Release
-        run: ./gradlew assembleRelease
+        run: |
+          cd sidekick
+          ./gradlew assembleRelease
 
   deploy:
     name: Deploy to Google Play
@@ -134,6 +136,7 @@ jobs:
         env:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
+          cd sidekick
           openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
             -d -in signing.tar.enc -out signing.tar \
             -pass pass:"$SIGNING_KEY_PASSWORD"
@@ -142,7 +145,7 @@ jobs:
       - name: Configure Keystore
         run: |
           mkdir -p ~/.android
-          cp keystore.properties ~/.android/keystore.properties
+          cp sidekick/keystore.properties ~/.android/keystore.properties
 
       - name: Install Fastlane
         run: sudo gem install fastlane
@@ -154,4 +157,6 @@ jobs:
           echo "GOOGLE_PLAY_JSON_KEY=api.json" >> $GITHUB_ENV
 
       - name: Build and Deploy with Fastlane
-        run: fastlane alpha
+        run: |
+          cd sidekick
+          fastlane alpha
