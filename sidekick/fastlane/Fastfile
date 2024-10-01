@@ -21,7 +21,7 @@ platform :android do
       task: "assemble",
       build_type: "Release",
       project_dir: "sidekick", # Specify the relative path to your Android project
-      gradle_path: "sidekick/gradlew", # Specify the path to your gradlew script
+      gradle_path: "gradlew", # Specify the path to your gradlew script
       properties: {
         "android.injected.signing.store.file" => File.expand_path("~/.android/android-keystore.jks"),
         "android.injected.signing.store.password" => keystore_properties["storePassword"],
