@@ -20,8 +20,10 @@ platform :android do
     gradle(
       task: "assemble",
       build_type: "Release",
+      project_dir: "sidekick", # Specify the relative path to your Android project
+      gradle_path: "sidekick/gradlew", # Specify the path to your gradlew script
       properties: {
-        "android.injected.signing.store.file" => keystore_properties["storeFile"],
+        "android.injected.signing.store.file" => File.expand_path("~/.android/android-keystore.jks"),
         "android.injected.signing.store.password" => keystore_properties["storePassword"],
         "android.injected.signing.key.alias" => keystore_properties["keyAlias"],
         "android.injected.signing.key.password" => keystore_properties["keyPassword"]
@@ -31,7 +33,7 @@ platform :android do
     # Upload to Google Play
     upload_to_play_store(
       track: 'alpha',
-      aab: 'app/build/outputs/bundle/release/app-release.aab',
+      aab: 'sidekick/app/build/outputs/bundle/release/app-release.aab',
       json_key: ENV['GOOGLE_PLAY_JSON_KEY']
     )
   end
