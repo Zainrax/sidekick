@@ -15,7 +15,7 @@ if (performSigning) {
 val sdk = 34
 val minSdkVersion = 22
 val majorVersion = 3
-val minorVersion = 7
+val minorVersion = 8
 val patchVersion = 0
 android {
     buildToolsVersion = "34.0.0"
