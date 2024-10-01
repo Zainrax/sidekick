@@ -1,0 +1,6 @@
+framework module SentryCapacitor {
+  umbrella header "SentryCapacitor-umbrella.h"
+
+  export *
+  module * { export * }
+}

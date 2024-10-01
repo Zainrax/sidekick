@@ -220,6 +220,7 @@ export interface DevicePlugin {
   unbindConnection(): Promise<void>;
   hasConnection(): Result;
   getTestText(): Promise<{ text: string }>;
+  checkPermissions(): Promise<{granted: boolean}>
 }
 
 export const DevicePlugin = registerPlugin<DevicePlugin>("Device");

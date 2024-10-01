@@ -44,6 +44,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "disconnectFromDeviceAP",returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "turnOnModem",returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "reregisterDevice",returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "checkPermissions",returnType: CAPPluginReturnPromise),
     ]
     
     enum CallType {
@@ -83,6 +84,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             return nil
         }
     }
+    
     @objc func discoverDevices(_ call: CAPPluginCall) {
         if isDiscovering {
             call.reject("Currently discovering")
@@ -390,5 +392,183 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             // Fallback on earlier versions
             call.resolve(["success": true, "data": "default"])
         }
+    }
+    enum PermissionState: String {
+        case granted
+        case denied
+        case prompt
+    }
+    
+    @objc override public func checkPermissions(_ call: CAPPluginCall) {
+        let serviceType = "_preflight_check._tcp"
+        let domain = "local."
+        let queue = DispatchQueue(label: "LocalNetworkPermissionCheckQueue")
+        
+        var listener: NWListener?
+        var browser: NWBrowser?
+        var didComplete = false
+        
+        // Define the Policy Denied error code
+        let kDNSServiceErr_PolicyDenied: Int32 = -72007
+        
+        do {
+            let parameters = NWParameters.tcp
+            listener = try NWListener(using: parameters)
+            listener?.service = NWListener.Service(name: UUID().uuidString, type: serviceType)
+            listener?.newConnectionHandler = { _ in } // Must be set or else the listener will error with POSIX error 22
+        } catch {
+            call.reject("Failed to create NWListener: \(error.localizedDescription)")
+            return
+        }
+        
+        listener?.stateUpdateHandler = { newState in
+            switch newState {
+            case .ready:
+                // Listener is ready
+                break
+            case .failed(let error):
+                // Handle failure with error
+                if !didComplete {
+                    didComplete = true
+                    listener?.cancel()
+                    browser?.cancel()
+                    DispatchQueue.main.async {
+                        call.reject("Listener failed with error: \(error.localizedDescription)")
+                    }
+                }
+            case .cancelled:
+                // Handle cancellation without error
+                if !didComplete {
+                    didComplete = true
+                    browser?.cancel()
+                    DispatchQueue.main.async {
+                        call.reject("Listener was cancelled")
+                    }
+                }
+            default:
+                break
+            }
+        }
+        
+        let browserParameters = NWParameters()
+        browserParameters.includePeerToPeer = true
+        browser = NWBrowser(for: .bonjour(type: serviceType, domain: nil), using: browserParameters)
+        
+        browser?.stateUpdateHandler = { newState in
+            switch newState {
+            case .failed(let error):
+                // Handle browser failure with error
+                if !didComplete {
+                    didComplete = true
+                    listener?.cancel()
+                    browser?.cancel()
+                    DispatchQueue.main.async {
+                        call.reject("Browser failed with error: \(error.localizedDescription)")
+                    }
+                }
+            case .cancelled:
+                // Handle browser cancellation without error
+                if (!didComplete) {
+                    didComplete = true
+                    listener?.cancel()
+                    DispatchQueue.main.async {
+                        call.reject("Browser was cancelled")
+                    }
+                }
+            case .waiting(let error):
+                // Handle waiting state to check for policy denied
+                if case let NWError.dns(dnsError) = error, dnsError == kDNSServiceErr_PolicyDenied {
+                    if !didComplete {
+                        didComplete = true
+                        listener?.cancel()
+                        browser?.cancel()
+                        DispatchQueue.main.async {
+                            call.resolve(["granted": false])
+                        }
+                    }
+                }
+            default:
+                break
+            }
+        }
+        
+        browser?.browseResultsChangedHandler = { results, changes in
+            if !didComplete {
+                for result in results {
+                    if case let .service(name, _, _, _) = result.endpoint, name == listener?.service?.name {
+                        // Permission granted
+                        didComplete = true
+                        listener?.cancel()
+                        browser?.cancel()
+                        DispatchQueue.main.async {
+                            call.resolve(["granted": true])
+                        }
+                        break
+                    }
+                }
+            }
+        }
+        
+        listener?.start(queue: queue)
+        browser?.start(queue: queue)
+        
+        // Set a timeout to prevent indefinite waiting
+        queue.asyncAfter(deadline: .now() + 5) {
+            if !didComplete {
+                didComplete = true
+                listener?.cancel()
+                browser?.cancel()
+                // Assume permission is denied after timeout
+                DispatchQueue.main.async {
+                    call.resolve(["granted": false])
+                }
+            }
+        }
+    }
+}
+class LocalNetworkPrivacy : NSObject {
+    let service: NetService
+
+    var completion: ((Bool) -> Void)?
+    var timer: Timer?
+    var publishing = false
+    
+    override init() {
+        service = .init(domain: "local.", type:"_lnp._tcp.", name: "LocalNetworkPrivacy", port: 1100)
+        super.init()
+    }
+    
+    @objc
+    func checkAccessState(completion: @escaping (Bool) -> Void) {
+        self.completion = completion
+        
+        timer = .scheduledTimer(withTimeInterval: 2, repeats: true, block: { timer in
+            guard UIApplication.shared.applicationState == .active else {
+                return
+            }
+            
+            if self.publishing {
+                self.timer?.invalidate()
+                self.completion?(false)
+            }
+            else {
+                self.publishing = true
+                self.service.delegate = self
+                self.service.publish()
+                
+            }
+        })
+    }
+    
+    deinit {
+        service.stop()
+    }
+}
+
+extension LocalNetworkPrivacy : NetServiceDelegate {
+    
+    func netServiceDidPublish(_ sender: NetService) {
+        timer?.invalidate()
+        completion?(true)
     }
 }

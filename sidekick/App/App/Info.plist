@@ -49,6 +49,7 @@
 	<true/>
 	<key>NSBonjourServices</key>
 	<array>
+		<string>_preflight_check._tcp</string>
 		<string>_cacophonator-management._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>

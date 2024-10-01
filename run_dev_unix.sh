@@ -23,4 +23,4 @@ else
   PLATFORM='android'
 fi
 
-ionic cap run $PLATFORM -l --external --port=5173 --public-host="localhost"
+ionic cap run $PLATFORM -l --external --port=5173 --public-host="192.168.1.4"

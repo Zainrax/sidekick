@@ -31,7 +31,6 @@
 	"packageClassList": [
 		"KeepAwakePlugin",
 		"CapacitorSQLitePlugin",
-		"FirebaseAnalyticsPlugin",
 		"FirebaseCrashlyticsPlugin",
 		"AppPlugin",
 		"CAPBrowserPlugin",

@@ -20,6 +20,7 @@ import {
   Switch,
   createEffect,
   createSignal,
+  createResource,
   on,
   onCleanup,
   onMount,
@@ -34,6 +35,11 @@ import { useDevice } from "~/contexts/Device";
 import { useLogsContext } from "~/contexts/LogsContext";
 import { useStorage } from "~/contexts/Storage";
 import { useUserContext } from "~/contexts/User";
+import { DevicePlugin } from "../../contexts/Device";
+import { NativeSettings } from "capacitor-native-settings/dist/esm";
+import { IOSSettings } from "capacitor-native-settings/dist/esm";
+import { AndroidSettings } from "capacitor-native-settings/dist/esm";
+import { App } from "@capacitor/app/dist/esm";
 
 interface DeviceDetailsProps {
   id: string;
@@ -419,6 +425,23 @@ function Devices() {
     setSearchParams({ step: "chooseDevice" });
   };
 
+  const [permission, {refetch}] = createResource(async()=>{
+    try {
+      const res = await DevicePlugin.checkPermissions();
+      console.log("PERMISSIONS", res.granted)
+      return res.granted
+    } catch (error) {
+      console.error("Permissions Error:", error)
+      return null
+    }
+  })
+
+  onMount(() => {
+    App.addListener("appStateChange", () => {
+      refetch()
+    })
+  })
+
   return (
     <>
       <section class="pb-bar pt-bar relative z-20 space-y-2 overflow-y-auto px-2">
@@ -467,6 +490,16 @@ function Devices() {
             <Show when={context.devices.size <= 0}>
               <p class="mt-4 max-w-sm px-4 text-center text-sm text-neutral-600">
                 No devices detected.
+                <Show when={permission() === false}>
+                <br />
+                  <p class="text-md font-medium text-neutral-800">Cannot access local network. Please check "Local Network" permission is enabled.</p>
+                    <button class={"text-blue-600"} onClick={() => {
+                      NativeSettings.open({
+                        optionAndroid: AndroidSettings.ApplicationDetails,
+                        optionIOS: IOSSettings.App,
+                      })
+                    }}>Open Permission Settings</button>
+                </Show>
                 <br />
                 Follow the instructions in "Find Device" below. You can connect
                 to a device using the top right
