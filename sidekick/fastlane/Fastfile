@@ -18,7 +18,7 @@ platform :android do
 
     # Configure signing
     gradle(
-      task: "assemble",
+      task: "bundle",
       build_type: "Release",
       project_dir: ".", # Specify the relative path to your Android project
       gradle_path: "./gradlew", # Specify the path to your gradlew script
