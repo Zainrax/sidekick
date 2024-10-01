@@ -83,15 +83,6 @@ jobs:
           cd sidekick
           ./gradlew assembleRelease
 
-      - name: Upload AAB to GitHub Release
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: sidekick/app/build/outputs/bundle/release/app-release.aab
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref }}
-          name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
   deploy:
     name: Deploy to Google Play
     needs: build
