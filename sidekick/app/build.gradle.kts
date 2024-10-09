@@ -16,7 +16,7 @@ val sdk = 34
 val minSdkVersion = 22
 val majorVersion = 3
 val minorVersion = 8
-val patchVersion = 0
+val patchVersion = 1
 android {
     buildToolsVersion = "34.0.0"
     namespace = "nz.org.cacophony.sidekick"

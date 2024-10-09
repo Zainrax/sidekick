@@ -1,0 +1,20 @@
+{
+  "version": 3,
+  "artifactType": {
+    "type": "APK",
+    "kind": "Directory"
+  },
+  "applicationId": "nz.org.cacophony.sidekick",
+  "variantName": "release",
+  "elements": [
+    {
+      "type": "SINGLE",
+      "filters": [],
+      "attributes": [],
+      "versionCode": 220030801,
+      "versionName": "3.8.1",
+      "outputFile": "app-release.apk"
+    }
+  ],
+  "elementType": "File"
+}
