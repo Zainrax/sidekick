@@ -59,6 +59,8 @@ export const asInt = z
   .transform((val) => (typeof val === "string" ? parseInt(val) : val));
 export const tc2ModemSchema = z
   .object({
+    failedToFindModem: z.boolean().optional(),
+    failedToFindSimCard: z.boolean().optional(),
     modem: z
       .object({
         connectedTime: z.string(),
@@ -73,7 +75,7 @@ export const tc2ModemSchema = z
         voltage: asInt,
         apn: z.string().optional(),
       })
-      .optional(),
+      .partial(),
     onOffReason: z.string(),
     powered: z.boolean(),
     signal: z
