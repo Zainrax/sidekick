@@ -110,10 +110,17 @@ export function AudioSettingsTab(props: SettingProps) {
     }, 5000);
   };
 
+  onMount(() => {
+    setInterval(() => {
+      if (!audioFiles.loading) {
+        refetchAudioFiles();
+      }
+    }, 5000);
+  });
+
   const [config] = createResource(id, async (id) => {
     if (!id) return null;
     const res = await context.getDeviceConfig(id);
-    console.log("Audio config", res);
     return res;
   });
 
@@ -198,7 +205,7 @@ export function AudioSettingsTab(props: SettingProps) {
               await context.setAudioMode(id(), value as AudioMode);
               refetchAudioMode();
             }}
-            value={audioMode() ?? "Disabled"}
+            value={audioMode() ?? "Loading..."}
             class="h-full w-full appearance-none bg-white pl-2"
           >
             <option value="Disabled">Disabled</option>
@@ -1117,7 +1124,7 @@ export function LocationSettingsTab(props: SettingProps) {
                 <span class="text-sm">Updating to Current Location...</span>
               }
             >
-              <span class="text-sm">Update to Current Location</span>
+              <span class="text-sm">Update Device Location</span>
             </Show>
             <FiMapPin size={18} />
           </button>
@@ -1135,8 +1142,8 @@ export function LocationSettingsTab(props: SettingProps) {
               <FiCloudOff size={18} />
             </div>
             <p class="flex space-x-2 text-sm text-blue-600">
-              Location will update when online and logged in as a member of the{" "}
-              "{device()?.group ?? "device's"}" group.
+              Unable to sync changes with server, please upload through
+              "Storage" when you have internet.
             </p>
           </div>
         )}
@@ -1628,7 +1635,11 @@ export function WifiSettingsTab(props: SettingProps) {
 
   const noSim = () => {
     const currModem = modem();
-    return currModem?.simCard?.simCardStatus.includes("not inserted") ?? false;
+    return (
+      currModem?.failedToFindSimCard ??
+      currModem?.simCard?.simCardStatus.includes("not inserted") ??
+      false
+    );
   };
 
   const [modemConnectedToInternet] = createResource(
@@ -1778,7 +1789,12 @@ export function WifiSettingsTab(props: SettingProps) {
                     >
                       <p>Checking Connection</p>
                     </Match>
-                    <Match when={modemConnectedToInternet() === "no-modem"}>
+                    <Match
+                      when={
+                        modem()?.failedToFindModem ||
+                        modemConnectedToInternet() === "no-modem"
+                      }
+                    >
                       <p>No Modem</p>
                     </Match>
                     <Match when={modemConnectedToInternet() === "connected"}>
@@ -2264,7 +2280,8 @@ export function GroupSelect(props: SettingProps) {
   const context = useDevice();
   const id = () => props.deviceId;
   const device = () => context.devices.get(id());
-  const groupName = () => device()?.group ?? "";
+  const groupName = () =>
+    (device()?.group ?? "-") === "new" ? "-" : device()?.group ?? "-";
   onMount(() => {
     try {
       const interval = setInterval(async () => {

@@ -6,6 +6,7 @@ import okio.FileSystem
 import okio.IOException
 import okio.Path
 import okio.Path.Companion.toPath
+import okio.buffer
 
 actual fun writeToFile(file: Path, data: ByteArray): Either<IOException,Path>  {
     return try {
@@ -65,5 +66,18 @@ actual fun deleteFile(path: Path): Either<IOException, Unit> {
         Unit.right()
     } catch (e: IOException) {
         Either.Left(e)
+    }
+}
+
+actual fun readAudioFile(path: Path): Either<IOException, AudioFileData> {
+    return try {
+        val source = FileSystem.SYSTEM.source(path).buffer()
+        source.use { bufferedSource ->
+            val content = bufferedSource.readByteArray()
+
+            AudioFileData(content).right()
+        }
+    } catch (e: IOException) {
+        e.left()
     }
 }

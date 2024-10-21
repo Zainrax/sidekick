@@ -85,16 +85,18 @@ export default function Storage() {
           </span>
         </A>
       </ActionContainer>
-      <ActionContainer icon={ImNotification} header="Events">
-        <p class="flex items-center text-gray-800">
-          <span class="w-28">
-            Saved: {storage.unuploadedEvents().filter(isProd).length}{" "}
-          </span>
-          <span class="ml-2">
-            Uploaded: {storage.uploadedEvents().filter(isProd).length}
-          </span>
-        </p>
-      </ActionContainer>
+      <Show when={user.dev()}>
+        <ActionContainer icon={ImNotification} header="Events">
+          <p class="flex items-center text-gray-800">
+            <span class="w-28">
+              Saved: {storage.unuploadedEvents().filter(isProd).length}{" "}
+            </span>
+            <span class="ml-2">
+              Uploaded: {storage.uploadedEvents().filter(isProd).length}
+            </span>
+          </p>
+        </ActionContainer>
+      </Show>
       <Show when={!user.isProd()}>
         <ActionContainer
           icon={BsCameraVideoFill}
@@ -114,16 +116,18 @@ export default function Storage() {
             </span>
           </A>
         </ActionContainer>
-        <ActionContainer icon={ImNotification} header="Test Events">
-          <p class="flex items-center text-gray-800">
-            <span class="w-28">
-              Saved: {storage.unuploadedEvents().filter(isTest).length}{" "}
-            </span>
-            <span class="ml-2">
-              Uploaded: {storage.uploadedEvents().filter(isTest).length}
-            </span>
-          </p>
-        </ActionContainer>
+        <Show when={user.dev()}>
+          <ActionContainer icon={ImNotification} header="Test Events">
+            <p class="flex items-center text-gray-800">
+              <span class="w-28">
+                Saved: {storage.unuploadedEvents().filter(isTest).length}{" "}
+              </span>
+              <span class="ml-2">
+                Uploaded: {storage.uploadedEvents().filter(isTest).length}
+              </span>
+            </p>
+          </ActionContainer>
+        </Show>
       </Show>
       <ActionContainer icon={ImLocation} header="Locations">
         <p class="flex items-center text-gray-800">

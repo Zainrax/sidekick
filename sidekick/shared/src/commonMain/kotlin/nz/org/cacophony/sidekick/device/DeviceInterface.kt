@@ -13,6 +13,7 @@ import nz.org.cacophony.sidekick.*
 import okio.Path.Companion.toPath
 
 
+
 @Suppress("UNUSED")
 class DeviceInterface(private val filePath: String): CapacitorInterface {
     public val client = HttpClient {
@@ -163,18 +164,24 @@ class DeviceInterface(private val filePath: String): CapacitorInterface {
     @Serializable
     data class Recording(val recordingPath: String)
     fun downloadRecording(call: PluginCall) = runCatch(call) {
-        getDeviceFromCall(call).map { deviceApi ->
-            call.validateCall<Recording>( "recordingPath")
-                .map { rec ->
-                    deviceApi.downloadFile(rec.recordingPath)
-                        .flatMap { file ->
-                            writeToFile(filePath.toPath().resolve("recordings/${rec.recordingPath}"), file)
-                                .map { call.success(mapOf("path" to it.toString(), "size" to file.size)) }
-                                .mapLeft { call.failure("Unable to write file: $it") }
+        getDeviceFromCall(call).flatMap { deviceApi ->
+            call.validateCall<Recording>("recordingPath").flatMap { rec ->
+                deviceApi.downloadFile(rec.recordingPath).flatMap { downloadedFile ->
+                    writeToFile(filePath.toPath().resolve("recordings/${downloadedFile.filename}"), downloadedFile.content)
+                        .map {
+                            call.success(mapOf(
+                                "path" to it.toString(),
+                                "size" to downloadedFile.content.size
+                            ))
                         }
-                        .mapLeft { call.failure("Unable to download file: $it") }
+                        .mapLeft { HttpRequestError.create("File Write", it.toString(), "recordings/$downloadedFile.filename") }
                 }
-
+            }
+        }.mapLeft { error ->
+            when (error) {
+                is ApiError -> call.failure("API Error: $error")
+                else -> call.failure("Unexpected error: $error")
+            }
         }
     }
 

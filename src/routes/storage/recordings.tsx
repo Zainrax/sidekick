@@ -1,6 +1,6 @@
 import { Browser } from "@capacitor/browser";
 import { BsCameraVideoFill } from "solid-icons/bs";
-import { FaSolidAngleDown } from "solid-icons/fa";
+import { FaSolidAngleDown, FaSolidMusic } from "solid-icons/fa";
 import { RiArrowsArrowRightSLine } from "solid-icons/ri";
 import { For, Show, createMemo, createSignal, mergeProps } from "solid-js";
 import ActionContainer from "~/components/ActionContainer";
@@ -43,7 +43,11 @@ function DeviceRecordingsDisplay(props: DeviceRecordingsProps) {
               }
             >
               <ActionContainer
-                icon={BsCameraVideoFill}
+                icon={
+                  recording.name.endsWith("aac")
+                    ? FaSolidMusic
+                    : BsCameraVideoFill
+                }
                 action={
                   <button class="text-blue-500">
                     <RiArrowsArrowRightSLine size={32} />

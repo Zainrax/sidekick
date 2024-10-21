@@ -13,3 +13,7 @@ expect fun hasFile(path: Path): Boolean
 expect fun deleteDirectory(path: Path): Either<IOException, Unit>
 
 expect fun deleteFile(path: Path): Either<IOException, Unit>
+
+data class AudioFileData(val content: ByteArray)
+
+expect fun readAudioFile(path: Path): Either<IOException, AudioFileData>;

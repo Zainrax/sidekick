@@ -24,6 +24,7 @@ import {
   on,
   onCleanup,
   onMount,
+  createMemo,
 } from "solid-js";
 import { Portal } from "solid-js/web";
 import ActionContainer from "~/components/ActionContainer";
@@ -40,6 +41,7 @@ import { NativeSettings } from "capacitor-native-settings/dist/esm";
 import { IOSSettings } from "capacitor-native-settings/dist/esm";
 import { AndroidSettings } from "capacitor-native-settings/dist/esm";
 import { App } from "@capacitor/app/dist/esm";
+import { Capacitor } from "@capacitor/core";
 
 interface DeviceDetailsProps {
   id: string;
@@ -97,7 +99,10 @@ function DeviceDetails(props: DeviceDetailsProps) {
 
   const [showTooltip, setShowTooltip] = createSignal(false);
 
-  const updateLocState = () => context.shouldDeviceUpdateLocation(props.id);
+  const updateLocState = createMemo(() =>
+    context.shouldDeviceUpdateLocation(props.id)
+  );
+  const user = useUserContext();
 
   return (
     <ActionContainer
@@ -144,17 +149,19 @@ function DeviceDetails(props: DeviceDetailsProps) {
               Recordings Saved: {savedRecs().length}/{deviceRecs().length}{" "}
             </p>
           </div>
-          <div class="mt-2 flex w-full items-center space-x-2 text-slate-700">
-            <AiOutlineUnorderedList size={20} />
-            <p class="text-sm">
-              Events Saved:{" "}
-              {
-                storage.savedEvents().filter((val) => val.device === props.id)
-                  .length
-              }
-              /{context.deviceEventKeys.get(props.id)?.length ?? 0}{" "}
-            </p>
-          </div>
+          <Show when={user.dev()}>
+            <div class="mt-2 flex w-full items-center space-x-2 text-slate-700">
+              <AiOutlineUnorderedList size={20} />
+              <p class="text-sm">
+                Events Saved:{" "}
+                {
+                  storage.savedEvents().filter((val) => val.device === props.id)
+                    .length
+                }
+                /{context.deviceEventKeys.get(props.id)?.length ?? 0}{" "}
+              </p>
+            </div>
+          </Show>
         </div>
         <Show
           when={props.isConnected}
@@ -218,14 +225,6 @@ function DeviceDetails(props: DeviceDetailsProps) {
                 </div>
               </Show>
               <Switch>
-                <Match
-                  when={
-                    updateLocState() === "loading" ||
-                    context.locationBeingSet.has(props.id)
-                  }
-                >
-                  <FaSolidSpinner size={28} class="animate-spin" />
-                </Match>
                 <Match when={updateLocState() === "current"}>
                   <BiRegularCurrentLocation size={28} />
                 </Match>
@@ -425,22 +424,23 @@ function Devices() {
     setSearchParams({ step: "chooseDevice" });
   };
 
-  const [permission, {refetch}] = createResource(async()=>{
+  const [permission, { refetch }] = createResource(async () => {
     try {
+      if (Capacitor.getPlatform() === "android") return true;
       const res = await DevicePlugin.checkPermissions();
-      console.log("PERMISSIONS", res.granted)
-      return res.granted
+      console.log("PERMISSIONS", res.granted);
+      return res.granted;
     } catch (error) {
-      console.error("Permissions Error:", error)
-      return null
+      console.error("Permissions Error:", error);
+      return null;
     }
-  })
+  });
 
   onMount(() => {
     App.addListener("appStateChange", () => {
-      refetch()
-    })
-  })
+      refetch();
+    });
+  });
 
   return (
     <>
@@ -491,14 +491,22 @@ function Devices() {
               <p class="mt-4 max-w-sm px-4 text-center text-sm text-neutral-600">
                 No devices detected.
                 <Show when={permission() === false}>
-                <br />
-                  <p class="text-md font-medium text-neutral-800">Cannot access local network. Please check "Local Network" permission is enabled.</p>
-                    <button class={"text-blue-600"} onClick={() => {
+                  <br />
+                  <p class="text-md font-medium text-neutral-800">
+                    Cannot access local network. Please check "Local Network"
+                    permission is enabled.
+                  </p>
+                  <button
+                    class={"text-blue-600"}
+                    onClick={() => {
                       NativeSettings.open({
                         optionAndroid: AndroidSettings.ApplicationDetails,
                         optionIOS: IOSSettings.App,
-                      })
-                    }}>Open Permission Settings</button>
+                      });
+                    }}
+                  >
+                    Open Permission Settings
+                  </button>
                 </Show>
                 <br />
                 Follow the instructions in "Find Device" below. You can connect

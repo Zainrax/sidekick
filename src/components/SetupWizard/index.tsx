@@ -10,6 +10,7 @@ import {
   createEffect,
   onMount,
   on,
+  createResource,
 } from "solid-js";
 import { Motion } from "solid-motionone";
 import HelpSection from "./HelpSection";
@@ -610,9 +611,13 @@ function SetupWizard(): JSX.Element {
 
   const StepProgressIndicator = (props: {
     nextStep?: Steps;
+    canProcceed?: boolean;
+    requirementText?: string;
     place: number;
   }) => {
     const totalSteps = 4;
+    const canProcceed = () =>
+      props.canProcceed === undefined || props.canProcceed === true;
     return (
       <div class="flex w-full flex-col items-center justify-center">
         <div class="flex w-full items-center justify-center gap-x-2">
@@ -630,15 +635,27 @@ function SetupWizard(): JSX.Element {
         <Show
           when={props.place === totalSteps - 1}
           fallback={
-            <button
-              onClick={() => {
-                setStep(props.nextStep!);
-              }}
-              class="relative flex items-center justify-center p-2 text-lg text-blue-500"
-            >
-              Next Step
-              <div class="pt- absolute right-[-1em]"></div>
-            </button>
+            <div class="flex flex-col items-center">
+              <button
+                onClick={() => {
+                  setStep(props.nextStep!);
+                }}
+                classList={{
+                  "text-blue-500": canProcceed(),
+                  "text-gray-400": props.canProcceed === false,
+                }}
+                class="relative flex items-center justify-center p-2 text-lg"
+                disabled={!canProcceed()}
+              >
+                Next Step
+                <div class="pt- absolute right-[-1em]"></div>
+              </button>
+              <Show when={props.canProcceed === false && props.requirementText}>
+                {(requirementText) => (
+                  <p class="text-sm text-gray-800">{requirementText()}</p>
+                )}
+              </Show>
+            </div>
           }
         >
           <div class="flex flex-col items-center justify-center">
@@ -656,6 +673,11 @@ function SetupWizard(): JSX.Element {
   };
 
   const WifiSetup = () => {
+    const context = useDevice();
+    const [hasConnection] = createResource(async () => {
+      const res = await context.deviceHasInternet(searchParams.setupDevice);
+      return res;
+    });
     return (
       <>
         <Title title="Wifi Setings" back="searchingDevice" />
@@ -670,23 +692,35 @@ function SetupWizard(): JSX.Element {
           </p>
         </div>
         <WifiSettingsTab deviceId={searchParams.setupDevice} />
-        <StepProgressIndicator nextStep="group" place={0} />
+        <StepProgressIndicator
+          canProcceed={!hasConnection.loading && hasConnection()}
+          requirementText={"Internet connection required to setup."}
+          nextStep="group"
+          place={0}
+        />
         <Additional />
       </>
     );
   };
 
   const GroupSettings = () => {
+    const device = () => deviceContext.devices.get(searchParams.setupDevice);
+    const group = () => device()?.group;
     return (
       <>
-        <Title title="Group Settings" back="wifiSetup" />
+        <Title title="Set Device Group" back="wifiSetup" />
         <div class="flex flex-col gap-y-2 px-8 text-center text-sm">
           Assign your device to a group so that you can view it in
           browse.cacophony.org.nz
         </div>
-        <div class="space-y-4">
+        <div class="space-y-4 px-4">
           <GroupSelect deviceId={searchParams.setupDevice} />
-          <StepProgressIndicator nextStep="location" place={1} />
+          <StepProgressIndicator
+            nextStep="location"
+            place={1}
+            requirementText={"Group assignment required."}
+            canProcceed={group() !== "new"}
+          />
         </div>
         <Additional />
       </>
@@ -790,7 +824,9 @@ function SetupWizard(): JSX.Element {
     );
   };
 
-  const show = () => showHelp() || currentStep();
+  const show = () =>
+    (showHelp() || currentStep()) &&
+    deviceContext.devices.has(searchParams.setupDevice);
   const [cancelledPrompt, setCancelledPrompt] = createSignal(false);
   createEffect(
     on(show, async (show) => {

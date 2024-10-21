@@ -6,7 +6,7 @@ import {
   registerPlugin,
 } from "@capacitor/core";
 import { CapacitorHttp } from "@capacitor/core";
-import { Filesystem } from "@capacitor/filesystem";
+import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { Geolocation } from "@capacitor/geolocation";
 import { createContextProvider } from "@solid-primitives/context";
 import { ReactiveMap } from "@solid-primitives/map";
@@ -59,32 +59,39 @@ export const asInt = z
   .transform((val) => (typeof val === "string" ? parseInt(val) : val));
 export const tc2ModemSchema = z
   .object({
-    modem: z.object({
-      connectedTime: z.string(),
-      manufacturer: z.string(),
-      model: z.string(),
-      name: z.string(),
-      netdev: z.string(),
-      serial: z.string(),
-      // parse as number even if it's a string
-      temp: asInt,
-      vendor: z.string(),
-      voltage: asInt,
-      apn: z.string().optional(),
-    }),
+    modem: z
+      .object({
+        connectedTime: z.string(),
+        manufacturer: z.string(),
+        model: z.string(),
+        name: z.string(),
+        netdev: z.string(),
+        serial: z.string(),
+        // parse as number even if it's a string
+        temp: asInt,
+        vendor: z.string(),
+        voltage: asInt,
+        apn: z.string().optional(),
+      })
+      .optional(),
     onOffReason: z.string(),
     powered: z.boolean(),
-    signal: z.object({
-      accessTechnology: z.string(),
-      band: z.string(),
-      provider: z.string(),
-      strength: z.string(),
-    }),
-    simCard: z.object({
-      ICCID: z.string(),
-      provider: z.string(),
-      simCardStatus: z.string(),
-    }),
+    signal: z
+      .object({
+        accessTechnology: z.string(),
+        band: z.string(),
+        provider: z.string(),
+        strength: z.string(),
+      })
+      .partial()
+      .optional(),
+    simCard: z
+      .object({
+        ICCID: z.string(),
+        provider: z.string(),
+        simCardStatus: z.string(),
+      })
+      .optional(),
     timestamp: z.string(),
   })
   .partial();
@@ -188,7 +195,7 @@ export interface DevicePlugin {
   getDeviceInfo(options: DeviceUrl): Result<string>;
   getDeviceConfig(options: DeviceUrl): Result<string>;
   setDeviceConfig(options: {
-    url: URL;
+    url: string;
     section: string;
     // JSON string
     config: string;
@@ -220,7 +227,7 @@ export interface DevicePlugin {
   unbindConnection(): Promise<void>;
   hasConnection(): Result;
   getTestText(): Promise<{ text: string }>;
-  checkPermissions(): Promise<{granted: boolean}>
+  checkPermissions(): Promise<{ granted: boolean }>;
 }
 
 export const DevicePlugin = registerPlugin<DevicePlugin>("Device");
@@ -515,7 +522,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     });
   };
 
-  // Function to monitor AP (Access Point) connection state
   const monitorAPConnection = () => {
     const interval = setInterval(async () => {
       const res = await DevicePlugin.checkIsAPConnected();
@@ -530,7 +536,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     onCleanup(() => clearInterval(interval));
   };
 
-  // Function to set up listeners for device discovery events
   const setupListeners = async () => {
     const serviceResolvedListener = await DevicePlugin.addListener(
       "onServiceResolved",
@@ -714,7 +719,15 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       }
       const { url } = device;
       const res = await DevicePlugin.getRecordings({ url });
-      return res.success ? res.data : [];
+      const audioRes = await fetch(`${url}/api/audio/recordings`, {
+        method: "GET",
+        headers,
+      });
+      const thermalRecordings = res.success ? res.data : [];
+      const audioRecordings = audioRes.ok
+        ? (await audioRes.json().catch(() => [])) ?? []
+        : [];
+      return [...thermalRecordings, ...audioRecordings];
     } catch (error) {
       log.logError({
         message: "Could not get recordings",
@@ -767,10 +780,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     const recs = deviceRecordings.get(device.id);
     const savedRecs = storage.savedRecordings();
     if (!recs) return;
-    // Filter out recordings that have already been saved
-    for (const rec of recs.filter(
+    const nonSavedRecs = recs.filter(
       (r) => !savedRecs.find((s) => s.name === r)
-    )) {
+    );
+    if (!nonSavedRecs.length) return;
+    // Filter out recordings that have already been saved
+    for (const rec of nonSavedRecs) {
       // Added to allow for pause functionality
       if (!devicesDownloading.has(device.id)) return;
       const res = await DevicePlugin.downloadRecording({
@@ -792,7 +807,14 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         size: res.data.size,
         isProd: device.isProd,
       });
-      if (!data) return;
+      if (!data) continue;
+    }
+    await setCurrRecs(device);
+    const recordings = storage
+      .savedRecordings()
+      .filter((rec) => rec.device === device.id && !rec.isUploaded);
+    if (recordings) {
+      saveRecordings(device);
     }
   };
 
@@ -1092,6 +1114,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           }
           return null;
         }
+        return null;
       }
     );
 
@@ -1113,6 +1136,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       return "denied";
     }
   });
+
   const [devicesLocToUpdate] = createResource(
     () => {
       return [[...devices.values()], permission()] as const;
@@ -1177,15 +1201,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const shouldDeviceUpdateLocation = (
     deviceId: DeviceId
   ): DeviceLocationStatus => {
-    if (devicesLocToUpdate.loading) return "loading";
     const devicesToUpdate = devicesLocToUpdate();
     if (!devicesToUpdate?.length)
       return permission() === "denied" ? "unavailable" : "current";
-    return devicesToUpdate
-      ? devicesToUpdate.includes(deviceId)
-        ? "needsUpdate"
-        : "current"
-      : "loading";
+    return devicesToUpdate.includes(deviceId) ? "needsUpdate" : "current";
   };
   const getWifiNetworks = async (deviceId: DeviceId) => {
     try {
@@ -1517,6 +1536,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
+      debugger;
       return res.status === 200 ? tc2ModemSchema.parse(res.data) : null;
     } catch (error) {
       console.error("Get Modem Error:", error);
@@ -1691,6 +1711,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     },
     800
   );
+
   const disconnectFromDeviceAP = async () => {
     try {
       setApState("loadingDisconnect");
@@ -2120,10 +2141,29 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
   };
 
+  const deviceHasInternet = async (deviceId: DeviceId) => {
+    debugger;
+    try {
+      const device = devices.get(deviceId);
+      if (!device || !device.isConnected) return false;
+
+      const wifi = await getCurrentWifiNetwork(deviceId);
+      if (wifi?.SSID !== "") return true;
+      const modemConnection = await checkDeviceModemInternetConnection(
+        deviceId
+      );
+      return modemConnection;
+    } catch (error) {
+      console.error("While checking device has internet", error);
+      return false;
+    }
+  };
+
   return {
     devices,
     isDiscovering,
     devicesDownloading,
+    deviceHasInternet,
     stopSaveItems,
     deviceRecordings,
     deviceEventKeys,

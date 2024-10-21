@@ -2,6 +2,7 @@ package nz.org.cacophony.sidekick.device
 
 import arrow.core.*
 import io.ktor.client.*
+import io.ktor.client.call.body
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -100,14 +101,44 @@ class DeviceApi(override val client: HttpClient, val device: Device): Api {
         }
             .flatMap { validateResponse(it) }
 
-    suspend fun downloadFile(id: String): Either<ApiError, ByteArray> =
-        get("recording/$id" ) {
-            // response type is ByteArray
+
+    data class DownloadedFile(
+        val content: ByteArray,
+        val contentType: String,
+        val filename: String
+    )
+
+    suspend fun downloadFile(id: String): Either<ApiError, DownloadedFile> =
+        get("recording/$id") {
             headers {
                 append(HttpHeaders.Authorization, token)
             }
+        }.flatMap { response ->
+            when (response.status) {
+                HttpStatusCode.OK -> {
+                    val contentType = response.headers[HttpHeaders.ContentType] ?: "application/octet-stream"
+                    val contentDisposition = response.headers[HttpHeaders.ContentDisposition]
+                    val filename = contentDisposition?.let { parseFilename(it) } ?: "$id.bin"
+
+                    Either.catch {
+                        DownloadedFile(
+                            content = response.body(),
+                            contentType = contentType,
+                            filename = filename
+                        )
+                    }.mapLeft {
+                        InvalidResponse.ParsingError("Error downloading file: ${it.message}")
+                    }
+                }
+                else -> handleServerError(response).left()
+            }
         }
-            .flatMap { validateResponse(it) }
+
+    private fun parseFilename(contentDisposition: String): String {
+        val filenameRegex = Regex("filename=\"?(.+?)\"?(?:;|$)")
+        return filenameRegex.find(contentDisposition)?.groupValues?.get(1) ?: "unknown"
+    }
+
 
     suspend fun connectToHost(
     ): Either<ApiError, HttpResponse> {

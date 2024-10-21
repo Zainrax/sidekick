@@ -33,9 +33,8 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
       if (await KeepAwake.isSupported()) {
         await KeepAwake.keepAwake();
       }
-      await event.uploadEvents();
-      await recording.uploadRecordings();
       await location.resyncLocations();
+      await Promise.all([event.uploadEvents(), recording.uploadRecordings()]);
       if (await KeepAwake.isSupported()) {
         await KeepAwake.allowSleep();
       }

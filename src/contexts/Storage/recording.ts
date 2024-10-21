@@ -1,7 +1,7 @@
 import {
+  createRecordingSchema,
   Recording,
   UploadedRecording,
-  createRecordingSchema,
 } from "~/database/Entities/Recording";
 import {
   getRecordings,
@@ -13,7 +13,7 @@ import {
 import { db } from ".";
 import { CacophonyPlugin } from "../CacophonyApi";
 import { DeviceDetails, DevicePlugin, unbindAndRebind } from "../Device";
-import { createMemo, createSignal, onMount } from "solid-js";
+import { createEffect, createMemo, createSignal, onMount } from "solid-js";
 import { useUserContext } from "../User";
 import { useLogsContext } from "../LogsContext";
 
@@ -34,6 +34,12 @@ export function useRecordingStorage() {
   );
   const unuploadedRecordings = createMemo(() =>
     savedRecordings().filter((rec) => !rec.isUploaded)
+  );
+  const unuploadedThermalRecordings = createMemo(() =>
+    unuploadedRecordings().filter((rec) => rec.name.endsWith("cptv"))
+  );
+  const unuploadedAudioRecordings = createMemo(() =>
+    unuploadedRecordings().filter((rec) => rec.name.endsWith("aac"))
   );
 
   const [shouldUpload, setShouldUpload] = createSignal(false);
@@ -83,16 +89,20 @@ export function useRecordingStorage() {
       (rec) => rec.isProd === userContext.isProd()
     );
     for (let i = 0; i < recordings.length; i++) {
-      if (!shouldUpload()) return;
+      const shouldCancel = !shouldUpload();
+      if (shouldCancel) return;
       const user = await userContext.getUser();
       if (!user) return;
       const recording = recordings[i];
-      const res = await CacophonyPlugin.uploadRecording({
-        token: user.token,
-        type: "thermalRaw",
-        device: recording.device,
-        filename: recording.name,
-      });
+      const type = recording.name.endsWith("cptv") ? "thermalRaw" : "audio";
+      const res = await unbindAndRebind(() =>
+        CacophonyPlugin.uploadRecording({
+          token: user.token,
+          type,
+          device: recording.device,
+          filename: recording.path.split("/").pop() ?? recording.name,
+        })
+      );
 
       if (res.success) {
         recording.isUploaded = true;
