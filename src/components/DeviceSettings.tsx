@@ -1386,13 +1386,20 @@ export function WifiSettingsTab(props: SettingProps) {
   const log = useLogsContext();
   const id = () => props.deviceId;
   const device = () => context.devices.get(id());
+  const [initialLoad, setInitialLoad] = createSignal(false);
   const [wifiNetworks, { refetch: refetchWifiNetowrks }] = createResource(
     () => [device(), context.apState()] as const,
     async ([currDevice]) => {
-      console.log("Fetching Wifi Networks for ", currDevice);
-      if (!currDevice?.isConnected) return null;
-      const wifiNetworks = await context.getWifiNetworks(currDevice.id);
-      return wifiNetworks;
+      try {
+        console.log("Fetching Wifi Networks for ", currDevice);
+        if (!currDevice?.isConnected) return null;
+        const wifiNetworks = await context.getWifiNetworks(currDevice.id);
+        return wifiNetworks;
+      } catch (e) {
+        console.error("Failed wifi networks", e);
+      } finally {
+        setInitialLoad(true);
+      }
     }
   );
   const [currentWifi, { refetch }] = createResource(
@@ -1550,6 +1557,7 @@ export function WifiSettingsTab(props: SettingProps) {
 
   createEffect(() => {
     on(wifiNetworks, () => {
+      if (!initialLoad()) return;
       if (wifiNetworks() === null || wifiNetworks.error) {
         refetchWifiNetowrks();
       }
@@ -1559,6 +1567,7 @@ export function WifiSettingsTab(props: SettingProps) {
   // Interval check for current wifi
   onMount(() => {
     const interval = setInterval(() => {
+      if (!initialLoad()) return;
       refetchWifiNetowrks();
       refetchSavedWifi();
       if (modem() === null) {
@@ -1728,6 +1737,15 @@ export function WifiSettingsTab(props: SettingProps) {
     )
   );
 
+  createEffect(() => {
+    console.log(
+      "Loading Wifi",
+      wifiNetworks.loading,
+      wifiNetworks(),
+      initialLoad()
+    );
+  });
+
   const disableConnect = (ssid: string) =>
     (showPassword() && password().length < 8) || connecting() === ssid;
   const hasApn = () => modem()?.modem?.apn !== undefined;
@@ -1862,7 +1880,7 @@ export function WifiSettingsTab(props: SettingProps) {
               </FieldWrapper>
             </button>
             <section class="flex h-32 flex-col space-y-2 overflow-y-auto rounded-md bg-neutral-100 p-2">
-              <Show when={wifiNetworks.loading && wifiNetworks()?.length === 0}>
+              <Show when={wifiNetworks.loading && wifiNetworks() === undefined}>
                 <div class="flex h-full w-full flex-col items-center justify-center">
                   <FaSolidSpinner size={28} class="animate-spin" />
                   <p>Loading Networks...</p>
