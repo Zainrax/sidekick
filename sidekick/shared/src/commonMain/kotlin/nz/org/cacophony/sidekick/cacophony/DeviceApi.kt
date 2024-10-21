@@ -9,10 +9,8 @@ import io.ktor.client.request.forms.*
 import io.ktor.http.*
 import io.ktor.http.HttpHeaders.Authorization
 import io.ktor.util.*
-import io.ktor.websocket.Frame
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import nz.org.cacophony.sidekick.*
 import okio.ByteString.Companion.toByteString
 import okio.Path
 import kotlinx.serialization.Serializable
@@ -21,16 +19,11 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonTransformingSerializer
 import kotlinx.datetime.*
-import kotlinx.datetime.LocalDate.Formats.ISO
-import kotlinx.serialization.BinaryFormat
-import okio.IOException
-import okio.Path.Companion.toPath
-import kotlin.time.Duration
 
 @Serializable
 data class UploadRecordingResponse(val recordingId: Int, val success: Boolean,val messages: List<String>)
 
-class DeviceApi(private val api: Api, val filePath: String) {
+class DeviceApi(private val api: Api) {
     private fun getSha1FileHash(file: ByteArray): Either<ApiError, String> = Either.catch {
         val byteStr = file.toByteString()
         return byteStr.sha1().hex().right()

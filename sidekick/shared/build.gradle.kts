@@ -51,6 +51,7 @@ kotlin {
                 implementation("io.ktor:ktor-client-auth:$ktorVersion")
                 implementation("io.ktor:ktor-client-encoding:$ktorVersion")
 
+                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.1")
                 implementation("com.squareup.okio:okio:3.3.0")
 
@@ -101,4 +102,7 @@ android {
         minSdk = 22
         targetSdk = 33
     }
+}
+dependencies {
+    implementation("androidx.core:core-i18n:1.0.0-alpha01")
 }

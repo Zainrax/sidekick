@@ -604,6 +604,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           const battery = await getBattery(device.url); // Assume getBattery is defined elsewhere
           const updatedDevice: ConnectedDevice = {
             ...device,
+            lastUpdated: info.data.lastUpdated
+              ? new Date(info.data.lastUpdated)
+              : device.lastUpdated,
             batteryPercentage: battery?.mainBattery,
             isConnected: true,
           };
