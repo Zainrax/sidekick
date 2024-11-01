@@ -145,6 +145,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         }
         
         serviceBrowser?.start(queue: .main)
+        call.resolve()
     }
 
     

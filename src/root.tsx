@@ -15,6 +15,8 @@ import { LogsProvider, useLogsContext } from "./contexts/LogsContext";
 import * as Sentry from "@sentry/solid";
 import { withSentryRouterRouting } from "@sentry/solid/solidrouter";
 import ConsentPopup from "./components/ConsentPopup";
+import BackgroundLogo from "./components/BackgroundLogo";
+import { ImSpinner } from "solid-icons/im";
 
 const routes = [
   {
@@ -55,8 +57,9 @@ const routes = [
 
 function LoadingScreen() {
   return (
-    <div class="flex h-full w-full items-center justify-center">
-      <div class="flex flex-col items-center"></div>
+    <div class="flex h-full w-full items-center justify-center flex-col">
+      <BackgroundLogo />
+      <div class="flex flex-col items-center"> <ImSpinner size={30} class="text-blue-500 animate-spin" /> Loading Sidekick...</div>
     </div>
   );
 }

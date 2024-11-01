@@ -1,6 +1,5 @@
 import { KeepAwake } from "@capacitor-community/keep-awake";
 import {
-  Capacitor,
   HttpResponse,
   PluginListenerHandle,
   registerPlugin,
@@ -10,11 +9,9 @@ import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { Geolocation } from "@capacitor/geolocation";
 import { createContextProvider } from "@solid-primitives/context";
 import { ReactiveMap } from "@solid-primitives/map";
-import { createStore } from "solid-js/store";
 import {
   debounce,
   leading,
-  leadingAndTrailing,
 } from "@solid-primitives/scheduled";
 import { ReactiveSet } from "@solid-primitives/set";
 import {
@@ -570,7 +567,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     for (const device of devices.values()) {
       const timeDiff = now - device.timeFound.getTime();
       // If the device hasn't been connected for more than 3 minutes
-      if (!device.isConnected && timeDiff > 60 * 1000 * 3) {
+      if (!device.isConnected && timeDiff > 60 * 1000 * 1) {
         devices.delete(device.id);
       }
     }
@@ -651,6 +648,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       await DevicePlugin.discoverDevices();
       setIsDiscovering(true);
     } catch (e) {
+      console.error("Already discovering devices");
       setIsDiscovering(false);
       return;
     }
@@ -1061,7 +1059,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
       // Make the request to the device.
       const res = await DevicePlugin.getDeviceLocation({ url });
-
       // If the request was successful, return the data.
       if (res.success) {
         const location = locationSchema.safeParse(JSON.parse(res.data));
@@ -1109,6 +1106,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
               deviceLocation.data.accuracy
             )
           );
+
           if (!location.length) return null;
           return location.sort(
             (a, b) =>
@@ -1150,8 +1148,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       } catch (e) {
         return "denied";
       }
-    }
-  );
+    );
 
   const [locationDisabled, setLocationDisabled] = createSignal(false);
   const [devicesLocToUpdate, { refetch: refetchDeviceLocToUpdate }] =
@@ -1248,15 +1245,15 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const networks = WifiNetwork.array().parse(JSON.parse(res.data));
       return networks
         ? networks
-            .filter((network) => network.SSID)
-            // remove duplicate networks
-            .reduce((acc, curr) => {
-              const found = acc.find((a) => a.SSID === curr.SSID);
-              if (!found) {
-                acc.push(curr);
-              }
-              return acc;
-            }, [] as WifiNetwork[])
+          .filter((network) => network.SSID)
+          // remove duplicate networks
+          .reduce((acc, curr) => {
+            const found = acc.find((a) => a.SSID === curr.SSID);
+            if (!found) {
+              acc.push(curr);
+            }
+            return acc;
+          }, [] as WifiNetwork[])
         : [];
     } catch (e) {
       console.error(e);
@@ -1520,8 +1517,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         res.status === 200
           ? ConnectionRes.parse(JSON.parse(res.data)).connected
           : res.status === 404
-          ? true
-          : false;
+            ? true
+            : false;
       return connection;
     } catch (error) {
       console.error(error);
@@ -1800,7 +1797,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
-      debugger;
       return res.status === 200
         ? AudioModeResSchema.parse(JSON.parse(res.data))["audio-mode"]
         : null;
@@ -1844,7 +1840,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
-      debugger;
       return res.status === 200;
     } catch (e) {
       console.error(e);
@@ -1964,10 +1959,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return null;
       const { url } = device;
-      debugger;
       const res = await DevicePlugin.getDeviceConfig({ url });
       if (!res.success) return null;
-      return configSchema.parse(JSON.parse(res.data));
+      const config = configSchema.parse(JSON.parse(res.data));
+      console.log("CONFIG", config);
+      return config;
     } catch (error) {
       console.error("Get Config Error", error);
       return null;

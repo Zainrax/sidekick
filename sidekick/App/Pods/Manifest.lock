@@ -110,7 +110,7 @@ DEPENDENCIES:
   - "CapacitorCordova (from `../../node_modules/.pnpm/@capacitor+ios@6.1.2_@capacitor+core@6.1.2/node_modules/@capacitor/ios`)"
   - "CapacitorDialog (from `../../node_modules/.pnpm/@capacitor+dialog@6.0.1_@capacitor+core@6.1.2/node_modules/@capacitor/dialog`)"
   - "CapacitorFilesystem (from `../../node_modules/.pnpm/@capacitor+filesystem@6.0.1_@capacitor+core@6.1.2/node_modules/@capacitor/filesystem`)"
-  - "CapacitorFirebaseCrashlytics (from `../../node_modules/.pnpm/@capacitor-firebase+crashlytics@6.0.0_bbz5npe5ftmrcux5cwtybwpdfu/node_modules/@capacitor-firebase/crashlytics`)"
+  - "CapacitorFirebaseCrashlytics (from `../../node_modules/.pnpm/@capacitor-firebase+crashlytics@6.0.0_3vx5rcik4fkq22unnzkbdnywba/node_modules/@capacitor-firebase/crashlytics`)"
   - "CapacitorGeolocation (from `../../node_modules/.pnpm/@capacitor+geolocation@6.0.1_@capacitor+core@6.1.2/node_modules/@capacitor/geolocation`)"
   - "CapacitorNativeSettings (from `../../node_modules/.pnpm/capacitor-native-settings@6.0.1_@capacitor+core@6.1.2/node_modules/capacitor-native-settings`)"
   - "CapacitorNetwork (from `../../node_modules/.pnpm/@capacitor+network@6.0.2_@capacitor+core@6.1.2/node_modules/@capacitor/network`)"
@@ -158,7 +158,7 @@ EXTERNAL SOURCES:
   CapacitorFilesystem:
     :path: "../../node_modules/.pnpm/@capacitor+filesystem@6.0.1_@capacitor+core@6.1.2/node_modules/@capacitor/filesystem"
   CapacitorFirebaseCrashlytics:
-    :path: "../../node_modules/.pnpm/@capacitor-firebase+crashlytics@6.0.0_bbz5npe5ftmrcux5cwtybwpdfu/node_modules/@capacitor-firebase/crashlytics"
+    :path: "../../node_modules/.pnpm/@capacitor-firebase+crashlytics@6.0.0_3vx5rcik4fkq22unnzkbdnywba/node_modules/@capacitor-firebase/crashlytics"
   CapacitorGeolocation:
     :path: "../../node_modules/.pnpm/@capacitor+geolocation@6.0.1_@capacitor+core@6.1.2/node_modules/@capacitor/geolocation"
   CapacitorNativeSettings:
@@ -206,6 +206,6 @@ SPEC CHECKSUMS:
   SQLCipher: 30a8e81afa6128e600b17ffa77d0f92fa05ed208
   ZIPFoundation: b8c29ea7ae353b309bc810586181fd073cb3312c
 
-PODFILE CHECKSUM: 86c196ed650977efc9484127b1de804786b66b92
+PODFILE CHECKSUM: f7daae0c1230f42a62639881ef2cf8dee9a44183
 
 COCOAPODS: 1.15.2

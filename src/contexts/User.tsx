@@ -14,6 +14,8 @@ import { useNavigate } from "@solidjs/router";
 import { CapacitorHttp } from "@capacitor/core";
 import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
 import { useLogsContext } from "./LogsContext";
+import { Effect } from "effect";
+import { url } from "inspector";
 
 const UserSchema = z.object({
   token: z.string(),
@@ -43,8 +45,9 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
           }
           const user = UserSchema.parse(json);
           setServer(user.prod ? "prod" : "test");
-          const validUser = await getValidUser(user);
-          return validUser;
+
+          getValidUser(user).then((user) => { mutateUser(user) })
+          return user;
         }
       } catch (error) {
         if (error instanceof z.ZodError) {
@@ -64,7 +67,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         if (storedUser.value) {
           const user = UserSchema.parse(JSON.parse(storedUser.value));
           setServer(user.prod ? "prod" : "test");
-          getValidUser(user);
+          getValidUser(user).then((user) => { mutateUser(user) })
           return user;
         }
       }
@@ -130,10 +133,17 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 
   async function login(email: string, password: string) {
     try {
-      const authUser = await CacophonyPlugin.authenticateUser({
-        email,
-        password,
-      });
+      const authUser = await Effect.runPromise(
+        Effect.retry(
+          Effect.tryPromise(() =>
+            CacophonyPlugin.authenticateUser({
+              email,
+              password,
+            })
+          ),
+          { times: 3 }
+        )
+      );
       if (!authUser.success) {
         log.logWarning({
           message: "Login attempt failed",
@@ -188,14 +198,14 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 
   interface JwtTokenPayload<
     T =
-      | "user"
-      | "device"
-      | "reset-password"
-      | "confirm-email"
-      | "join-group"
-      | "invite-new-user"
-      | "invite-existing-user"
-      | "refresh"
+    | "user"
+    | "device"
+    | "reset-password"
+    | "confirm-email"
+    | "join-group"
+    | "invite-new-user"
+    | "invite-existing-user"
+    | "refresh"
   > {
     exp: number;
     iat: number;

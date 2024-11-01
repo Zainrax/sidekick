@@ -1,4 +1,4 @@
-import { Camera, CameraResultType } from "@capacitor/camera";
+import { Camera, CameraResultType, Photo } from "@capacitor/camera";
 import { Dialog as Prompt } from "@capacitor/dialog";
 import { A, useSearchParams } from "@solidjs/router";
 import { AiFillEdit, AiOutlineInfoCircle } from "solid-icons/ai";
@@ -1006,6 +1006,43 @@ export function LocationSettingsTab(props: SettingProps) {
     ...photoFilesToUpload(),
   ];
 
+  const base64FromPath = async (path: string): Promise<string> => {
+    const response = await fetch(path);
+    const blob = await response.blob();
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = () => {
+        const base64Data = (reader.result as string).split(",")[1];
+        resolve(base64Data);
+      };
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const savePicture = async (photo: Photo) => {
+    // Convert photo to base64 format, required by Filesystem API to save
+    if (!photo.webPath) throw Error("No web path found on photo");
+    const base64Data = await base64FromPath(photo.webPath ?? "");
+
+    // Generate a unique file name
+    const fileName = new Date().getTime() + ".jpeg";
+
+    // Write the file to the data directory
+    const savedFile = await Filesystem.writeFile({
+      path: fileName,
+      data: base64Data,
+      directory: Directory.Data,
+    });
+
+    // Return the file path and webview path
+    return {
+      file: savedFile.uri,
+      url: photo.webPath,
+    };
+  };
+
   const addPhotoToDevice = async () => {
     try {
       const image = await Camera.getPhoto({
@@ -1014,10 +1051,13 @@ export function LocationSettingsTab(props: SettingProps) {
         resultType: CameraResultType.Uri,
         width: 500,
       });
+
       if (image.path && image.webPath) {
+        const savedImageFile = await savePicture(image);
+
         setPhotoFilesToUpload((curr) => [
           ...curr,
-          { file: image.path ?? "", url: image.webPath ?? "" },
+          { file: savedImageFile.file, url: savedImageFile.url },
         ]);
         setPhotoIndex(photos().length - 1);
       }
@@ -1028,6 +1068,7 @@ export function LocationSettingsTab(props: SettingProps) {
       });
     }
   };
+
   const [setting, setSetting] = createSignal(false);
   const saveLocationSettings = async () => {
     if (setting()) return;
@@ -1159,9 +1200,16 @@ export function LocationSettingsTab(props: SettingProps) {
     }
   };
 
+  const updateLocation = createMemo(shouldUpdateLocState, "current", {
+    equals: (prev, curr) => {
+      if (curr === "loading" && prev === "needsUpdate") return true;
+      else if (curr === prev) return true;
+      else return false;
+    },
+  });
   const [locCoords, { refetch }] = createResource(
-    () => id(),
-    async (id) => {
+    () => [id(), updateLocation()] as const,
+    async ([id]) => {
       const res = await context.getLocationCoords(id);
       if (res.success) return res.data;
       return null;

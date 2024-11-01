@@ -19,6 +19,7 @@ import {
 import { DevicePlugin } from "../Device";
 import { useUserContext } from "../User";
 import { useLogsContext } from "../LogsContext";
+import { Filesystem } from "@capacitor/filesystem";
 
 const MIN_STATION_SEPARATION_METERS = 60;
 
@@ -608,7 +609,7 @@ export function useLocationStorage() {
 
     const concurrencyLimit = 3; // Adjust based on your requirements
     const uploadedPhotos: [string, string][] = [];
-
+    let photosToDelete = [];
     try {
       const results = await asyncPool(
         concurrencyLimit,
@@ -634,6 +635,12 @@ export function useLocationStorage() {
                 message: `Failed to upload photo: ${photo}`,
                 details: res.message,
               });
+              if (res.message.includes("Unable to get image")) {
+                uploadPhotos = uploadPhotos.filter(
+                  (currPhoto) => photo[0] !== currPhoto[0]
+                );
+                return null;
+              }
               return null;
             }
           } catch (error) {
