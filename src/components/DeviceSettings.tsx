@@ -87,14 +87,12 @@ export function AudioSettingsTab(props: SettingProps) {
       if (!id) return null;
       const res = await context.getAudioMode(id);
       console.log("STATUS", res);
-      debugger;
       return res;
     }
   );
   const [recording, setRecording] = createSignal(false);
   const [result, setResult] = createSignal<"failed" | "success" | null>(null);
   const createTestRecording = async () => {
-    debugger;
     const res = await context.takeAudioRecording(id());
     setResult(res ? "success" : "failed");
     refetchAudioStatus();
@@ -183,7 +181,6 @@ export function AudioSettingsTab(props: SettingProps) {
     if (end) {
       endWidth = calcWidth(end);
     }
-    debugger;
     let startWidth = calcWidth(start);
     const value = 100 - startWidth - endWidth;
     return value;
@@ -861,8 +858,8 @@ export function LocationSettingsTab(props: SettingProps) {
   const id = () => props.deviceId;
   const groupName = () => context.devices.get(id())?.group ?? "";
   const isProd = () => context.devices.get(id())?.isProd ?? false;
-  const shouldUpdateLocState = () => context.shouldDeviceUpdateLocation(id());
   const device = () => context.devices.get(id());
+  const shouldUpdateLocState = () => context.shouldDeviceUpdateLocation(id());
 
   createEffect((prev) => {
     const currUpdateLocState = shouldUpdateLocState();
@@ -886,10 +883,9 @@ export function LocationSettingsTab(props: SettingProps) {
       await context?.setDeviceToCurrLocation(id());
     });
   });
-  const [location, { refetch: refetchLocation }] = context.getLocationByDevice(
-    id()
-  );
-
+  const [locationRes, { refetch: refetchLocation }] =
+    context.getLocationByDevice(id());
+  const location = createMemo(() => locationRes());
   createEffect(() => {
     on(
       () => shouldUpdateLocState(),
@@ -1100,6 +1096,7 @@ export function LocationSettingsTab(props: SettingProps) {
       else return false;
     },
   });
+  const hasLocation = () => location() !== null || (lat() !== 0 && lng() !== 0);
   return (
     <section class="px-4 py-4">
       <Show when={updateLocation() === "needsUpdate"}>
@@ -1129,10 +1126,13 @@ export function LocationSettingsTab(props: SettingProps) {
             <FiMapPin size={18} />
           </button>
         </div>
+        <Show when={!hasLocation()}>
+          <p class="px-1">Locations are needed for recordings to be saved.</p>
+        </Show>
       </Show>
       <Show
         when={
-          (!location.loading && location()?.updateName) ||
+          (!locationRes.loading && location()?.updateName) ||
           location()?.uploadPhotos?.length
         }
       >
@@ -1148,235 +1148,242 @@ export function LocationSettingsTab(props: SettingProps) {
           </div>
         )}
       </Show>
-      <div class="w-full">
-        <div class="space-y-2">
-          <p class="flex gap-x-2">
-            <span class="text-slate-400">Lat:</span>
-            <span>{lat()}</span>
-            <span class="text-slate-400">Lng:</span>
-            <span>{lng()}</span>
-          </p>
-          <div>
-            <Show
-              when={photoFilesToUpload().length && !newName() && !location()}
-            >
-              <p class="text-sm text-yellow-400">
-                Add a name to save new location.
-              </p>
-            </Show>
-            <p class="text-sm text-slate-400">Name:</p>
-            <Show
-              when={isEditing()}
-              fallback={
-                <div
-                  class="flex items-center justify-between"
-                  onClick={() => toggleEditing()}
-                >
-                  <Show
-                    when={!location.loading && location()?.updateName}
-                    fallback={
-                      <>
-                        <h1 class="text-sm text-gray-800">{locationName()}</h1>
-                      </>
-                    }
-                  >
-                    {(loc) => (
-                      <h1 class="flex space-x-2 text-sm text-blue-600">
-                        {loc()}
-                      </h1>
-                    )}
-                  </Show>
-                  <button class="flex items-center rounded-lg bg-blue-600 px-2 py-1 text-white">
-                    {!location() ? "Add Location Name" : "Edit"}
-                    <AiFillEdit size={18} />
-                  </button>
-                </div>
-              }
-            >
-              <div class="flex">
-                <input
-                  ref={setLocationNameInput}
-                  type="text"
-                  class="w-full rounded-l bg-slate-50 py-2 pl-2 text-sm text-gray-800 outline-none"
-                  placeholder={locationName() ?? "Location Name"}
-                  onInput={(e) =>
-                    setNewName((e.target as HTMLInputElement).value)
-                  }
-                />
-                <button
-                  class="rounded-r bg-slate-50 px-4 py-2 text-gray-500"
-                  onClick={() => {
-                    setNewName("");
-                    toggleEditing();
-                  }}
-                >
-                  <ImCross size={12} />
-                </button>
-              </div>
-            </Show>
-          </div>
-          <div>
-            <p class="text-sm text-slate-400">Photo Reference:</p>
-            <div class="relative rounded-md bg-slate-100">
-              <Switch>
-                <Match when={photoReference.loading}>
-                  <div class="absolute flex h-full w-full flex-col justify-between gap-2">
-                    <div class="flex w-full justify-between">
-                      <button
-                        class="flex h-10 w-10 items-center justify-center rounded-br-lg bg-slate-100 p-2 text-blue-500"
-                        onClick={() => addPhotoToDevice()}
-                      >
-                        <TbCameraPlus size={28} />
-                      </button>
-                      <button
-                        class="flex h-10 w-10 items-center justify-center rounded-bl-lg bg-slate-100 p-2 text-red-500"
-                        onClick={() => removePhotoReference()}
-                      >
-                        <FaRegularTrashCan size={22} />
-                      </button>
-                    </div>
-                    <div class="flex w-full justify-between">
-                      <button
-                        class="flex h-10 w-10 items-center justify-center rounded-r-full bg-slate-100 p-2 text-gray-500"
-                        onClick={() =>
-                          setPhotoIndex((i) =>
-                            i === 0 ? photos().length - 1 : i - 1
-                          )
-                        }
-                      >
-                        <ImArrowLeft size={18} />
-                      </button>
-                      <button
-                        class="flex h-10 w-10 items-center justify-center rounded-l-full bg-slate-100 p-2 text-gray-500"
-                        onClick={() =>
-                          setPhotoIndex((i) =>
-                            i === photos().length - 1 ? 0 : i + 1
-                          )
-                        }
-                      >
-                        <ImArrowRight size={18} />
-                      </button>
-                    </div>
-                    <div class="w-fit self-center rounded-lg bg-slate-50 p-1">
-                      {photoIndex() + 1}/{photos().length}
-                    </div>
-                  </div>
+      <Show when={hasLocation()}>
+        <div class="w-full">
+          <div class="space-y-2">
+            <p class="flex gap-x-2">
+              <span class="text-slate-400">Lat:</span>
+              <span>{lat()}</span>
+              <span class="text-slate-400">Lng:</span>
+              <span>{lng()}</span>
+            </p>
+            <div>
+              <Show
+                when={photoFilesToUpload().length && !newName() && !location()}
+              >
+                <p class="text-sm text-yellow-400">
+                  Add a name to save new location.
+                </p>
+              </Show>
+              <p class="text-sm text-slate-400">Name:</p>
+              <Show
+                when={isEditing()}
+                fallback={
                   <div
-                    class="flex h-[18rem] w-full flex-col items-center justify-center  text-gray-700"
-                    onClick={() => addPhotoToDevice()}
-                  >
-                    <FaSolidSpinner size={28} class="animate-spin" />
-                    <p class="text-sm text-gray-800">Loading...</p>
-                  </div>
-                </Match>
-                <Match when={photoReference() && !photoReference.loading}>
-                  <div class="absolute flex h-full w-full flex-col justify-between gap-2">
-                    <div class="flex w-full justify-between">
-                      <button
-                        class="flex h-10 w-10 items-center justify-center rounded-br-lg bg-slate-100 p-2 text-blue-500"
-                        onClick={() => addPhotoToDevice()}
-                      >
-                        <TbCameraPlus size={28} />
-                      </button>
-                      <button
-                        class="flex h-10 w-10 items-center justify-center rounded-bl-lg bg-slate-100 p-2 text-red-500"
-                        onClick={() => removePhotoReference()}
-                      >
-                        <FaRegularTrashCan size={22} />
-                      </button>
-                    </div>
-                    <div class="flex w-full justify-between">
-                      <button
-                        class="flex h-10 w-10 items-center justify-center rounded-r-full bg-slate-100 p-2 text-gray-500"
-                        onClick={() =>
-                          setPhotoIndex((i) =>
-                            i === 0 ? photos().length - 1 : i - 1
-                          )
-                        }
-                      >
-                        <ImArrowLeft size={18} />
-                      </button>
-                      <button
-                        class="flex h-10 w-10 items-center justify-center rounded-l-full bg-slate-100 p-2 text-gray-500"
-                        onClick={() =>
-                          setPhotoIndex((i) =>
-                            i === photos().length - 1 ? 0 : i + 1
-                          )
-                        }
-                      >
-                        <ImArrowRight size={18} />
-                      </button>
-                    </div>
-                    <div class="w-fit self-center rounded-lg bg-slate-50 p-1">
-                      {photoIndex() + 1}/{photos().length}
-                    </div>
-                  </div>
-                  <div
-                    classList={{
-                      "outline-blue-500 outline outline-2": isImageToUpload(),
-                    }}
-                    class="h-[18rem]"
+                    class="flex items-center justify-between"
+                    onClick={() => toggleEditing()}
                   >
                     <Show
-                      when={
-                        !photoReference.loading &&
-                        !photoReference.error &&
-                        photoReference()
+                      when={!locationRes.loading && location()?.updateName}
+                      fallback={
+                        <>
+                          <h1 class="text-sm text-gray-800">
+                            {locationName()}
+                          </h1>
+                        </>
                       }
                     >
-                      {(photo) => (
-                        <img
-                          src={photo()}
-                          class="h-[18rem] w-full rounded-md object-cover p-4"
-                        />
+                      {(loc) => (
+                        <h1 class="flex space-x-2 text-sm text-blue-600">
+                          {loc()}
+                        </h1>
                       )}
                     </Show>
+                    <button class="flex items-center rounded-lg bg-blue-600 px-2 py-1 text-white">
+                      {!location() ? "Add Location Name" : "Edit"}
+                      <AiFillEdit size={18} />
+                    </button>
                   </div>
-                </Match>
-                <Match when={!photoReference.loading && !photoReference()}>
+                }
+              >
+                <div class="flex">
+                  <input
+                    ref={setLocationNameInput}
+                    type="text"
+                    class="w-full rounded-l bg-slate-50 py-2 pl-2 text-sm text-gray-800 outline-none"
+                    placeholder={locationName() ?? "Location Name"}
+                    onInput={(e) =>
+                      setNewName((e.target as HTMLInputElement).value)
+                    }
+                  />
                   <button
-                    class="flex w-full flex-col items-center justify-center p-8  text-gray-700"
-                    onClick={() => addPhotoToDevice()}
+                    class="rounded-r bg-slate-50 px-4 py-2 text-gray-500"
+                    onClick={() => {
+                      setNewName("");
+                      toggleEditing();
+                    }}
                   >
-                    <TbCameraPlus size={52} />
-                    <p class="text-sm text-gray-800">Add Photo</p>
+                    <ImCross size={12} />
                   </button>
-                </Match>
-              </Switch>
+                </div>
+              </Show>
+            </div>
+            <div>
+              <p class="text-sm text-slate-400">Photo Reference:</p>
+              <div class="relative rounded-md bg-slate-100">
+                <Switch>
+                  <Match when={photoReference.loading}>
+                    <div class="absolute flex h-full w-full flex-col justify-between gap-2">
+                      <div class="flex w-full justify-between">
+                        <button
+                          class="flex h-10 w-10 items-center justify-center rounded-br-lg bg-slate-100 p-2 text-blue-500"
+                          onClick={() => addPhotoToDevice()}
+                        >
+                          <TbCameraPlus size={28} />
+                        </button>
+                        <button
+                          class="flex h-10 w-10 items-center justify-center rounded-bl-lg bg-slate-100 p-2 text-red-500"
+                          onClick={() => removePhotoReference()}
+                        >
+                          <FaRegularTrashCan size={22} />
+                        </button>
+                      </div>
+                      <div class="flex w-full justify-between">
+                        <button
+                          class="flex h-10 w-10 items-center justify-center rounded-r-full bg-slate-100 p-2 text-gray-500"
+                          onClick={() =>
+                            setPhotoIndex((i) =>
+                              i === 0 ? photos().length - 1 : i - 1
+                            )
+                          }
+                        >
+                          <ImArrowLeft size={18} />
+                        </button>
+                        <button
+                          class="flex h-10 w-10 items-center justify-center rounded-l-full bg-slate-100 p-2 text-gray-500"
+                          onClick={() =>
+                            setPhotoIndex((i) =>
+                              i === photos().length - 1 ? 0 : i + 1
+                            )
+                          }
+                        >
+                          <ImArrowRight size={18} />
+                        </button>
+                      </div>
+                      <div class="w-fit self-center rounded-lg bg-slate-50 p-1">
+                        {photoIndex() + 1}/{photos().length}
+                      </div>
+                    </div>
+                    <div
+                      class="flex h-[18rem] w-full flex-col items-center justify-center  text-gray-700"
+                      onClick={() => addPhotoToDevice()}
+                    >
+                      <FaSolidSpinner size={28} class="animate-spin" />
+                      <p class="text-sm text-gray-800">Loading...</p>
+                    </div>
+                  </Match>
+                  <Match when={photoReference() && !photoReference.loading}>
+                    <div class="absolute flex h-full w-full flex-col justify-between gap-2">
+                      <div class="flex w-full justify-between">
+                        <button
+                          class="flex h-10 w-10 items-center justify-center rounded-br-lg bg-slate-100 p-2 text-blue-500"
+                          onClick={() => addPhotoToDevice()}
+                        >
+                          <TbCameraPlus size={28} />
+                        </button>
+                        <button
+                          class="flex h-10 w-10 items-center justify-center rounded-bl-lg bg-slate-100 p-2 text-red-500"
+                          onClick={() => removePhotoReference()}
+                        >
+                          <FaRegularTrashCan size={22} />
+                        </button>
+                      </div>
+                      <div class="flex w-full justify-between">
+                        <button
+                          class="flex h-10 w-10 items-center justify-center rounded-r-full bg-slate-100 p-2 text-gray-500"
+                          onClick={() =>
+                            setPhotoIndex((i) =>
+                              i === 0 ? photos().length - 1 : i - 1
+                            )
+                          }
+                        >
+                          <ImArrowLeft size={18} />
+                        </button>
+                        <button
+                          class="flex h-10 w-10 items-center justify-center rounded-l-full bg-slate-100 p-2 text-gray-500"
+                          onClick={() =>
+                            setPhotoIndex((i) =>
+                              i === photos().length - 1 ? 0 : i + 1
+                            )
+                          }
+                        >
+                          <ImArrowRight size={18} />
+                        </button>
+                      </div>
+                      <div class="w-fit self-center rounded-lg bg-slate-50 p-1">
+                        {photoIndex() + 1}/{photos().length}
+                      </div>
+                    </div>
+                    <div
+                      classList={{
+                        "outline-blue-500 outline outline-2": isImageToUpload(),
+                      }}
+                      class="h-[18rem]"
+                    >
+                      <Show
+                        when={
+                          !photoReference.loading &&
+                          !photoReference.error &&
+                          photoReference()
+                        }
+                      >
+                        {(photo) => (
+                          <img
+                            src={photo()}
+                            class="h-[18rem] w-full rounded-md object-cover p-4"
+                          />
+                        )}
+                      </Show>
+                    </div>
+                  </Match>
+                  <Match when={!photoReference.loading && !photoReference()}>
+                    <button
+                      class="flex w-full flex-col items-center justify-center p-8  text-gray-700"
+                      onClick={() => addPhotoToDevice()}
+                    >
+                      <TbCameraPlus size={52} />
+                      <p class="text-sm text-gray-800">Add Photo</p>
+                    </button>
+                  </Match>
+                </Switch>
+              </div>
+            </div>
+            <div
+              classList={{
+                hidden: !location() && !hasPicture() && !newName(),
+              }}
+              class="mt-4 flex justify-end space-x-2 text-gray-500"
+            >
+              <button
+                classList={{
+                  "bg-blue-500 py-2 px-4 text-white rounded-md": canSave(),
+                  "bg-gray-200 py-2 px-4 text-gray-500 rounded-md": !canSave(),
+                }}
+                disabled={!canSave()}
+                onClick={() => saveLocationSettings()}
+              >
+                <Show
+                  when={!setting() || !canSave()}
+                  fallback={<p>Saving...</p>}
+                >
+                  <p>Save</p>
+                </Show>
+              </button>
+              <button
+                class="text-gray-400"
+                onClick={() => {
+                  setNewName("");
+                  setPhotoFilesToUpload([]);
+                  setShowLocationSettings(false);
+                }}
+                disabled={!canSave()}
+              >
+                <p>Cancel</p>
+              </button>
             </div>
           </div>
-          <div
-            classList={{
-              hidden: !location() && !hasPicture() && !newName(),
-            }}
-            class="mt-4 flex justify-end space-x-2 text-gray-500"
-          >
-            <button
-              classList={{
-                "bg-blue-500 py-2 px-4 text-white rounded-md": canSave(),
-                "bg-gray-200 py-2 px-4 text-gray-500 rounded-md": !canSave(),
-              }}
-              disabled={!canSave()}
-              onClick={() => saveLocationSettings()}
-            >
-              <Show when={!setting() || !canSave()} fallback={<p>Saving...</p>}>
-                <p>Save</p>
-              </Show>
-            </button>
-            <button
-              class="text-gray-400"
-              onClick={() => {
-                setNewName("");
-                setPhotoFilesToUpload([]);
-                setShowLocationSettings(false);
-              }}
-              disabled={!canSave()}
-            >
-              <p>Cancel</p>
-            </button>
-          </div>
         </div>
-      </div>
+      </Show>
     </section>
   );
 }
@@ -1646,7 +1653,7 @@ export function WifiSettingsTab(props: SettingProps) {
     const currModem = modem();
     return (
       currModem?.failedToFindSimCard ??
-      currModem?.simCard?.simCardStatus.includes("not inserted") ??
+      currModem?.simCard?.simCardStatus?.includes("not inserted") ??
       false
     );
   };
@@ -1794,7 +1801,7 @@ export function WifiSettingsTab(props: SettingProps) {
                   </div>
                 }
               >
-                <div class="space-between flex h-full w-full items-center justify-between p-2 text-sm">
+                <div class="space-between flex h-full w-full items-center justify-between p-2 text-xs">
                   <Switch>
                     <Match when={modem.loading}>
                       <FaSolidSpinner class="animate-spin" />
@@ -1856,7 +1863,7 @@ export function WifiSettingsTab(props: SettingProps) {
               <FieldWrapper
                 type="custom"
                 title={
-                  <div class="flex items-center justify-center gap-x-2 text-sm">
+                  <div class="flex items-center justify-center gap-x-2 text-xs">
                     <div
                       classList={{
                         "bg-yellow-300": wifiConnectedToInternet.loading,
@@ -1974,10 +1981,10 @@ export function WifiSettingsTab(props: SettingProps) {
             <section>
               <button
                 onClick={() => setShowSaveNetwork(true)}
-                class="flex w-full items-center justify-center space-x-2 pb-3 pt-5 text-lg text-blue-700"
+                class="text-md flex w-full items-center justify-center space-x-2 pb-3 pt-3 text-blue-700"
               >
                 <p>Add Network</p>
-                <FaSolidPlus size={20} />
+                <FaSolidPlus size={16} />
               </button>
             </section>
           </Show>
@@ -2640,7 +2647,7 @@ export function DeviceSettingsModal() {
     <Show when={show()}>
       {(id) => {
         return (
-          <div class="fixed left-1/2 top-24 z-40 h-auto w-11/12 -translate-x-1/2 transform rounded-xl border bg-white shadow-lg">
+          <div class="fixed left-1/2 top-[70px] z-40 h-auto w-11/12 -translate-x-1/2 transform rounded-xl border bg-white shadow-lg">
             <header class="flex justify-between px-4">
               <div class="flex items-center py-4">
                 <Show

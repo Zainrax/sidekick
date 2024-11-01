@@ -11,6 +11,7 @@ import {
   onMount,
   on,
   createResource,
+  createMemo,
 } from "solid-js";
 import { Motion } from "solid-motionone";
 import HelpSection from "./HelpSection";
@@ -246,7 +247,6 @@ function SetupWizard(): JSX.Element {
   };
   const close = () => setSearchParams({ step: "" });
   const finishSetup = () => {
-    deviceContext.rebootDevice(searchParams.setupDevice);
     close();
   };
   const [showHelp, setShowHelp] = createSignal(false);
@@ -273,7 +273,7 @@ function SetupWizard(): JSX.Element {
     }
   });
   const Title = (props: { title: string; back?: Steps }) => (
-    <div class="mb-4 flex items-center justify-between px-4">
+    <div class="mb-2 flex items-center justify-between px-4">
       <div class="flex items-center gap-x-2">
         <Show when={props.back}>
           {(back) => (
@@ -644,11 +644,11 @@ function SetupWizard(): JSX.Element {
                   "text-blue-500": canProcceed(),
                   "text-gray-400": props.canProcceed === false,
                 }}
-                class="relative flex items-center justify-center p-2 text-lg"
+                class="text-md relative flex items-center justify-center p-2"
                 disabled={!canProcceed()}
               >
                 Next Step
-                <div class="pt- absolute right-[-1em]"></div>
+                <div class="absolute right-[-1em]"></div>
               </button>
               <Show when={props.canProcceed === false && props.requirementText}>
                 {(requirementText) => (
@@ -665,7 +665,6 @@ function SetupWizard(): JSX.Element {
             >
               Finish Setup
             </button>
-            <p class="text-sm text-gray-500">Will reboot to apply changes.</p>
           </div>
         </Show>
       </div>
@@ -681,7 +680,7 @@ function SetupWizard(): JSX.Element {
     return (
       <>
         <Title title="Wifi Setings" back="searchingDevice" />
-        <div class="flex flex-col gap-y-2 text-sm">
+        <div class="flex flex-col gap-y-2 text-xs">
           <p class="text-center">
             The camera/bird monitor may temporarily disconnect, ensure that your
             phone is connected to the same WiFi.
@@ -728,11 +727,44 @@ function SetupWizard(): JSX.Element {
   };
 
   const LocationSettings = () => {
+    const shouldUpdateLocState = () =>
+      deviceContext.shouldDeviceUpdateLocation(searchParams.setupDevice);
+
+    const [locationRes, { refetch: refetchLocation }] =
+      deviceContext.getLocationByDevice(searchParams.setupDevice);
+    const location = createMemo(() => locationRes());
+    createEffect(() => {
+      on(
+        () => shouldUpdateLocState(),
+        async (shouldUpdate) => {
+          if (shouldUpdate === "loading") return;
+          refetchLocation();
+        }
+      );
+    });
+
+    const [locCoords, { refetch }] = createResource(
+      () => searchParams.setupDevice,
+      async (id) => {
+        const res = await deviceContext.getLocationCoords(id);
+        if (res.success) return res.data;
+        return null;
+      }
+    );
+    const lat = () => locCoords()?.latitude ?? "...";
+    const lng = () => locCoords()?.longitude ?? "...";
+    const hasLocation = () =>
+      location() !== null || (lat() !== 0 && lng() !== 0);
+
     return (
       <>
         <Title title="Location Settings" back="group" />
         <LocationSettingsTab deviceId={searchParams.setupDevice} />
-        <StepProgressIndicator nextStep="camera" place={2} />
+        <StepProgressIndicator
+          nextStep="camera"
+          place={2}
+          canProcceed={hasLocation()}
+        />
         <Additional />
       </>
     );
@@ -849,7 +881,7 @@ function SetupWizard(): JSX.Element {
   );
   return (
     <Show when={show()}>
-      <div class="fixed left-1/2 top-20 z-40 h-auto w-11/12 -translate-x-1/2 transform rounded-xl border bg-white px-2 py-4 shadow-lg">
+      <div class="fixed left-1/2 top-[70px] z-40 h-auto w-11/12 -translate-x-1/2 transform rounded-xl border bg-white px-2 py-4 shadow-lg">
         <Switch>
           <Match when={showHelp()}>
             <HelpSection onClose={toggleHelp} />

@@ -19,7 +19,13 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonTransformingSerializer
 import kotlinx.datetime.*
+import kotlin.math.roundToInt
 
+private const val ADTS_HEADER_SIZE = 7
+private const val SYNC_WORD_MASK = 0xFFF0
+private const val SYNC_WORD = 0xFFF0
+private const val SAMPLE_RATE_INDEX_MASK = 0x3C00
+private val SAMPLE_RATES = listOf(96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000)
 @Serializable
 data class UploadRecordingResponse(val recordingId: Int, val success: Boolean,val messages: List<String>)
 
@@ -51,6 +57,8 @@ class DeviceApi(private val api: Api) {
         // Format to ISO 8601 string
         return instant.toString()
     }
+
+
     private fun parseLocation(locationString: String): List<Double>? {
         return try {
             locationString.trim('[', ']').split(',').map { it.toDouble() }
@@ -58,14 +66,19 @@ class DeviceApi(private val api: Api) {
             null
         }
     }
+
+    private fun convertToMp3Filename(filename: String): String {
+        val nameWithoutExtension = filename.substringBeforeLast(".", "")
+        return if (nameWithoutExtension.isEmpty()) filename else "$nameWithoutExtension.mp3"
+    }
     @Serializable
     data class RecordingData(val type: String, val fileHash: String)
     @Serializable
-    data class AudioRecordingData(val type: String, val fileHash: String, val recordingDateTime: String)
+    data class AudioRecordingData(val type:String, val fileHash: String)
     suspend fun uploadRecording(filePath: Path, filename: String, device: String, token: Token, type: String): Either<ApiError,UploadRecordingResponse> =
         if(type == "audio") {
-                readAudioFile(filePath).flatMap { audioData ->
-                    getSha1FileHash(audioData.content).flatMap { hash ->
+                readAudioFile(filePath).map { audioData ->
+                    return getSha1FileHash(audioData.content).flatMap { hash ->
                         api.post(
                             "recordings/device/${device}"
                         ) {
@@ -79,12 +92,12 @@ class DeviceApi(private val api: Api) {
                                         append("file", audioData.content, Headers.build {
                                             append(
                                                 HttpHeaders.ContentDisposition,
-                                                "form-data; name=file; filename=${filename}"
+                                                "filename=file"
                                             )
                                         })
                                         append(
                                             "data",
-                                            Json.encodeToString(AudioRecordingData(type, hash, convertToIsoString(filename.removeSuffix(".aac")))),
+                                            Json.encodeToString(AudioRecordingData(type, hash)),
                                             Headers.build {
                                                 append(HttpHeaders.ContentType, "application/json")
                                             })
@@ -96,7 +109,8 @@ class DeviceApi(private val api: Api) {
                             return validateResponse(it)
                         }
                     }
-                }.mapLeft { InvalidResponse.UnknownError("Unable to upload recording for $filename: $it") }        } else {
+                }.mapLeft { InvalidResponse.UnknownError("Unable to upload recording for $filename: $it") }
+        } else {
             getFile(filePath).flatMap { file ->
                 getSha1FileHash(file).flatMap { hash ->
                     api.post(

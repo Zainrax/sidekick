@@ -14,11 +14,13 @@ import { BiSolidCopyAlt } from "solid-icons/bi";
 import { VsChevronDown, VsClose } from "solid-icons/vs";
 import { Clipboard } from "@capacitor/clipboard";
 import { FiCloudOff } from "solid-icons/fi";
+import { useLogsContext } from "~/contexts/LogsContext";
 interface NotificationBarProps {
   notification: Notification;
 }
 
 function NotificationBar(props: NotificationBarProps) {
+  const log = useLogsContext();
   const color = () => {
     switch (props.notification.type) {
       case "error":
@@ -91,7 +93,7 @@ function NotificationBar(props: NotificationBarProps) {
         <div class="space-y-2">
           <button
             onClick={() => {
-              hideNotification(props.notification.id, 0);
+              log.hideNotification(props.notification.id, 0);
             }}
           >
             <VsClose size={26} />
@@ -134,9 +136,10 @@ function NotificationBar(props: NotificationBarProps) {
 }
 
 function NotificationPopup() {
+  const notifcationContext = useLogsContext();
   return (
     <div class="mt-safe absolute top-0 z-50 w-full space-y-2 px-4 pt-2">
-      <For each={notifications()}>
+      <For each={notifcationContext.notifications()}>
         {(notification) => <NotificationBar notification={notification} />}
       </For>
     </div>

@@ -34,6 +34,7 @@ import { isWithinRange } from "../Storage/location";
 import DeviceCamera from "./Camera";
 import { Effect } from "effect";
 import { useLogsContext } from "../LogsContext";
+import { useSearchParams } from "@solidjs/router";
 
 const WifiNetwork = z
   .object({
@@ -93,6 +94,7 @@ export const tc2ModemSchema = z
         provider: z.string(),
         simCardStatus: z.string(),
       })
+      .partial()
       .optional(),
     timestamp: z.string(),
   })
@@ -590,6 +592,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         new Error(`Could not get device information: ${unknown}`),
     });
 
+  const [searchParams, setSearchParams] = useSearchParams();
   // Function to check if a device is still connected
   const checkDeviceConnection = async (device: Device) => {
     try {
@@ -602,24 +605,38 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         const info = DeviceInfoSchema.safeParse(data);
         console.info("DEVICE INFO", data, info);
 
-        if (info.success && info.data.deviceID.toString() === device.id) {
+        if (info.success) {
           const battery = await getBattery(device.url); // Assume getBattery is defined elsewhere
           const updatedDevice: ConnectedDevice = {
             ...device,
+            id: info.data.deviceID.toString(),
+            name: info.data.devicename,
             lastUpdated: info.data.lastUpdated
               ? new Date(info.data.lastUpdated)
               : device.lastUpdated,
             batteryPercentage: battery?.mainBattery,
             isConnected: true,
           };
-          devices.set(device.id, updatedDevice);
+          if (info.data.deviceID.toString() !== device.id) {
+            devices.delete(device.id);
+            if (searchParams.deviceSettings === device.id) {
+              setSearchParams({ deviceSettings: updatedDevice.id });
+            } else if (searchParams.setupDevice === device.id) {
+              setSearchParams({
+                setupDevice: updatedDevice.id,
+              });
+            }
+          }
+          devices.set(updatedDevice.id, updatedDevice);
           return updatedDevice;
         }
       }
 
+      console.log("DISCONNECT", device);
       devices.set(device.id, { ...device, isConnected: false });
       return undefined;
     } catch (error) {
+      console.log("DISCONNECT", device);
       devices.set(device.id, { ...device, isConnected: false });
       return undefined;
     }
@@ -627,7 +644,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   const hasAudioCapabilities = async (deviceId: string) => {
     try {
-      debugger;
       const res = await getAudioMode(deviceId);
       if (res !== null) return true;
     } catch (error) {
@@ -700,12 +716,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     await setupListeners();
     monitorAPConnection();
 
-    //const discoveryInterval = setInterval(() => {
-    //  searchDevice();
-    //}, 30000); // Every 20 seconds
+    const discoveryInterval = setInterval(() => {
+      searchDevice();
+    }, 30000); // Every 20 seconds
 
     onCleanup(() => {
-      // clearInterval(discoveryInterval);
+      clearInterval(discoveryInterval);
       cleanupListeners();
     });
   });
@@ -713,7 +729,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const Authorization = "Basic YWRtaW46ZmVhdGhlcnM=";
   const headers = { Authorization: Authorization };
 
-  const getRecordings = async (device: ConnectedDevice): Promise<string[]> => {
+  const getRecordings = async (
+    device: ConnectedDevice
+  ): Promise<string[] | null> => {
     try {
       await DevicePlugin.rebindConnection();
       if ((await Filesystem.checkPermissions()).publicStorage === "denied") {
@@ -923,6 +941,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const saveEvents = async (device: ConnectedDevice) => {
     const eventKeys = await getEventKeys(device);
     deviceEventKeys.set(device.id, eventKeys);
+    debugger;
     if (!eventKeys) return;
     const savedEvents = storage.savedEvents();
     const events = await getEvents(
@@ -932,7 +951,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       )
     );
     for (const event of events) {
-      if (!devicesDownloading.has(device.id)) return;
       storage?.saveEvent({
         key: parseInt(event.key),
         device: device.id,
@@ -2179,6 +2197,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     getDeviceConfig,
     getEvents,
     saveItems,
+    setCurrEvents,
+    saveEvents,
     changeGroup,
     rebootDevice,
     // Location

@@ -122,6 +122,7 @@ export function useRecordingStorage() {
           log.logWarning({
             message: "Your account does not have access to upload recordings",
             details: res.message,
+            warn: true,
           });
           const otherRecordings = recordings.filter(
             (r) => r.device !== recording.device
@@ -130,7 +131,8 @@ export function useRecordingStorage() {
         } else {
           log.logWarning({
             message: "Failed to upload recording",
-            details: res.message,
+            details: `${recording.name} - ${res.message}`,
+            warn: true,
           });
         }
       }

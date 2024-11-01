@@ -173,19 +173,31 @@ const [LogsProvider, useLogsContext] = createContextProvider(() => {
     const details = log.details ? `${log.details}\n` : "";
     const errorInfo = isErrorLog(log) && log.error ? `${log.error}` : "";
     console.debug(`[${log.type}] ${log.message} ${details} ${errorInfo}`);
-    const shouldWarn = log.warn ?? true;
+    const shouldWarn = log.warn ?? false;
     if (shouldWarn) {
-      setNotifications([
-        ...notifications(),
-        {
-          id,
-          message: log.message,
-          details: log.details,
-          type: log.type,
-          timeout: log.timeout,
-          action: log.action,
-        },
-      ]);
+      debugger;
+      const existingNotifcation = notifications().find(
+        ({ message }) => log.message === message
+      );
+      if (existingNotifcation) {
+        existingNotifcation.details += `\n ${log.details}`;
+        setNotifications([
+          ...notifications().filter(({ id }) => id !== existingNotifcation.id),
+          existingNotifcation,
+        ]);
+      } else {
+        setNotifications([
+          ...notifications(),
+          {
+            id,
+            message: log.message,
+            details: log.details,
+            type: log.type,
+            timeout: log.timeout,
+            action: log.action,
+          },
+        ]);
+      }
       if (log.type === "success" || log.type === "loading" || log.timeout) {
         hideNotification(id, log.timeout ?? defaultDuration);
       }

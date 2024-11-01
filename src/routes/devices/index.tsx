@@ -32,7 +32,7 @@ import BackgroundLogo from "~/components/BackgroundLogo";
 import { DeviceSettingsModal } from "~/components/DeviceSettings";
 import { useHeaderContext } from "~/components/Header";
 import SetupWizard from "~/components/SetupWizard";
-import { useDevice } from "~/contexts/Device";
+import { Device, useDevice } from "~/contexts/Device";
 import { useLogsContext } from "~/contexts/LogsContext";
 import { useStorage } from "~/contexts/Storage";
 import { useUserContext } from "~/contexts/User";
@@ -69,13 +69,18 @@ function DeviceDetails(props: DeviceDetailsProps) {
     storage
       .savedEvents()
       .filter((event) => event.device === props.id && !event.isUploaded);
-  const eventKeys = () => context.deviceEventKeys.get(props.id) ?? [];
+  const eventKeys = createMemo(
+    () => context.deviceEventKeys.get(props.id) ?? []
+  );
   const disabledDownload = () => {
     const hasRecsToDownload =
       deviceRecs().length > 0 && deviceRecs().length !== savedRecs().length;
     const hasEventsToDownload =
       eventKeys().length > 0 && savedEvents().length !== eventKeys().length;
-    return !hasRecsToDownload && !hasEventsToDownload;
+    return (
+      !hasRecsToDownload ||
+      (userContext.dev() && !hasEventsToDownload && !hasRecsToDownload)
+    );
   };
   const [, setParams] = useSearchParams();
 
@@ -104,6 +109,19 @@ function DeviceDetails(props: DeviceDetailsProps) {
   );
   const user = useUserContext();
 
+  const hasEventsToDownload = createMemo(
+    () => eventKeys().length > 0 && savedEvents().length !== eventKeys().length
+  );
+  createEffect(
+    on(hasEventsToDownload, async (hasEventsToDownload) => {
+      if (hasEventsToDownload) {
+        const device = context.devices.get(props.id);
+        if (!device || !device.isConnected) return;
+        await context.saveEvents(device);
+      }
+    })
+  );
+
   return (
     <ActionContainer
       disabled={!props.isConnected}
@@ -121,7 +139,7 @@ function DeviceDetails(props: DeviceDetailsProps) {
         </Show>
       }
     >
-      <div class=" flex items-center justify-between px-2">
+      <div class=" flex items-center justify-between">
         <div class="w-full" onClick={() => openDeviceInterface()} role="button">
           <div class="flex items-center space-x-1 ">
             <Show when={!props.isProd}>
@@ -171,12 +189,12 @@ function DeviceDetails(props: DeviceDetailsProps) {
             </div>
           }
         >
-          <div class=" flex items-center space-x-6 px-2 text-blue-500">
+          <div class=" flex items-center text-blue-500">
             <Show
               when={!context.devicesDownloading.has(props.id)}
               fallback={
                 <button
-                  class="text-red-500"
+                  class="p-2 text-red-500"
                   onClick={() => context.stopSaveItems(props.id)}
                 >
                   <FaSolidStop size={28} />
@@ -186,7 +204,7 @@ function DeviceDetails(props: DeviceDetailsProps) {
               <button
                 class={`${
                   disabledDownload() ? "text-slate-300" : "text-blue-500"
-                }`}
+                } p-2`}
                 disabled={disabledDownload()}
                 onClick={() => context.saveItems(props.id)}
               >
@@ -194,7 +212,7 @@ function DeviceDetails(props: DeviceDetailsProps) {
               </button>
             </Show>
             <button
-              class="relative text-blue-500"
+              class="relative p-2 text-blue-500"
               disabled={
                 context.locationBeingSet.has(props.id) ||
                 ["loading", "unavailable"].includes(updateLocState())
@@ -254,9 +272,83 @@ export function isKeyOfObject<T extends object>(
   return key in obj;
 }
 
+/**
+ * Performs a deep comparison between two arrays of Device objects
+ * @param arr1 First array of Device objects
+ * @param arr2 Second array of Device objects
+ * @returns boolean indicating whether the arrays are deeply equal
+ */
+export function compareDeviceArrays(arr1: Device[], arr2: Device[]): boolean {
+  if (arr1.length !== arr2.length) return false;
+
+  // Sort arrays by device ID to ensure consistent comparison
+  const sortedArr1 = [...arr1].sort((a, b) => a.id.localeCompare(b.id));
+  const sortedArr2 = [...arr2].sort((a, b) => a.id.localeCompare(b.id));
+
+  return sortedArr1.every((device1, index) => {
+    const device2 = sortedArr2[index];
+    return deepCompareDevices(device1, device2);
+  });
+}
+
+/**
+ * Performs a deep comparison between two Device objects
+ * @param device1 First Device object
+ * @param device2 Second Device object
+ * @returns boolean indicating whether the devices are deeply equal
+ */
+function deepCompareDevices(device1: Device, device2: Device): boolean {
+  // Compare basic properties
+  const basicPropsEqual =
+    device1.id === device2.id &&
+    device1.host === device2.host &&
+    device1.name === device2.name &&
+    device1.group === device2.group &&
+    device1.endpoint === device2.endpoint &&
+    device1.isProd === device2.isProd &&
+    device1.locationSet === device2.locationSet &&
+    device1.url === device2.url &&
+    device1.type === device2.type &&
+    device1.isConnected === device2.isConnected;
+
+  if (!basicPropsEqual) return false;
+
+  // Compare optional properties
+  const optionalPropsEqual =
+    device1.saltId === device2.saltId &&
+    device1.batteryPercentage === device2.batteryPercentage &&
+    compareDates(device1.timeFound, device2.timeFound) &&
+    compareOptionalDates(device1.lastUpdated, device2.lastUpdated);
+
+  return basicPropsEqual && optionalPropsEqual;
+}
+
+/**
+ * Compares two Date objects for equality
+ * @param date1 First Date object
+ * @param date2 Second Date object
+ * @returns boolean indicating whether the dates are equal
+ */
+function compareDates(date1: Date, date2: Date): boolean {
+  return date1.getTime() === date2.getTime();
+}
+
+/**
+ * Compares two optional Date objects for equality
+ * @param date1 First optional Date object
+ * @param date2 Second optional Date object
+ * @returns boolean indicating whether the dates are equal
+ */
+function compareOptionalDates(date1?: Date, date2?: Date): boolean {
+  if (!date1 && !date2) return true;
+  if (!date1 || !date2) return false;
+  return date1.getTime() === date2.getTime();
+}
 function Devices() {
   const context = useDevice();
-  const devices = () => [...context.devices.values()];
+  const devices = createMemo(() => [...context.devices.values()], [], {
+    equals: compareDeviceArrays,
+  });
   const [groupPromptCancelled, setGroupCancelledPrompt] = createSignal(false);
   const [locPromptCancelled, setPromptCancel] = createSignal(false);
   const headerContext = useHeaderContext();
