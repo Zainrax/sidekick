@@ -68,7 +68,6 @@ export function AudioSettingsTab(props: SettingProps) {
     async (id) => {
       if (!id) return null;
       const res = await context.getAudioFiles(id);
-      console.log("Audio Files", res);
       return res;
     }
   );
@@ -77,16 +76,44 @@ export function AudioSettingsTab(props: SettingProps) {
     async (id) => {
       if (!id) return null;
       const res = await context.getAudioStatus(id);
-      console.log("CURRENT AUDIO STATUS", res, id);
       return res;
     }
   );
+  const [currentStatusMonitor, setCurrentStatusMonitor] = createSignal();
+  const monitorAudioStatus = () => {
+    const currInterval = currentStatusMonitor();
+    if (currInterval) {
+      console.log("Clearing interval");
+      clearInterval(currInterval as number);
+    }
+    const interval = setInterval(() => {
+      if (audioStatus.loading) return;
+      if (audioStatus()?.status === "ready") {
+        if (!audioFiles.loading) {
+          refetchAudioFiles();
+        }
+      } else {
+        refetchAudioStatus();
+      }
+    }, 10000);
+    setCurrentStatusMonitor(interval);
+  };
+
+  onMount(() => {
+    monitorAudioStatus();
+    onCleanup(() => {
+      const currInterval = currentStatusMonitor();
+      if (currInterval) {
+        clearInterval(currInterval as number);
+      }
+    });
+  });
+
   const [audioMode, { refetch: refetchAudioMode }] = createResource(
     id,
     async (id) => {
       if (!id) return null;
       const res = await context.getAudioMode(id);
-      console.log("STATUS", res);
       return res;
     }
   );
@@ -96,25 +123,7 @@ export function AudioSettingsTab(props: SettingProps) {
     const res = await context.takeAudioRecording(id());
     setResult(res ? "success" : "failed");
     refetchAudioStatus();
-    const interval = setInterval(() => {
-      if (audioStatus()?.status === "ready") {
-        clearInterval(interval);
-        if (!audioFiles.loading) {
-          refetchAudioFiles();
-        }
-      } else {
-        refetchAudioStatus();
-      }
-    }, 5000);
   };
-
-  onMount(() => {
-    setInterval(() => {
-      if (!audioFiles.loading) {
-        refetchAudioFiles();
-      }
-    }, 5000);
-  });
 
   const [config] = createResource(id, async (id) => {
     if (!id) return null;
@@ -317,11 +326,16 @@ export function AudioSettingsTab(props: SettingProps) {
       <button
         classList={{
           "bg-blue-500": audioMode() !== "Disabled",
-          "bg-gray-300": audioMode() === "Disabled",
+          "bg-gray-300":
+            audioMode() === "Disabled" || audioStatus()?.status === "busy",
         }}
         class="flex w-full items-center justify-center space-x-2 rounded-lg bg-blue-500 py-3 text-white"
         onClick={() => createTestRecording()}
-        disabled={recording() || audioMode() === "Disabled"}
+        disabled={
+          recording() ||
+          audioMode() === "Disabled" ||
+          audioStatus()?.status === "busy"
+        }
       >
         <Switch
           fallback={
@@ -336,6 +350,10 @@ export function AudioSettingsTab(props: SettingProps) {
           </Match>
           <Match when={audioStatus()?.status === "recording"}>
             <p>Recording...</p>
+            <FaSolidSpinner class="animate-spin" size={24} />
+          </Match>
+          <Match when={audioStatus()?.status === "busy"}>
+            <p class="sm:text-sm">Busy Recording Video...</p>
             <FaSolidSpinner class="animate-spin" size={24} />
           </Match>
           <Match when={audioStatus()?.status === "ready"}>
@@ -1575,12 +1593,18 @@ export function WifiSettingsTab(props: SettingProps) {
   onMount(() => {
     const interval = setInterval(() => {
       if (!initialLoad()) return;
-      refetchWifiNetowrks();
-      refetchSavedWifi();
+      if (!wifiNetworks.loading) {
+        refetchWifiNetowrks();
+      }
+      if (!currentWifi.loading) {
+        refetchSavedWifi();
+      }
       if (modem() === null) {
         refetchModem();
       }
-      refetch();
+      if (!currentWifi.loading) {
+        refetch();
+      }
     }, 10000);
     onCleanup(() => clearInterval(interval));
   });
@@ -2440,7 +2464,7 @@ export function GeneralSettingsTab(props: SettingProps) {
       if (!canUpdate()) {
         setTimeout(() => {
           refetch();
-        }, 3000);
+        }, 30000);
       }
     }
   });

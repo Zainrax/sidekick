@@ -11,7 +11,6 @@ import { Result } from ".";
 import { z } from "zod";
 import { CacophonyPlugin } from "./CacophonyApi";
 import { useNavigate } from "@solidjs/router";
-import { unbindAndRebind } from "./Device";
 import { CapacitorHttp } from "@capacitor/core";
 import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
 import { useLogsContext } from "./LogsContext";
@@ -230,44 +229,43 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       if (!decodedToken) return null;
 
       const now = new Date();
-      const bufferTime = 5000; // 5 seconds buffer
+      const bufferTime = 10000; // 10 second buffer
 
       if (decodedToken.expiresAt.getTime() < now.getTime() + bufferTime) {
         // Token is about to expire, try to refresh
         try {
-          const refreshedUser = await unbindAndRebind(async () => {
-            const result = await CacophonyPlugin.validateToken({
-              refreshToken,
-            });
+          const result = await CacophonyPlugin.validateToken({
+            refreshToken,
+          });
 
-            if (result.success) {
-              const updatedUser: User = {
-                token: result.data.token,
-                refreshToken: result.data.refreshToken,
-                id,
-                email,
-                expiry: result.data.expiry,
-                prod: isProd(),
-              };
-              await Preferences.set({
-                key: "user",
-                value: JSON.stringify(updatedUser),
+          if (result.success) {
+            const updatedUser: User = {
+              token: result.data.token,
+              refreshToken: result.data.refreshToken,
+              id,
+              email,
+              expiry: result.data.expiry,
+              prod: isProd(),
+            };
+            await Preferences.set({
+              key: "user",
+              value: JSON.stringify(updatedUser),
+            });
+            console.info({ message: "Token refreshed successfully" });
+            return updatedUser;
+          } else {
+            if (result.message.includes("Failed")) {
+              log.logWarning({
+                message: "Token validation failed",
+                details: result.message,
               });
-              console.info({ message: "Token refreshed successfully" });
-              return updatedUser;
-            } else {
-              if (result.message.includes("Failed") && navigator.onLine) {
-                log.logWarning({
-                  message: "Token validation failed",
-                  details: result.message,
-                });
+              if (navigator.onLine) {
                 await logout();
               }
-              console.warn("Failed to refresh token");
-              return user;
             }
-          });
-          return refreshedUser;
+            console.warn("Failed to refresh token");
+            return user;
+          }
         } catch (networkError) {
           log.logError({
             message: "Network error during token validation",
@@ -312,16 +310,14 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         throw new Error("User not authenticated");
       }
 
-      const res = await unbindAndRebind(async () => {
-        return await CapacitorHttp.request({
-          method: "POST",
-          url: `${getServerUrl()}/api/v1/groups`,
-          headers: {
-            Authorization: user.token,
-            "Content-Type": "application/json",
-          },
-          data: { groupName },
-        });
+      const res = await CapacitorHttp.request({
+        method: "POST",
+        url: `${getServerUrl()}/api/v1/groups`,
+        headers: {
+          Authorization: user.token,
+          "Content-Type": "application/json",
+        },
+        data: { groupName },
       });
 
       const parsed = CreateGroupResSchema.safeParse(res.data);

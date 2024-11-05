@@ -12,8 +12,8 @@ import {
 } from "~/database/Entities/Recording";
 import { db } from ".";
 import { CacophonyPlugin } from "../CacophonyApi";
-import { DeviceDetails, DevicePlugin, unbindAndRebind } from "../Device";
-import { createEffect, createMemo, createSignal, onMount } from "solid-js";
+import { DeviceDetails, DevicePlugin } from "../Device";
+import { createMemo, createSignal, onMount } from "solid-js";
 import { useUserContext } from "../User";
 import { useLogsContext } from "../LogsContext";
 
@@ -51,7 +51,6 @@ export function useRecordingStorage() {
   }): Promise<Recording[]> => getRecordings(db)(options);
 
   const deleteRecording = async (recording: Recording) => {
-    debugger;
     const res = await DevicePlugin.deleteRecording({
       recordingPath: recording.name,
     });
@@ -82,8 +81,7 @@ export function useRecordingStorage() {
     setSavedRecordings(savedRecordings().filter((r) => r.isUploaded));
   };
 
-  const uploadRecordings = async () => {
-    debugger;
+  const uploadRecordings = async (warn = true) => {
     setShouldUpload(true);
     let recordings = unuploadedRecordings().filter(
       (rec) => rec.isProd === userContext.isProd()
@@ -95,14 +93,12 @@ export function useRecordingStorage() {
       if (!user) return;
       const recording = recordings[i];
       const type = recording.name.endsWith("cptv") ? "thermalRaw" : "audio";
-      const res = await unbindAndRebind(() =>
-        CacophonyPlugin.uploadRecording({
-          token: user.token,
-          type,
-          device: recording.device,
-          filename: recording.path.split("/").pop() ?? recording.name,
-        })
-      );
+      const res = await CacophonyPlugin.uploadRecording({
+        token: user.token,
+        type,
+        device: recording.device,
+        filename: recording.path.split("/").pop() ?? recording.name,
+      });
 
       if (res.success) {
         recording.isUploaded = true;
@@ -122,18 +118,27 @@ export function useRecordingStorage() {
           log.logWarning({
             message: "Your account does not have access to upload recordings",
             details: res.message,
-            warn: true,
+            warn,
           });
           const otherRecordings = recordings.filter(
             (r) => r.device !== recording.device
           );
           recordings = otherRecordings;
         } else {
-          log.logWarning({
-            message: "Failed to upload recording",
-            details: `${recording.name} - ${res.message}`,
-            warn: true,
-          });
+          if (res.message.includes("Failed to verify JWT")) {
+            log.logWarning({
+              message:
+                "Failed to upload recording, please try again or log in again",
+              details: `${recording.name} - ${res.message}`,
+              warn,
+            });
+          } else {
+            log.logWarning({
+              message: "Failed to upload recording",
+              details: `${recording.name} - ${res.message}`,
+              warn,
+            });
+          }
         }
       }
     }

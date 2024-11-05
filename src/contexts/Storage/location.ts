@@ -544,12 +544,10 @@ export function useLocationStorage() {
   const getReferencePhotoForLocation = async (id: number, fileKey: string) => {
     try {
       const user = await userContext.getUser();
-      const res = await unbindAndRebind(async () => {
-        return CacophonyPlugin.getReferencePhoto({
-          ...(user?.token && { token: user.token }),
-          station: id.toString(),
-          fileKey,
-        });
+      const res = await CacophonyPlugin.getReferencePhoto({
+        ...(user?.token && { token: user.token }),
+        station: id.toString(),
+        fileKey,
       });
 
       if (res.success) {

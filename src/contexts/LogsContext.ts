@@ -76,12 +76,17 @@ const [LogsProvider, useLogsContext] = createContextProvider(() => {
   const [userData, setUser] = createSignal<User | null>();
   onMount(() => {
     Sentry.init({
+      dsn: "https://90b77917fa4030b726635b1bb8cea254@sentry.crittergames.co.nz/2",
       integrations: [
         SentrySolid.browserTracingIntegration(),
-        SentrySolid.replayIntegration(),
+        SentrySolid.replayIntegration({
+          maskAllText: false,
+          blockAllMedia: false,
+        }),
       ],
-      dsn: "https://0af3453887927768a693178c3604d01f@o4507970723971072.ingest.us.sentry.io/4507970755493888",
       tracesSampleRate: 0.2,
+      replaysSessionSampleRate: 0.1,
+      replaysOnErrorSampleRate: 1.0,
     });
   });
 
@@ -175,7 +180,6 @@ const [LogsProvider, useLogsContext] = createContextProvider(() => {
     console.debug(`[${log.type}] ${log.message} ${details} ${errorInfo}`);
     const shouldWarn = log.warn ?? false;
     if (shouldWarn) {
-      debugger;
       const existingNotifcation = notifications().find(
         ({ message }) => log.message === message
       );

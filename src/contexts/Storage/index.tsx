@@ -1,7 +1,7 @@
 import { KeepAwake } from "@capacitor-community/keep-awake";
 import { CapacitorSQLite, SQLiteConnection } from "@capacitor-community/sqlite";
 import { createContextProvider } from "@solid-primitives/context";
-import { createResource, createSignal } from "solid-js";
+import { createEffect, createResource, createSignal, on } from "solid-js";
 import { openConnection } from "../../database";
 import { useEventStorage } from "./event";
 import { useLocationStorage } from "./location";
@@ -26,7 +26,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
   const location = useLocationStorage();
   const event = useEventStorage();
   const log = useLogsContext();
-  const uploadItems = async () => {
+  const uploadItems = async (warn = true) => {
     try {
       if (isUploading()) return;
       setIsUploading(true);
@@ -34,7 +34,10 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
         await KeepAwake.keepAwake();
       }
       await location.resyncLocations();
-      await Promise.all([event.uploadEvents(), recording.uploadRecordings()]);
+      await Promise.all([
+        event.uploadEvents(),
+        recording.uploadRecordings(warn),
+      ]);
       if (await KeepAwake.isSupported()) {
         await KeepAwake.allowSleep();
       }
@@ -62,16 +65,18 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
     );
   };
 
-  const [upload] = createResource(hasItemsToUpload, async (hasItems) => {
-    try {
-      const status = await Network.getStatus();
-      if (status.connectionType === "wifi" && hasItems) {
-        uploadItems();
+  createEffect(
+    on(hasItemsToUpload, async (hasItems) => {
+      try {
+        const status = await Network.getStatus();
+        if (status.connectionType === "wifi" && hasItems) {
+          uploadItems(false);
+        }
+      } catch (error) {
+        console.error("Error getting network status:", error);
       }
-    } catch (error) {
-      console.error("Error getting network status:", error);
-    }
-  });
+    })
+  );
 
   return {
     ...recording,

@@ -26,8 +26,6 @@ private const val SYNC_WORD_MASK = 0xFFF0
 private const val SYNC_WORD = 0xFFF0
 private const val SAMPLE_RATE_INDEX_MASK = 0x3C00
 private val SAMPLE_RATES = listOf(96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000)
-@Serializable
-data class UploadRecordingResponse(val recordingId: Int, val success: Boolean,val messages: List<String>)
 
 class DeviceApi(private val api: Api) {
     private fun getSha1FileHash(file: ByteArray): Either<ApiError, String> = Either.catch {
@@ -75,41 +73,94 @@ class DeviceApi(private val api: Api) {
     data class RecordingData(val type: String, val fileHash: String)
     @Serializable
     data class AudioRecordingData(val type:String, val fileHash: String)
-    suspend fun uploadRecording(filePath: Path, filename: String, device: String, token: Token, type: String): Either<ApiError,UploadRecordingResponse> =
-        if(type == "audio") {
-                readAudioFile(filePath).map { audioData ->
-                    return getSha1FileHash(audioData.content).flatMap { hash ->
-                        api.post(
-                            "recordings/device/${device}"
-                        ) {
-                            headers {
-                                append(Authorization, token)
-                                contentType(ContentType.MultiPart.FormData)
-                            }
-                            setBody(
-                                MultiPartFormDataContent(
-                                    formData {
-                                        append("file", audioData.content, Headers.build {
-                                            append(
-                                                HttpHeaders.ContentDisposition,
-                                                "filename=file"
-                                            )
-                                        })
+    @Serializable
+    data class DatedAudioRecordingData(val type:String, val fileHash: String, val recordingDateTime: String)
+    @Serializable
+    data class UploadRecordingResponse(val recordingId: Int, val success: Boolean,val messages: List<String>)
+
+    suspend fun uploadRecording(filePath: Path, filename: String, device: String, token: Token, type: String): Either<ApiError, UploadRecordingResponse> =
+        if (type == "audio") {
+            readAudioFile(filePath).map { audioData ->
+                return getSha1FileHash(audioData.content).flatMap { hash ->
+                    // First attempt without date
+                    val initialResponse = api.post(
+                        "recordings/device/${device}"
+                    ) {
+                        headers {
+                            append(Authorization, token)
+                            contentType(ContentType.MultiPart.FormData)
+                        }
+                        setBody(
+                            MultiPartFormDataContent(
+                                formData {
+                                    append("file", audioData.content, Headers.build {
                                         append(
-                                            "data",
-                                            Json.encodeToString(AudioRecordingData(type, hash)),
-                                            Headers.build {
-                                                append(HttpHeaders.ContentType, "application/json")
-                                            })
-                                    },
-                                    boundary = "WebAppBoundary"
-                                )
+                                            HttpHeaders.ContentDisposition,
+                                            "filename=file"
+                                        )
+                                    })
+                                    append(
+                                        "data",
+                                        Json.encodeToString(AudioRecordingData(type, hash)),
+                                        Headers.build {
+                                            append(HttpHeaders.ContentType, "application/json")
+                                        })
+                                },
+                                boundary = "WebAppBoundary"
                             )
-                        }.map {
-                            return validateResponse(it)
+                        )
+                    }
+
+                    // Check response and retry with date if needed
+                    initialResponse.flatMap { validateResponse<UploadRecordingResponse>(it) }.flatMap { response ->
+                        if (!response.success &&
+                            response.messages.any { it.contains("recordingDateTime not supplied") }) {
+
+                            // Extract date from filename or use current time
+                            val recordingDate = convertToIsoString(filename.removeSuffix(".aac"))
+
+                            // Retry with DatedAudioRecordingData
+                            return api.post(
+                                "recordings/device/${device}"
+                            ) {
+                                headers {
+                                    append(Authorization, token)
+                                    contentType(ContentType.MultiPart.FormData)
+                                }
+                                setBody(
+                                    MultiPartFormDataContent(
+                                        formData {
+                                            append("file", audioData.content, Headers.build {
+                                                append(
+                                                    HttpHeaders.ContentDisposition,
+                                                    "filename=file"
+                                                )
+                                            })
+                                            append(
+                                                "data",
+                                                Json.encodeToString(
+                                                    DatedAudioRecordingData(
+                                                        type,
+                                                        hash,
+                                                        recordingDate
+                                                    )
+                                                ),
+                                                Headers.build {
+                                                    append(HttpHeaders.ContentType, "application/json")
+                                                })
+                                        },
+                                        boundary = "WebAppBoundary"
+                                    )
+                                )
+                            }.flatMap { retryResponse ->
+                                validateResponse<UploadRecordingResponse>(retryResponse)
+                            }
+                        } else {
+                            Either.Right(response)
                         }
                     }
-                }.mapLeft { InvalidResponse.UnknownError("Unable to upload recording for $filename: $it") }
+                }
+            }.mapLeft { InvalidResponse.UnknownError("Unable to upload recording for $filename: $it") }
         } else {
             getFile(filePath).flatMap { file ->
                 getSha1FileHash(file).flatMap { hash ->
@@ -129,12 +180,12 @@ class DeviceApi(private val api: Api) {
                                             "filename=${filename}"
                                         )
                                     })
-                                        append(
-                                            "data",
-                                            Json.encodeToString(RecordingData(type, hash)),
-                                            Headers.build {
-                                                append(HttpHeaders.ContentType, "application/json")
-                                            })
+                                    append(
+                                        "data",
+                                        Json.encodeToString(RecordingData(type, hash)),
+                                        Headers.build {
+                                            append(HttpHeaders.ContentType, "application/json")
+                                        })
                                 },
                                 boundary = "WebAppBoundary"
 
@@ -146,8 +197,7 @@ class DeviceApi(private val api: Api) {
                 }
             }
                 .mapLeft { InvalidResponse.UnknownError("Unable to upload recording for $filename: $it") }
-        }
-    object JsonAsStringSerializer: JsonTransformingSerializer<String>(tSerializer = String.serializer()) {
+        }    object JsonAsStringSerializer: JsonTransformingSerializer<String>(tSerializer = String.serializer()) {
         override fun transformDeserialize(element: JsonElement): JsonElement {
             return JsonPrimitive(value = element.toString())
         }

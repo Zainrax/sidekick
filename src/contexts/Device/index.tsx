@@ -112,6 +112,7 @@ const AudioStatusSchema = z.union([
   z.literal(1).transform(() => "ready" as const),
   z.literal(2).transform(() => "pending" as const),
   z.literal(3).transform(() => "recording" as const),
+  z.literal(4).transform(() => "busy" as const),
 ]);
 const AudioModeResSchema = z.object({
   ["audio-mode"]: AudioModeSchema,
@@ -266,7 +267,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const log = useLogsContext();
 
   const devices = new ReactiveMap<DeviceId, Device>();
-  const deviceRecordings = new ReactiveMap<DeviceId, RecordingName[]>();
+  const deviceRecordings = new ReactiveMap<DeviceId, RecordingName[] | null>();
   const deviceEventKeys = new ReactiveMap<DeviceId, number[]>();
   const [connectingToDevice, setConnectingToDevice] = createSignal<string[]>(
     []
@@ -394,9 +395,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
             if (device.isConnected) {
               if (!interval) {
                 const id = setInterval(() => {
-                  unbindAndRebind(() =>
-                    DevicePlugin.turnOnModem({ url: device.url, minutes: "5" })
-                  );
+                  DevicePlugin.turnOnModem({ url: device.url, minutes: "5" });
                 }, 300000); // Every 5 minutes
                 modemOnIntervals.set(device.id, id);
               }
@@ -737,7 +736,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       if ((await Filesystem.checkPermissions()).publicStorage === "denied") {
         const permission = await Filesystem.requestPermissions();
         if (permission.publicStorage === "denied") {
-          return [];
+          return null;
         }
       }
       const { url } = device;
@@ -756,7 +755,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         message: "Could not get recordings",
         error,
       });
-      return [];
+      return null;
     }
   };
 
@@ -767,8 +766,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const savedRecordings = await storage.getSavedRecordings({
         device: device.id,
       });
+      debugger;
       for (const rec of savedRecordings) {
-        if (currDeviceRecordings.includes(rec.name)) {
+        if (currDeviceRecordings?.includes(rec.name)) {
           if (rec.isUploaded) {
             const res: HttpResponse = await CapacitorHttp.delete({
               url: `${url}/api/recording/${rec.name}`,
@@ -777,12 +777,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
                 credentials: "include",
               },
             });
-            if (res.status !== 200) return;
+            if (res.status !== 200) continue;
+            await storage.deleteRecording(rec);
           } else {
-            return;
+            continue;
           }
         }
-        await storage.deleteRecording(rec);
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -802,10 +802,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const saveRecordings = async (device: ConnectedDevice) => {
     const recs = deviceRecordings.get(device.id);
     const savedRecs = storage.savedRecordings();
+    debugger;
     if (!recs) return;
     const nonSavedRecs = recs.filter(
       (r) => !savedRecs.find((s) => s.name === r)
     );
+    debugger;
     if (!nonSavedRecs.length) return;
     // Filter out recordings that have already been saved
     for (const rec of nonSavedRecs) {
@@ -941,7 +943,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const saveEvents = async (device: ConnectedDevice) => {
     const eventKeys = await getEventKeys(device);
     deviceEventKeys.set(device.id, eventKeys);
-    debugger;
     if (!eventKeys) return;
     const savedEvents = storage.savedEvents();
     const events = await getEvents(
@@ -1137,7 +1138,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           }
           return null;
         }
-        return null;
       }
     );
 
@@ -2006,7 +2006,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     // Validate LastUpdate as a datetime string in ISO 8601 format
     LastUpdate: z.string().datetime({ offset: true }).optional(),
 
-    UpdateProgressPercentage: z.number().int().min(0).max(100).optional(),
+    UpdateProgressPercentage: z.number().int().optional(),
     UpdateProgressStr: z.string().optional(),
   });
   type SaltStatus = z.infer<typeof SaltStatusSchema>;
@@ -2022,21 +2022,31 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     if (!device || !device.isConnected) return;
     const { url } = device;
     const interval = setInterval(async () => {
-      const res = await CapacitorHttp.get({
-        url: `${url}/api/salt-update`,
-        headers: { ...headers, "Content-Type": "application/json" },
-        webFetchExtra: {
-          credentials: "include",
-        },
-      });
-      if (res.status === 200) {
-        const data = SaltStatusSchema.parse(JSON.parse(res.data));
-        console.log("Check Updating", data);
-        updatingDevice.set(deviceId, { interval, ...data });
-        if (data.RunningUpdate === false) {
-          clearInterval(interval);
-          updatingDevice.delete(deviceId);
+      try {
+        const res = await CapacitorHttp.get({
+          url: `${url}/api/salt-update`,
+          headers: { ...headers, "Content-Type": "application/json" },
+          webFetchExtra: {
+            credentials: "include",
+          },
+        });
+        if (res.status === 200) {
+          console.log("Parsing Update", res.data);
+          const statusRes = SaltStatusSchema.safeParse(JSON.parse(res.data));
+          if (statusRes.success) {
+            const { data } = statusRes;
+            console.log("Check Updating", data);
+            updatingDevice.set(deviceId, { interval, ...data });
+            if (data.RunningUpdate === false) {
+              clearInterval(interval);
+              updatingDevice.delete(deviceId);
+            }
+          } else {
+            console.error("Check Updating Error", statusRes.error, res.data);
+          }
         }
+      } catch (error) {
+        console.error("Check Updating Error", error);
       }
     }, 5000);
   };
