@@ -75,22 +75,25 @@ const [LogsProvider, useLogsContext] = createContextProvider(() => {
   // Import user context to get current user
   const [userData, setUser] = createSignal<User | null>();
   onMount(() => {
-    Sentry.init({
-      dsn: "https://90b77917fa4030b726635b1bb8cea254@sentry.crittergames.co.nz/2",
-      transport: SentrySolid.makeBrowserOfflineTransport(
-        SentrySolid.makeFetchTransport
-      ),
-      integrations: [
-        SentrySolid.browserTracingIntegration(),
-        SentrySolid.replayIntegration({
-          maskAllText: false,
-          blockAllMedia: false,
-        }),
-      ],
-      tracesSampleRate: 0.2,
-      replaysSessionSampleRate: 0.1,
-      replaysOnErrorSampleRate: 1.0,
-    });
+    Sentry.init(
+      {
+        dsn: "https://90b77917fa4030b726635b1bb8cea254@sentry.crittergames.co.nz/2",
+        transport: SentrySolid.makeBrowserOfflineTransport(
+          SentrySolid.makeFetchTransport
+        ),
+        integrations: [
+          SentrySolid.browserTracingIntegration(),
+          SentrySolid.replayIntegration({
+            maskAllText: false,
+            blockAllMedia: false,
+          }),
+        ],
+        tracesSampleRate: 0.2,
+        replaysSessionSampleRate: 0.1,
+        replaysOnErrorSampleRate: 1.0,
+      },
+      SentrySolid.init
+    );
   });
 
   // Notifications state

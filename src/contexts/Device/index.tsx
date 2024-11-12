@@ -9,10 +9,7 @@ import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { Geolocation } from "@capacitor/geolocation";
 import { createContextProvider } from "@solid-primitives/context";
 import { ReactiveMap } from "@solid-primitives/map";
-import {
-  debounce,
-  leading,
-} from "@solid-primitives/scheduled";
+import { debounce, leading } from "@solid-primitives/scheduled";
 import { ReactiveSet } from "@solid-primitives/set";
 import {
   createEffect,
@@ -1148,7 +1145,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       } catch (e) {
         return "denied";
       }
-    );
+    }
+  );
 
   const [locationDisabled, setLocationDisabled] = createSignal(false);
   const [devicesLocToUpdate, { refetch: refetchDeviceLocToUpdate }] =
@@ -1245,15 +1243,15 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const networks = WifiNetwork.array().parse(JSON.parse(res.data));
       return networks
         ? networks
-          .filter((network) => network.SSID)
-          // remove duplicate networks
-          .reduce((acc, curr) => {
-            const found = acc.find((a) => a.SSID === curr.SSID);
-            if (!found) {
-              acc.push(curr);
-            }
-            return acc;
-          }, [] as WifiNetwork[])
+            .filter((network) => network.SSID)
+            // remove duplicate networks
+            .reduce((acc, curr) => {
+              const found = acc.find((a) => a.SSID === curr.SSID);
+              if (!found) {
+                acc.push(curr);
+              }
+              return acc;
+            }, [] as WifiNetwork[])
         : [];
     } catch (e) {
       console.error(e);
@@ -1517,8 +1515,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         res.status === 200
           ? ConnectionRes.parse(JSON.parse(res.data)).connected
           : res.status === 404
-            ? true
-            : false;
+          ? true
+          : false;
       return connection;
     } catch (error) {
       console.error(error);

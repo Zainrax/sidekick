@@ -75,24 +75,9 @@ actual fun readAudioFile(path: Path): Either<IOException, AudioFileData> {
     return try {
         val source = FileSystem.SYSTEM.source(path).buffer()
         source.use { bufferedSource ->
-            // Read WAV header
-            bufferedSource.skip(24) // Skip to sample rate
-            val sampleRate = bufferedSource.readIntLe()
-            bufferedSource.skip(6) // Skip to bits per sample
-            val bitsPerSample = bufferedSource.readShortLe()
-            bufferedSource.skip(4) // Skip to data chunk size
-            val dataSize = bufferedSource.readIntLe()
-
-            // Calculate duration
-            val bytesPerSample = bitsPerSample / 8
-            val numSamples = dataSize / bytesPerSample
-            val durationSeconds = numSamples.toDouble() / sampleRate
-
-            // Read the entire file content
-            bufferedSource.skip(-(44 + 4)) // Go back to the start of the file
             val content = bufferedSource.readByteArray()
 
-            AudioFileData(content, durationSeconds).right()
+            AudioFileData(content).right()
         }
     } catch (e: IOException) {
         e.left()

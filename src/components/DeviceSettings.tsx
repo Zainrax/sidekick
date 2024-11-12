@@ -1218,13 +1218,6 @@ export function LocationSettingsTab(props: SettingProps) {
   const lat = () => locCoords()?.latitude ?? "...";
   const lng = () => locCoords()?.longitude ?? "...";
   const [settingLocation, setSettingLocation] = createSignal(false);
-  const updateLocation = createMemo(shouldUpdateLocState, "current", {
-    equals: (prev, curr) => {
-      if (curr === "loading" && prev === "needsUpdate") return true;
-      else if (curr === prev) return true;
-      else return false;
-    },
-  });
   const hasLocation = () => location() !== null || (lat() !== 0 && lng() !== 0);
   onMount(() => {
     context.refetchDeviceLocToUpdate();

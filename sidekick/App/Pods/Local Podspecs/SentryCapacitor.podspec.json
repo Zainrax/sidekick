@@ -1,13 +1,13 @@
 {
   "name": "SentryCapacitor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "summary": "Official Sentry SDK for Capacitor",
   "license": "MIT",
   "homepage": "https://github.com/getsentry/sentry-capacitor",
   "authors": "Sentry Team and Contributors",
   "source": {
     "git": "https://github.com/getsentry/sentry-capacitor",
-    "tag": "1.0.0"
+    "tag": "1.0.1"
   },
   "source_files": "ios/Plugin/**/*.{swift,h,m,c,cc,mm,cpp}",
   "dependencies": {
