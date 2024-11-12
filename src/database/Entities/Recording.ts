@@ -111,7 +111,8 @@ export const insertRecording =
 
 export const updateRecording =
   (db: SQLiteDBConnection) => async (recording: Recording) => {
-    if (!recording.isUploaded || !recording.uploadId) return;
+    if (recording.isUploaded === undefined && recording.uploadId === undefined)
+      return;
     const sql = `UPDATE ${DBName} SET isUploaded = ${
       recording.isUploaded ? 1 : 0
     }, uploadId = '${recording.uploadId}' WHERE id = '${recording.id}';`;

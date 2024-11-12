@@ -856,9 +856,7 @@ function SetupWizard(): JSX.Element {
     );
   };
 
-  const show = () =>
-    (showHelp() || currentStep()) &&
-    deviceContext.devices.has(searchParams.setupDevice);
+  const show = () => showHelp() || currentStep();
   const [cancelledPrompt, setCancelledPrompt] = createSignal(false);
   createEffect(
     on(show, async (show) => {
@@ -879,6 +877,7 @@ function SetupWizard(): JSX.Element {
       }
     })
   );
+
   return (
     <Show when={show()}>
       <div class="fixed left-1/2 top-[70px] z-40 h-auto w-11/12 -translate-x-1/2 transform rounded-xl border bg-white px-2 py-4 shadow-lg">

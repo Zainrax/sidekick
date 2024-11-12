@@ -54,6 +54,11 @@ import { useUserContext } from "~/contexts/User";
 import { Frame, Region, Track } from "~/contexts/Device/Camera";
 import { VsArrowSwap } from "solid-icons/vs";
 import { useLogsContext } from "~/contexts/LogsContext";
+import {
+  AndroidSettings,
+  IOSSettings,
+  NativeSettings,
+} from "capacitor-native-settings";
 type CameraCanvas = HTMLCanvasElement | undefined;
 const colours = ["#ff0000", "#00ff00", "#ffff00", "#80ffff"];
 type SettingProps = { deviceId: DeviceId };
@@ -368,7 +373,38 @@ export function AudioSettingsTab(props: SettingProps) {
 
 export function CameraSettingsTab(props: SettingProps) {
   const context = useDevice();
+  const device = () => context.devices.get(props.deviceId);
+  const [audioStatus, { refetch: refetchAudioStatus }] = createResource(
+    props.deviceId,
+    async (id) => {
+      if (!id) return null;
+      const res = await context.getAudioStatus(id);
+      return res;
+    }
+  );
+  const [currentStatusMonitor, setCurrentStatusMonitor] = createSignal();
+  const monitorAudioStatus = () => {
+    const currInterval = currentStatusMonitor();
+    if (currInterval) {
+      console.log("Clearing interval");
+      clearInterval(currInterval as number);
+    }
+    const interval = setInterval(() => {
+      if (audioStatus.loading) return;
+      refetchAudioStatus();
+    }, 10000);
+    setCurrentStatusMonitor(interval);
+  };
 
+  onMount(() => {
+    monitorAudioStatus();
+    onCleanup(() => {
+      const currInterval = currentStatusMonitor();
+      if (currInterval) {
+        clearInterval(currInterval as number);
+      }
+    });
+  });
   const id = () => props.deviceId;
   const [config, { refetch }] = createResource(id, async (id) => {
     if (!id) return null;
@@ -689,79 +725,106 @@ export function CameraSettingsTab(props: SettingProps) {
     return true;
   };
 
-  const [isAudio] = createResource(() => context.getAudioMode(id()));
+  const [audioMode] = createResource(async () => {
+    try {
+      const res = await context.getAudioMode(id());
+      return res;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  });
+
+  createEffect(() => {
+    console.log("Audio Status: ", audioStatus());
+    console.log("Audio Mode: ", audioMode());
+  });
 
   return (
     <section>
       <Show
-        when={isAudio.loading || isAudio() !== "AudioOnly"}
+        when={
+          device()?.type !== "tc2" ||
+          audioStatus.loading ||
+          audioStatus()?.status === "ready"
+        }
         fallback={
-          <p class="w-full p-8 text-center text-2xl text-neutral-600">
-            Preview not available in audio only mode.
+          <p class="flex w-full flex-col items-center gap-y-2 p-8 text-center text-2xl text-neutral-600">
+            <FaSolidSpinner class="animate-spin" size={32} />
+            Camera not available due to audio recording.
           </p>
         }
       >
         <Show
-          when={isRecieving()}
+          when={audioMode() !== "AudioOnly"}
           fallback={
-            <div
-              style={{
-                height: "269px",
-              }}
-              class="flex h-full items-center justify-center gap-x-2 bg-slate-50"
-            >
-              <FaSolidSpinner class="animate-spin" size={32} />
-              <p>Starting Camera...</p>
-            </div>
+            <p class="w-full p-8 text-center text-2xl text-neutral-600">
+              Preview not available in audio only mode.
+            </p>
           }
         >
-          <div class="relative">
-            <canvas
-              ref={frameCanvas}
-              id="frameCanvas"
-              width="160"
-              height="120"
-              class="w-full"
-            />
-            <canvas
-              ref={trackCanvas}
-              id="trackCanvas"
-              width="160"
-              height="120"
-              class="absolute left-0 top-0 z-10 w-full"
-            />
-          </div>
+          <Show
+            when={isRecieving()}
+            fallback={
+              <div
+                style={{
+                  height: "269px",
+                }}
+                class="flex h-full items-center justify-center gap-x-2 bg-slate-50"
+              >
+                <FaSolidSpinner class="animate-spin" size={32} />
+                <p>Starting Camera...</p>
+              </div>
+            }
+          >
+            <div class="relative">
+              <canvas
+                ref={frameCanvas}
+                id="frameCanvas"
+                width="160"
+                height="120"
+                class="w-full"
+              />
+              <canvas
+                ref={trackCanvas}
+                id="trackCanvas"
+                width="160"
+                height="120"
+                class="absolute left-0 top-0 z-10 w-full"
+              />
+            </div>
+          </Show>
+          <button
+            ref={triggerTrap}
+            style="position: relative;display: none"
+            type="button"
+          >
+            Trigger trap
+          </button>
+          <button
+            class="flex w-full items-center justify-center space-x-2 rounded-b-lg bg-blue-500 py-3 text-white"
+            onClick={() => createTestRecording()}
+            disabled={recording()}
+          >
+            <Switch>
+              <Match when={recording()}>
+                <p>Recording...</p>
+                <FaSolidSpinner class="animate-spin" size={24} />
+              </Match>
+              <Match when={result() === "success"}>
+                <p>Success!</p>
+                <FaSolidCheck size={24} />
+              </Match>
+              <Match when={result() === "failed"}>
+                <ImCross size={12} />
+              </Match>
+              <Match when={!recording() && !result()}>
+                <p>Test Recording</p>
+                <FaSolidVideo size={24} />
+              </Match>
+            </Switch>
+          </button>
         </Show>
-        <button
-          ref={triggerTrap}
-          style="position: relative;display: none"
-          type="button"
-        >
-          Trigger trap
-        </button>
-        <button
-          class="flex w-full items-center justify-center space-x-2 rounded-b-lg bg-blue-500 py-3 text-white"
-          onClick={() => createTestRecording()}
-          disabled={recording()}
-        >
-          <Switch>
-            <Match when={recording()}>
-              <p>Recording...</p>
-              <FaSolidSpinner class="animate-spin" size={24} />
-            </Match>
-            <Match when={result() === "success"}>
-              <p>Success!</p>
-              <FaSolidCheck size={24} />
-            </Match>
-            <Match when={result() === "failed"}>
-              <ImCross size={12} />
-            </Match>
-            <Match when={!recording() && !result()}>
-              <p>Test Recording</p>
-              <FaSolidVideo size={24} />
-            </Match>
-          </Switch>
-        </button>
       </Show>
       <div class="px-6 py-2">
         <h1 class="font-semibold text-gray-800">Recording Window</h1>
@@ -1115,8 +1178,34 @@ export function LocationSettingsTab(props: SettingProps) {
     },
   });
   const hasLocation = () => location() !== null || (lat() !== 0 && lng() !== 0);
+  onMount(() => {
+    context.refetchDeviceLocToUpdate();
+  });
   return (
     <section class="px-4 py-4">
+      <Show
+        when={context.locationDisabled() || updateLocation() === "unavailable"}
+      >
+        <div class="flex w-full flex-col items-center">
+          <p class="text-sm text-red-500">
+            Location services are disabled, please enable to save location
+            settings.
+          </p>
+          <button
+            class=" my-2 flex space-x-2 self-center rounded-md bg-blue-500 px-4 py-2 text-white"
+            onClick={async () => {
+              await NativeSettings.open({
+                optionIOS: IOSSettings.LocationServices,
+                optionAndroid: AndroidSettings.Location,
+              });
+              await context.refetchLocationPermission();
+              context.shouldDeviceUpdateLocation(id());
+            }}
+          >
+            Open Location Settings
+          </button>
+        </div>
+      </Show>
       <Show when={updateLocation() === "needsUpdate"}>
         <div class="flex w-full flex-col items-center">
           <button
@@ -2422,22 +2511,10 @@ export function GeneralSettingsTab(props: SettingProps) {
   const saltId = () => device()?.saltId ?? "";
   const name = () => device()?.name ?? "";
 
-  createEffect(() => {
-    console.log("DEVICE", device());
-  });
-
   const [updateStatus, { refetch }] = createResource(async () => {
     const res = await context.checkDeviceUpdate(id());
     console.log("Salt Connection", res);
     return res;
-  });
-
-  const canUpdate = createMemo(() => {
-    const status = updateStatus();
-    console.log("Status", status);
-    if (!status || status.UpdateProgressStr?.includes("No update"))
-      return false;
-    return true;
   });
 
   const [lowPowerMode, setLowPowerMode] = createSignal<boolean | null>(null);
@@ -2459,6 +2536,25 @@ export function GeneralSettingsTab(props: SettingProps) {
     user.refetchGroups();
   });
 
+  const [hasInternetConnection] = createResource(async () => {
+    const wifiRes = await context
+      .checkDeviceWifiInternetConnection(id())
+      .catch(() => false);
+    const modemRes = await context
+      .checkDeviceModemInternetConnection(id())
+      .catch(() => false);
+    console.log("WIFI", wifiRes, "MODEM", modemRes);
+    return wifiRes || modemRes;
+  });
+  const canUpdate = createMemo(() => {
+    if (!hasInternetConnection()) return false;
+    const status = updateStatus();
+    console.log("Status", status);
+    if (!status || status.UpdateProgressStr?.includes("No update"))
+      return false;
+    return true;
+  });
+
   createEffect(() => {
     if (!updateStatus.loading) {
       if (!canUpdate()) {
@@ -2469,19 +2565,14 @@ export function GeneralSettingsTab(props: SettingProps) {
     }
   });
 
-  const [canChangeGroup] = createResource(async () => {
-    const wifiRes = await context.checkDeviceWifiInternetConnection(id());
-    const modemRes = await context.checkDeviceModemInternetConnection(id());
-    return wifiRes || modemRes;
-  });
-
   const updateError = () => {
     const error = context.getUpdateError(id());
     return error;
   };
 
   const softwareUpdateMessage = () => {
-    console.log("can update", canUpdate());
+    if (hasInternetConnection.loading) return "Checking Available Update...";
+    if (!hasInternetConnection()) return "No Internet Connection";
     if (context.isDeviceUpdating(id())) return "Updating...";
     if (context.didDeviceUpdate(id()) === false) {
       return "Failed to Update";
@@ -2513,6 +2604,7 @@ export function GeneralSettingsTab(props: SettingProps) {
     }
   };
   const showProgress = () =>
+    hasInternetConnection() &&
     context.isDeviceUpdating(id()) &&
     context.getDeviceUpdating(id())?.UpdateProgressPercentage !== undefined;
   return (
@@ -2658,7 +2750,7 @@ export function DeviceSettingsModal() {
     return deviceName;
   };
 
-  const show = () => deviceName() && !params.step && params.deviceSettings;
+  const show = () => !params.step && params.deviceSettings;
 
   const clearParams = () => {
     setParams({ deviceSettings: null, tab: null });

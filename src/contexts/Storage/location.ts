@@ -16,7 +16,7 @@ import {
   CacophonyPlugin,
   getLocationsForUser,
 } from "../CacophonyApi";
-import { DevicePlugin, unbindAndRebind, useDevice } from "../Device";
+import { DevicePlugin } from "../Device";
 import { useUserContext } from "../User";
 import { useLogsContext } from "../LogsContext";
 
@@ -348,7 +348,6 @@ export function useLocationStorage() {
     location: Location,
     fileKey: string
   ) => {
-    await DevicePlugin.unbindConnection();
     const user = await userContext.getUser();
     if (!user) return;
     const res = await CacophonyPlugin.deleteReferencePhoto({
@@ -356,7 +355,6 @@ export function useLocationStorage() {
       station: location.id.toString(),
       fileKey,
     });
-    await DevicePlugin.rebindConnection();
     if (res.success) {
       const deleted = res.data;
       // This image is in cache, so just remove without syncing
@@ -419,7 +417,6 @@ export function useLocationStorage() {
     "Currently offline. You can upload when you're online through storage.";
   const updateLocationName = async (location: Location, newName: string) => {
     try {
-      await DevicePlugin.unbindConnection();
       const validToken = await userContext.getUser();
       if (validToken) {
         while (savedLocations()?.some((loc) => loc.name === newName)) {
@@ -430,7 +427,6 @@ export function useLocationStorage() {
           id: location.id.toString(),
           name: newName,
         });
-        await DevicePlugin.rebindConnection();
         if (res.success) {
           location.name = newName;
           location.updateName = undefined;
@@ -458,7 +454,6 @@ export function useLocationStorage() {
 
   const updateLocationPhoto = async (location: Location, newPhoto: string) => {
     try {
-      await DevicePlugin.unbindConnection();
       const user = await userContext.getUser();
       const isConnectedToDevice = await DevicePlugin.checkIsAPConnected();
       if (user && !isConnectedToDevice.connected) {
@@ -493,9 +488,7 @@ export function useLocationStorage() {
           location.uploadPhotos = [...(location.uploadPhotos ?? []), newPhoto];
         }
       }
-      await DevicePlugin.rebindConnection();
     } catch (e) {
-      await DevicePlugin.rebindConnection();
       log.logWarning({
         message: "Failed to update location picture",
         details: JSON.stringify(e),
@@ -706,7 +699,6 @@ export function useLocationStorage() {
     isProd: boolean;
     name?: string | null | undefined;
   }): Promise<Location> => {
-    await DevicePlugin.unbindConnection();
     const user = await userContext.getUser();
     const fromDate = new Date().toISOString();
     const id = getNextLocationId();
@@ -782,7 +774,6 @@ export function useLocationStorage() {
         await insertLocation(db)(location);
       }
     }
-    await DevicePlugin.rebindConnection();
 
     mutate((locations) => [
       ...(locations ?? []).filter((loc) => loc.id !== settings.id),

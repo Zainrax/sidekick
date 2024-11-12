@@ -113,33 +113,44 @@ export function useRecordingStorage() {
         if (!deletion.success) {
           console.error(deletion.message);
         }
-      } else {
-        if (res.message.includes("AuthError")) {
-          log.logWarning({
-            message: "Your account does not have access to upload recordings",
-            details: res.message,
-            warn,
-          });
-          const otherRecordings = recordings.filter(
-            (r) => r.device !== recording.device
-          );
-          recordings = otherRecordings;
-        } else {
-          if (res.message.includes("Failed to verify JWT")) {
-            log.logWarning({
-              message:
-                "Failed to upload recording, please try again or log in again",
-              details: `${recording.name} - ${res.message}`,
-              warn,
-            });
-          } else {
-            log.logWarning({
-              message: "Failed to upload recording",
-              details: `${recording.name} - ${res.message}`,
-              warn,
-            });
-          }
+      } else if (res.message.includes("AuthError")) {
+        log.logWarning({
+          message: "Your account does not have access to upload recordings",
+          details: res.message,
+          warn,
+        });
+        const otherRecordings = recordings.filter(
+          (r) => r.device !== recording.device
+        );
+        recordings = otherRecordings;
+      } else if (res.message.includes("Failed to verify JWT")) {
+        log.logWarning({
+          message:
+            "Failed to upload recording, please try again or log in again",
+          details: `${recording.name} - ${res.message}`,
+          warn,
+        });
+      } else if (res.message.includes("recordingDateTime")) {
+        debugger;
+        // This is a temporary fix for the issue where the audio file is corrupted, simply mark it as uploaded
+        recording.isUploaded = true;
+        recording.uploadId = null;
+        await updateRecordingInDb(db)(recording);
+        setSavedRecordings((prev) => {
+          return [...prev.filter((r) => r.name !== recording.name), recording];
+        });
+        const deletion = await DevicePlugin.deleteRecording({
+          recordingPath: recording.name,
+        });
+        if (!deletion.success) {
+          console.error(deletion.message);
         }
+      } else {
+        log.logWarning({
+          message: "Failed to upload recording",
+          details: `${recording.name} - ${res.message}`,
+          warn,
+        });
       }
     }
   };

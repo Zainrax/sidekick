@@ -138,6 +138,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         log.logWarning({
           message: "Login attempt failed",
           details: authUser.message,
+          warn: true,
         });
         throw new Error("Authentication failed");
       }

@@ -39,7 +39,7 @@ export interface CacophonyPlugin {
     eventId: string;
     type: string;
     details: string;
-    dateTimes: string;
+    timeStamp: string;
   }): Result<{ recordingId: string; messages: string }>;
   getDeviceById(options: { token: string; id: string }): Result<{
     deviceName: string;

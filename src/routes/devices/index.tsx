@@ -353,6 +353,7 @@ function Devices() {
   const [locPromptCancelled, setPromptCancel] = createSignal(false);
   const headerContext = useHeaderContext();
   const log = useLogsContext();
+  const [tryDisconnect, setTryDisconnect] = createSignal(false);
 
   onMount(() => {
     // Add delete button to header
@@ -377,17 +378,25 @@ function Devices() {
             <button
               onClick={async () => {
                 debugger;
-                if (state() === "connected") {
-                  const dialog = await Prompt.confirm({
-                    title: "Disconnect from Device",
-                    message:
-                      "You are currently connected to the device's WiFi network. Disconnect from the device to connect to another network?",
-                  });
-                  if (dialog.value) {
-                    context.disconnectFromDeviceAP();
+                try {
+                  if (state() === "connected") {
+                    if (tryDisconnect()) return;
+                    setTryDisconnect(true);
+                    const dialog = await Prompt.confirm({
+                      title: "Disconnect from Device",
+                      message:
+                        "You are currently connected to the device's WiFi network. Disconnect from the device to connect to another network?",
+                    });
+                    if (dialog.value) {
+                      await context.disconnectFromDeviceAP();
+                    }
+                  } else {
+                    context.connectToDeviceAP();
                   }
-                } else {
-                  context.connectToDeviceAP();
+                } catch (error) {
+                  console.error("Error in disconnecting from device", error);
+                } finally {
+                  setTryDisconnect(false);
                 }
               }}
               classList={{
@@ -402,17 +411,6 @@ function Devices() {
         </Show>
       ),
     ]);
-  });
-
-  onMount(async () => {
-    context.searchDevice();
-    const search = setInterval(() => {
-      context.searchDevice();
-    }, 6 * 1000);
-
-    onCleanup(() => {
-      clearInterval(search);
-    });
   });
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -512,6 +510,7 @@ function Devices() {
   );
 
   const findDevice = () => {
+    debugger;
     log.logEvent("Find Device");
     setSearchParams({ step: "chooseDevice" });
   };

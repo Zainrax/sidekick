@@ -228,28 +228,12 @@ export interface DevicePlugin {
   updateWifi(options: DeviceUrl & { ssid: string; password: string }): Result;
   // rebind & unbind are used when trying to use the phone's internet connection
   turnOnModem(options: DeviceUrl & { minutes: string }): Result;
-  rebindConnection(): Promise<void>;
-  unbindConnection(): Promise<void>;
   hasConnection(): Result;
   getTestText(): Promise<{ text: string }>;
   checkPermissions(): Promise<{ granted: boolean }>;
 }
 
 export const DevicePlugin = registerPlugin<DevicePlugin>("Device");
-
-/**
- * Helper function to unbind and rebind connection to device hotspot.
- * @param callback The callback to execute between unbinding and rebinding.
- * @returns The return value from the callback.
- */
-export async function unbindAndRebind<T>(
-  callback: () => Promise<T>
-): Promise<T> {
-  await DevicePlugin.unbindConnection();
-  const result_1 = await callback();
-  await DevicePlugin.rebindConnection();
-  return result_1;
-}
 
 const DeviceInfoSchema = z.object({
   serverURL: z.string(),
@@ -286,11 +270,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   const clearUploaded = async (device: ConnectedDevice) => {
     if (devicesDownloading.has(device.id)) return;
-    await Promise.all([
-      deleteUploadedRecordings(device),
-      deleteUploadedEvents(device),
-    ]);
-    await Promise.all([setCurrRecs(device), setCurrEvents(device)]);
+    await deleteUploadedRecordings(device);
+    await deleteUploadedEvents(device);
+    await setCurrRecs(device);
+    await setCurrEvents(device);
   };
   // Function to fetch device info from a URL
   const fetchDeviceInfo = async (url: string): Promise<DeviceInfo> => {
@@ -525,18 +508,28 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     });
   };
 
+  const [checkingAP, setCheckingAP] = createSignal(false);
   const monitorAPConnection = () => {
-    const interval = setInterval(async () => {
-      const res = await DevicePlugin.checkIsAPConnected();
+    return setInterval(async () => {
+      try {
+        if (checkingAP()) return;
+        setCheckingAP(true);
+        const res = await DevicePlugin.checkIsAPConnected();
 
-      if (res.connected && apState() !== "loadingDisconnect") {
-        setApState("connected");
-      } else if (!res.connected && apState() !== "loadingConnect") {
-        setApState("default");
+        if (res.connected && apState() !== "loadingDisconnect") {
+          setApState("connected");
+        } else if (!res.connected && apState() !== "loadingConnect") {
+          setApState("default");
+        }
+      } catch (error) {
+        log.logError({
+          message: "Error checking AP connection",
+          error,
+        });
+      } finally {
+        setCheckingAP(false);
       }
     }, 10000); // Every 10 seconds
-
-    onCleanup(() => clearInterval(interval));
   };
 
   const setupListeners = async () => {
@@ -713,14 +706,14 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   // Set up component lifecycle
   onMount(async () => {
     await setupListeners();
-    monitorAPConnection();
-
+    const monitorInterval = monitorAPConnection();
     const discoveryInterval = setInterval(() => {
       searchDevice();
-    }, 30000); // Every 20 seconds
+    }, 30000); // Every 30 seconds
 
     onCleanup(() => {
       clearInterval(discoveryInterval);
+      clearInterval(monitorInterval);
       cleanupListeners();
     });
   });
@@ -732,7 +725,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     device: ConnectedDevice
   ): Promise<string[] | null> => {
     try {
-      await DevicePlugin.rebindConnection();
       if ((await Filesystem.checkPermissions()).publicStorage === "denied") {
         const permission = await Filesystem.requestPermissions();
         if (permission.publicStorage === "denied") {
@@ -766,7 +758,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const savedRecordings = await storage.getSavedRecordings({
         device: device.id,
       });
-      debugger;
       for (const rec of savedRecordings) {
         if (currDeviceRecordings?.includes(rec.name)) {
           if (rec.isUploaded) {
@@ -805,7 +796,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     debugger;
     if (!recs) return;
     const nonSavedRecs = recs.filter(
-      (r) => !savedRecs.find((s) => s.name === r)
+      (r) => !savedRecs.find((s) => s.name === r && s.device === device.id)
     );
     debugger;
     if (!nonSavedRecs.length) return;
@@ -1141,80 +1132,89 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       }
     );
 
-  const [permission] = createResource(async () => {
-    try {
-      let permission = await Geolocation.checkPermissions();
-      if (
-        permission.location === "denied" ||
-        permission.location === "prompt" ||
-        permission.location === "prompt-with-rationale"
-      ) {
-        permission = await Geolocation.requestPermissions();
-        if (permission.location === "prompt-with-rationale") {
-          permission = await Geolocation.checkPermissions();
-        }
-      }
-      return permission.location;
-    } catch (e) {
-      return "denied";
-    }
-  });
-
-  const [devicesLocToUpdate] = createResource(
-    () => {
-      return [[...devices.values()], permission()] as const;
-    },
-    async ([devices, permission]) => {
+  const [permission, { refetch: refetchLocationPermission }] = createResource(
+    async () => {
       try {
-        devices = devices.filter(({ isConnected }) => isConnected);
-        if (!devices || devices.length === 0 || !permission) return [];
-        if (permission === "denied") return [];
-        const pos = await Geolocation.getCurrentPosition({
-          enableHighAccuracy: true,
-        }).catch(() => {
-          return null;
-        });
-        if (!pos) return [];
-
-        const devicesToUpdate: string[] = [];
-        for (const device of devices) {
-          if (!device.isConnected) continue;
-          const locationRes = await getLocationCoords(device.id);
-          if (!locationRes.success) continue;
-          const loc = locationRes.data;
-          const newLoc: [number, number] = [
-            pos.coords.latitude,
-            pos.coords.longitude,
-          ];
-
-          const withinRange = isWithinRange(
-            [loc.latitude, loc.longitude],
-            newLoc,
-            pos.coords.accuracy
-          );
-          if (!withinRange) {
-            devicesToUpdate.push(device.id);
+        let permission = await Geolocation.checkPermissions();
+        if (
+          permission.location === "denied" ||
+          permission.location === "prompt" ||
+          permission.location === "prompt-with-rationale"
+        ) {
+          permission = await Geolocation.requestPermissions();
+          if (permission.location === "prompt-with-rationale") {
+            permission = await Geolocation.checkPermissions();
           }
         }
-        return devicesToUpdate;
-      } catch (error) {
-        if (error instanceof Error) {
-          log.logWarning({
-            message:
-              "Could not update device locations. Check location permissions and try again.",
-            action: <GoToPermissions />,
-          });
-        } else if (typeof error === "string") {
-          log.logWarning({
-            message: "Could not update device locations",
-            details: error,
-          });
-        }
-
-        return [];
+        return permission.location;
+      } catch (e) {
+        return "denied";
       }
     }
   );
+
+  const [locationDisabled, setLocationDisabled] = createSignal(false);
+  const [devicesLocToUpdate, { refetch: refetchDeviceLocToUpdate }] =
+    createResource(
+      () => {
+        return [[...devices.values()], permission()] as const;
+      },
+      async ([devices, permission]) => {
+        try {
+          devices = devices.filter(({ isConnected }) => isConnected);
+          if (!devices || devices.length === 0 || !permission) return [];
+          if (permission === "denied") return [];
+          const pos = await Geolocation.getCurrentPosition({
+            enableHighAccuracy: true,
+          }).catch((e) => {
+            console.log("Error", e);
+            if (e instanceof Error && e.message === "location disabled") {
+              setLocationDisabled(true);
+            }
+            return null;
+          });
+          if (!pos) return [];
+          setLocationDisabled(false);
+
+          const devicesToUpdate: string[] = [];
+          for (const device of devices) {
+            if (!device.isConnected) continue;
+            const locationRes = await getLocationCoords(device.id);
+            if (!locationRes.success) continue;
+            const loc = locationRes.data;
+            const newLoc: [number, number] = [
+              pos.coords.latitude,
+              pos.coords.longitude,
+            ];
+
+            const withinRange = isWithinRange(
+              [loc.latitude, loc.longitude],
+              newLoc,
+              pos.coords.accuracy
+            );
+            if (!withinRange) {
+              devicesToUpdate.push(device.id);
+            }
+          }
+          return devicesToUpdate;
+        } catch (error) {
+          if (error instanceof Error) {
+            log.logWarning({
+              message:
+                "Could not update device locations. Check location permissions and try again.",
+              action: <GoToPermissions />,
+            });
+          } else if (typeof error === "string") {
+            log.logWarning({
+              message: "Could not update device locations",
+              details: error,
+            });
+          }
+
+          return [];
+        }
+      }
+    );
 
   type DeviceLocationStatus =
     | "loading"
@@ -1225,6 +1225,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     deviceId: DeviceId
   ): DeviceLocationStatus => {
     const devicesToUpdate = devicesLocToUpdate();
+    console.log("Permission", permission());
     if (!devicesToUpdate?.length)
       return permission() === "denied" ? "unavailable" : "current";
     return devicesToUpdate.includes(deviceId) ? "needsUpdate" : "current";
@@ -1712,6 +1713,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     debounce,
     async () => {
       setApState("loadingConnect");
+      setTimeout(() => {
+        if (apState() === "loadingConnect") {
+          setApState("default");
+        }
+      }, 120000); // 2 minute
       try {
         log.logEvent("AP_connect");
         const res = await DevicePlugin.connectToDeviceAP();
@@ -2013,14 +2019,16 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const updatingDevice = new ReactiveMap<
     DeviceId,
     {
-      interval: NodeJS.Timeout;
-    } & SaltStatus
+      pending?: boolean;
+      interval?: NodeJS.Timeout;
+    } & Partial<SaltStatus>
   >();
-  const runUpdateCheck = (deviceId: DeviceId) => {
+  const runUpdateCheck = leading(debounce, (deviceId: DeviceId) => {
     if (updatingDevice.has(deviceId)) return;
     const device = devices.get(deviceId);
     if (!device || !device.isConnected) return;
     const { url } = device;
+    updatingDevice.set(deviceId, { pending: true });
     const interval = setInterval(async () => {
       try {
         const res = await CapacitorHttp.get({
@@ -2036,7 +2044,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           if (statusRes.success) {
             const { data } = statusRes;
             console.log("Check Updating", data);
-            updatingDevice.set(deviceId, { interval, ...data });
+            updatingDevice.set(deviceId, { pending: false, interval, ...data });
             if (data.RunningUpdate === false) {
               clearInterval(interval);
               updatingDevice.delete(deviceId);
@@ -2047,9 +2055,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         }
       } catch (error) {
         console.error("Check Updating Error", error);
+        updatingDevice.delete(deviceId);
       }
     }, 5000);
-  };
+  });
+
   // Update
   const updateDevice = async (deviceId: DeviceId) => {
     try {
@@ -2125,7 +2135,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   const isDeviceUpdating = (deviceId: DeviceId) => {
     const device = updatingDevice.get(deviceId);
-    return device?.RunningUpdate && device?.LastCallSuccess !== false;
+    debugger;
+    return (
+      device?.pending ||
+      (device?.RunningUpdate && device?.LastCallSuccess !== false)
+    );
   };
 
   const didDeviceUpdate = (deviceId: DeviceId): boolean | null => {
@@ -2175,7 +2189,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   };
 
   const deviceHasInternet = async (deviceId: DeviceId) => {
-    debugger;
     try {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return false;
@@ -2212,6 +2225,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     changeGroup,
     rebootDevice,
     // Location
+    locationDisabled,
+    locationPermission: permission,
+    refetchLocationPermission,
+    refetchDeviceLocToUpdate,
     setDeviceToCurrLocation,
     locationBeingSet,
     getLocationCoords,

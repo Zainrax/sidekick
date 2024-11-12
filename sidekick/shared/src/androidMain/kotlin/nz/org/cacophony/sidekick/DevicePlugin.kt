@@ -216,9 +216,7 @@ class DevicePlugin : Plugin() {
     @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
     fun disconnectFromDeviceAP(call: PluginCall) {
         try {
-            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            wifiManager.disconnect()
-
+            cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 cm?.bindProcessToNetwork(null)
                 currNetworkCallback?.let { cm?.unregisterNetworkCallback(it) }

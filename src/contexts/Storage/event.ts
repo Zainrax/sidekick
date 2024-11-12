@@ -1,7 +1,7 @@
 import { createSignal, createMemo, onMount } from "solid-js";
 import { db } from ".";
 import { CacophonyPlugin } from "../CacophonyApi";
-import { DeviceId, DevicePlugin, unbindAndRebind } from "../Device";
+import { DeviceId } from "../Device";
 import {
   type Event,
   createEventSchema,
@@ -72,38 +72,36 @@ export function useEventStorage() {
       (e) => e.isProd === userContext.isProd()
     );
     const errors: string[] = [];
-    await unbindAndRebind(async () => {
-      for (let i = 0; i < events.length; i++) {
-        if (!shouldUpload()) return;
-        const event = events[i];
-        const res = await CacophonyPlugin.uploadEvent({
-          token: user.token,
-          device: event.device,
-          eventId: event.key,
-          type: event.type,
-          details: event.details,
-          timeStamp: event.timestamp,
+    for (let i = 0; i < events.length; i++) {
+      if (!shouldUpload()) return;
+      const event = events[i];
+      const res = await CacophonyPlugin.uploadEvent({
+        token: user.token,
+        device: event.device,
+        eventId: event.key,
+        type: event.type,
+        details: event.details,
+        timeStamp: event.timestamp,
+      });
+      if (res.success) {
+        event.isUploaded = true;
+        await updateEvent(db)(event);
+        setSavedEvents((prev) => {
+          return [...prev.filter((e) => e.key !== event.key), event];
         });
-        if (res.success) {
-          event.isUploaded = true;
-          await updateEvent(db)(event);
-          setSavedEvents((prev) => {
-            return [...prev.filter((e) => e.key !== event.key), event];
+      } else {
+        if (res.message.includes("AuthError")) {
+          log.logWarning({
+            message: "Your account does not have access to upload events",
+            details: res.message,
+            warn: false,
           });
+          events = events.filter((e) => e.device !== event.device);
         } else {
-          if (res.message.includes("AuthError")) {
-            log.logWarning({
-              message: "Your account does not have access to upload events",
-              details: res.message,
-              warn: false,
-            });
-            events = events.filter((e) => e.device !== event.device);
-          } else {
-            errors.push(res.message);
-          }
+          errors.push(res.message);
         }
       }
-    });
+    }
     if (errors.length > 0) {
       log.logWarning({
         message: "Failed to upload events",

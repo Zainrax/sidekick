@@ -45,6 +45,7 @@ export default function Storage() {
   });
 
   const toggleUpload = async () => {
+    if (!storage.hasItemsToUpload()) return;
     if (storage.isUploading()) {
       storage.stopUploading();
       return;
@@ -167,10 +168,16 @@ export default function Storage() {
         <button
           class="flex items-center justify-center space-x-2 rounded-md bg-white px-4 py-4"
           onClick={toggleUpload}
+          disabled={!storage.hasItemsToUpload()}
         >
           <Switch>
             <Match when={!storage.isUploading()}>
-              <div class="text-blue-500">
+              <div
+                classList={{
+                  "text-blue-500": storage.hasItemsToUpload(),
+                  "text-gray-400": !storage.hasItemsToUpload(),
+                }}
+              >
                 <FiUploadCloud size={28} />
               </div>
               <p>Upload</p>
