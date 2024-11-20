@@ -18,7 +18,7 @@ platform :android do
 
     # Configure signing
     gradle(
-      task: "bundle",
+      task: "assemble", 
       build_type: "Release",
       project_dir: ".", # Specify the relative path to your Android project
       gradle_path: "./gradlew", # Specify the path to your gradlew script
@@ -33,7 +33,7 @@ platform :android do
     # Upload to Google Play
     upload_to_play_store(
       track: 'alpha',
-      aab: 'app/build/outputs/bundle/release/app-release.aab',   # Correct relative path
+      apk: 'app/build/outputs/apk/release/app-release.apk',  # Updated to point to the APK
       json_key: ENV['GOOGLE_PLAY_JSON_KEY']
     )
   end
