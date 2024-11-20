@@ -702,6 +702,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   onMount(async () => {
     await setupListeners();
     const monitorInterval = monitorAPConnection();
+    searchDevice();
     const discoveryInterval = setInterval(() => {
       searchDevice();
     }, 30000); // Every 30 seconds
