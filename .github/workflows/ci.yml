@@ -17,31 +17,26 @@ jobs:
       LC_ALL: en_US.UTF-8
 
     steps:
-      # 1. Checkout Repository
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # 2. Set up JDK 17
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
           distribution: "temurin"
           java-version: "17"
 
-      # 3. Set up Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      # 4. Setup pnpm
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
           run_install: false
 
-      # 5. Cache pnpm store
       - name: Cache pnpm store
         uses: actions/cache@v3
         with:
@@ -50,23 +45,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
-      # 6. Configure pnpm store
       - name: Configure pnpm store
         run: pnpm config set store-dir ~/.pnpm-store
 
-      # 7. Install Dependencies
       - name: Install Dependencies
         run: pnpm install
 
-      # 8. Build Project
       - name: Build Project
         run: pnpm build
 
-      # 9. Set up Android SDK
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # 10. Decrypt and Extract signing.tar.enc
+      - name: Build Project
+        run: pnpm sync
+
       - name: Decrypt and Extract signing.tar.enc
         env:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
@@ -77,12 +70,10 @@ jobs:
           tar xvf signing.tar
         working-directory: sidekick
 
-      # 11. Verify Decryption
       - name: Verify Decryption
         run: ls -la
         working-directory: sidekick
 
-      # 12. Configure Keystore
       - name: Configure Keystore
         run: |
           mkdir -p ~/.android
@@ -90,7 +81,6 @@ jobs:
           cp android-keystore.jks ~/.android/android-keystore.jks
         working-directory: sidekick
 
-      # 13. Cache Gradle packages
       - name: Cache Gradle packages
         uses: actions/cache@v3
         with:
@@ -102,19 +92,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # 14. Make gradlew Executable
       - name: Make gradlew Executable
         run: chmod +x ./gradlew
         working-directory: sidekick
 
-      # 15. Set up Ruby
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.0" # Specify the Ruby version you need
           bundler-cache: true # Automatically caches gems
 
-      # 16. Build and Deploy with Fastlane
       - name: Build and Deploy with Fastlane
         working-directory: sidekick # Directory containing Fastfile
         run: bundle exec fastlane alpha
