@@ -2732,7 +2732,7 @@ export function GeneralSettingsTab(props: SettingProps) {
             "rounded-md": !showProgress(),
             "rounded-b-md": showProgress() !== false,
           }}
-          disabled={!canUpdate?.()}
+          disabled={!canUpdate?.() || canUpdate() === undefined}
           class="flex w-full items-center justify-center space-x-2 bg-blue-500 px-4 py-3 text-white "
           onClick={() => context.updateDevice(id())}
         >

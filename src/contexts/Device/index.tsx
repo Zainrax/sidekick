@@ -344,7 +344,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
       if (!device) throw new Error("Failed to connect to device");
 
-      const batteryPercentage = await getBattery(device.url); // Assume getBattery is defined elsewhere
+      const batteryPercentage = await getBattery(device.url);
 
       return {
         ...device,
@@ -592,7 +592,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         console.info("DEVICE INFO", data, info);
 
         if (info.success) {
-          const battery = await getBattery(device.url); // Assume getBattery is defined elsewhere
+          const battery = await getBattery(device.url);
           const updatedDevice: ConnectedDevice = {
             ...device,
             id: info.data.deviceID.toString(),
@@ -1351,6 +1351,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     voltageArray: number[],
     percentageArray: number[]
   ): number {
+    debugger;
     if (voltage <= voltageArray[0]) return percentageArray[0];
     if (voltage >= voltageArray[voltageArray.length - 1])
       return percentageArray[percentageArray.length - 1];
@@ -1379,7 +1380,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       time: new Date(data.time),
       mainBattery: Number(
         interpolateVoltageToPercentage(
-          Number(data.mainBattery),
+          // remove spaces from the string
+          Number(data.mainBattery.replace(/\s/g, "")),
           LimeVoltage,
           LimePercent
         )
@@ -1396,8 +1398,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
+      console.log("BATTERY", res);
       return dataSchema.safeParse(JSON.parse(res.data)).data;
     } catch (e) {
+      console.error(e);
       return;
     }
   };

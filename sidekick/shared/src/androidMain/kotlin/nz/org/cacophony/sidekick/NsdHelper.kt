@@ -65,6 +65,14 @@ abstract class NsdHelper(private val context: Context) {
 
             override fun onServiceFound(service: NsdServiceInfo) {
                 Log.d(TAG, "Service discovery success: $service")
+
+                // Error 3 Failure_Already_Active is thrown if the listener is busy adding sleep helps
+                try {
+                    Thread.sleep(50);
+                } catch (e: Exception ) {
+                    e.printStackTrace();
+                }
+
                 if (service.serviceType == NSD_SERVICE_TYPE) {
                     pendingNsdServices.offer(service)
                     if (resolveListenerBusy.compareAndSet(false, true)) {

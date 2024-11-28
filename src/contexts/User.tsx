@@ -46,7 +46,9 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
           const user = UserSchema.parse(json);
           setServer(user.prod ? "prod" : "test");
 
-          getValidUser(user).then((user) => { mutateUser(user) })
+          getValidUser(user).then((user) => {
+            mutateUser(user);
+          });
           return user;
         }
       } catch (error) {
@@ -67,7 +69,9 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         if (storedUser.value) {
           const user = UserSchema.parse(JSON.parse(storedUser.value));
           setServer(user.prod ? "prod" : "test");
-          getValidUser(user).then((user) => { mutateUser(user) })
+          getValidUser(user).then((user) => {
+            mutateUser(user);
+          });
           return user;
         }
       }
@@ -198,14 +202,14 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 
   interface JwtTokenPayload<
     T =
-    | "user"
-    | "device"
-    | "reset-password"
-    | "confirm-email"
-    | "join-group"
-    | "invite-new-user"
-    | "invite-existing-user"
-    | "refresh"
+      | "user"
+      | "device"
+      | "reset-password"
+      | "confirm-email"
+      | "join-group"
+      | "invite-new-user"
+      | "invite-existing-user"
+      | "refresh"
   > {
     exp: number;
     iat: number;
@@ -233,6 +237,8 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   };
 
+  let refreshingToken = false;
+
   async function getValidUser(user: User): Promise<User | null> {
     try {
       const { token, refreshToken, email, id } = user;
@@ -243,62 +249,70 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       const bufferTime = 10000; // 10 second buffer
 
       if (decodedToken.expiresAt.getTime() < now.getTime() + bufferTime) {
-        // Token is about to expire, try to refresh
-        try {
-          const result = await CacophonyPlugin.validateToken({
-            refreshToken,
-          });
+        if (!refreshingToken) {
+          refreshingToken = true;
+          // Token is about to expire, try to refresh
+          try {
+            const result = await CacophonyPlugin.validateToken({
+              refreshToken,
+            });
 
-          if (result.success) {
-            const updatedUser: User = {
-              token: result.data.token,
-              refreshToken: result.data.refreshToken,
-              id,
-              email,
-              expiry: result.data.expiry,
-              prod: isProd(),
-            };
-            await Preferences.set({
-              key: "user",
-              value: JSON.stringify(updatedUser),
-            });
-            console.info({ message: "Token refreshed successfully" });
-            return updatedUser;
-          } else {
-            if (result.message.includes("Failed")) {
-              log.logWarning({
-                message: "Token validation failed",
-                details: result.message,
+            if (result.success) {
+              const updatedUser: User = {
+                token: result.data.token,
+                refreshToken: result.data.refreshToken,
+                id,
+                email,
+                expiry: result.data.expiry,
+                prod: isProd(),
+              };
+              await Preferences.set({
+                key: "user",
+                value: JSON.stringify(updatedUser),
               });
-              if (navigator.onLine) {
-                await logout();
+              console.info({ message: "Token refreshed successfully" });
+              return updatedUser;
+            } else {
+              if (result.message.includes("Failed")) {
+                log.logWarning({
+                  message: "Token validation failed",
+                  details: result.message,
+                });
+                if (navigator.onLine) {
+                  await logout();
+                }
               }
+              console.warn("Failed to refresh token");
+              return user;
             }
-            console.warn("Failed to refresh token");
-            return user;
-          }
-        } catch (networkError) {
-          log.logError({
-            message: "Network error during token validation",
-            error: networkError,
-          });
-          // If network error, check if token is still valid
-          if (decodedToken.expiresAt.getTime() > now.getTime()) {
-            // Token is still valid, allow user to stay logged in
-            log.logWarning({
-              message: "Offline",
-              details:
-                "You're currently offline. Some features may be unavailable.",
+          } catch (networkError) {
+            log.logError({
+              message: "Network error during token validation",
+              error: networkError,
             });
-            return mutateUser(() => user);
-          } else {
-            // Token expired and cannot refresh
-            await logout();
-            return null;
+            // If network error, check if token is still valid
+            if (decodedToken.expiresAt.getTime() > now.getTime()) {
+              // Token is still valid, allow user to stay logged in
+              log.logWarning({
+                message: "Offline",
+                details:
+                  "You're currently offline. Some features may be unavailable.",
+              });
+              mutateUser(() => user);
+              return user;
+            } else {
+              // Token expired and cannot refresh
+              await logout();
+              return null;
+            }
           }
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          return getValidUser(user);
         }
       } else {
-        return mutateUser(() => user);
+        mutateUser(() => user);
+        return user;
       }
     } catch (error) {
       log.logError({ message: "Error validating current token", error });

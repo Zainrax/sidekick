@@ -12,6 +12,7 @@ import {
   on,
   createResource,
   createMemo,
+  onCleanup,
 } from "solid-js";
 import { Motion } from "solid-motionone";
 import HelpSection from "./HelpSection";
@@ -673,9 +674,17 @@ function SetupWizard(): JSX.Element {
 
   const WifiSetup = () => {
     const context = useDevice();
-    const [hasConnection] = createResource(async () => {
+    const [hasConnection, { refetch }] = createResource(async () => {
       const res = await context.deviceHasInternet(searchParams.setupDevice);
       return res;
+    });
+    onMount(() => {
+      const interval = setInterval(() => {
+        refetch();
+      }, 10000);
+      onCleanup(() => {
+        clearInterval(interval);
+      });
     });
     return (
       <>
