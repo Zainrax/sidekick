@@ -17,29 +17,7 @@ import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
 import { useLogsContext } from "./LogsContext";
 import { Effect, Either } from "effect";
 
-type UserAuthResponse = {
-  success: boolean;
-  messages?: string[];
-  token?: string;
-  refreshToken?: string;
-  expiry?: string;
-  userData?: {
-    email: string;
-    globalPermission: string;
-    endUserAgreement: number | null;
-    emailConfirmed: boolean;
-    settings: {
-      displayMode: Record<string, unknown>;
-      lastKnownTimezone: string;
-      currentSelectedGroup?: {
-        groupName: string;
-        id: number;
-      };
-    };
-    userName: string;
-    id: number;
-  };
-};
+export type UserAuthResponse = z.infer<typeof UserAuthResponseSchema>;
 
 const UserAuthResponseSchema = z.object({
   success: z.boolean(),
@@ -72,11 +50,7 @@ const UserAuthResponseSchema = z.object({
     .optional(),
 });
 
-export type EUAResponse = {
-  success: boolean;
-  messages: string[];
-  euaVersion?: number;
-};
+export type EUAResponse = z.infer<typeof EUAResponseSchema>;
 
 const EUAResponseSchema = z.object({
   success: z.boolean(),
@@ -284,6 +258,10 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         if (!server) {
           return null;
         }
+        
+        // Add slightly longer delay to ensure loading screen appears first
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         const storedUser = await Preferences.get({ key: "user" });
         if (!storedUser.value) return null;
 
@@ -296,6 +274,11 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         log.logError({ message: "User validation failed", error });
         return null;
       }
+    },
+    { 
+      initialValue: undefined,
+      // Add SSR option to prevent hydration mismatch
+      ssrLoadFrom: 'initial'
     }
   );
 
@@ -355,10 +338,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   }
 
-  async function login(
-    email: string,
-    password: string
-  ): Promise<LoginResult> {
+  async function login(email: string, password: string): Promise<LoginResult> {
     try {
       // First get the latest EUA version
       const euaResponse = await CapacitorHttp.request({

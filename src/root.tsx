@@ -57,9 +57,12 @@ const routes = [
 
 function LoadingScreen() {
   return (
-    <div class="flex h-full w-full items-center justify-center flex-col">
+    <div class="fixed inset-0 z-50 flex h-full w-full flex-col items-center justify-center bg-gray-200">
       <BackgroundLogo />
-      <div class="flex flex-col items-center"> <ImSpinner size={30} class="text-blue-500 animate-spin" /> Loading Sidekick...</div>
+      <div class="mt-8 flex flex-col items-center space-y-4">
+        <ImSpinner size={32} class="animate-spin text-blue-500" />
+        <span class="text-lg font-medium text-gray-700">Loading Sidekick...</span>
+      </div>
     </div>
   );
 }
@@ -86,8 +89,18 @@ const AppRoutes = () => {
     })
   );
 
+  // Improved loading state check
+  const isLoading = () => {
+    return (
+      context.data.loading || 
+      context.skippedLogin.loading || 
+      typeof context.data() === 'undefined'
+    );
+  };
+
+  // Show loading screen until we have definitive data
   return (
-    <Show when={!context?.data.loading} fallback={<LoadingScreen />}>
+    <Show when={!isLoading()} fallback={<LoadingScreen />}>
       <Show
         when={context?.data() || context?.skippedLogin()}
         fallback={<Login />}
