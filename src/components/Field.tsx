@@ -11,10 +11,8 @@ import {
   Switch,
   createEffect,
   createSignal,
-  on,
 } from "solid-js";
 import { Portal } from "solid-js/web";
-import { useDevice } from "~/contexts/Device";
 type DropdownOption = string | { value: string; element: JSX.Element };
 type DropdownInputProps = {
   value: string;
@@ -27,7 +25,6 @@ type DropdownInputProps = {
 
 // Note: This is not generic, recommend changing it to be generic props (title etc.) if it's used more than once.
 const DropdownInput: Component<DropdownInputProps> = (props) => {
-  const context = useDevice();
   const [open, setOpen] = createSignal(false);
   const [search, setSearch] = createSignal("");
   let options: HTMLDivElement | undefined;

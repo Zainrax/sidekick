@@ -8,6 +8,7 @@ import { useLocationStorage } from "./location";
 import { useRecordingStorage } from "./recording";
 import { Network } from "@capacitor/network";
 import { useLogsContext } from "../LogsContext";
+import { useDeviceImagesStorage } from "./deviceImages";
 
 const DatabaseName = "Cacophony";
 
@@ -24,6 +25,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
   const [isUploading, setIsUploading] = createSignal(false);
   const recording = useRecordingStorage();
   const location = useLocationStorage();
+  const deviceImages = useDeviceImagesStorage();
   const event = useEventStorage();
   const log = useLogsContext();
   const uploadItems = async (warn = true) => {
@@ -33,11 +35,10 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
       if (await KeepAwake.isSupported()) {
         await KeepAwake.keepAwake();
       }
+      await recording.uploadRecordings(warn);
       await location.resyncLocations();
-      await Promise.all([
-        recording.uploadRecordings(warn),
-        event.uploadEvents(),
-      ]);
+      await deviceImages.syncPendingPhotos();
+      await event.uploadEvents();
       if (await KeepAwake.isSupported()) {
         await KeepAwake.allowSleep();
       }
@@ -61,7 +62,8 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
     return (
       recording.hasItemsToUpload() ||
       event.hasItemsToUpload() ||
-      location.hasItemsToUpload()
+      location.hasItemsToUpload() ||
+      deviceImages.hasItemsToUpload()
     );
   };
 
@@ -82,6 +84,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
     ...recording,
     ...location,
     ...event,
+    ...deviceImages,
     uploadItems,
     stopUploading,
     isUploading,

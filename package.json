@@ -55,6 +55,8 @@
     "@capacitor/ios": "^6.1.2",
     "@capacitor/network": "^6.0.1",
     "@capacitor/preferences": "^6.0.1",
+    "@capgo/camera-preview": "^6.5.19",
+    "@capgo/capacitor-uploader": "^0.0.27",
     "@libsql/client": "^0.12.0",
     "@sentry/capacitor": "^1.0.2",
     "@sentry/solid": "8.37.1",

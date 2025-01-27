@@ -15,7 +15,7 @@ const val testUrl = "https://api-test.cacophony.org.nz/api/v1"
 const val browseProdUrl = "https://browse.cacophony.org.nz/api/v1"
 const val browseTestUrl = "https://browse-test.cacophony.org.nz/api/v1"
 
-class CacophonyApi: Api {
+class CacophonyApi : Api {
     override var basePath: String = prodUrl
     override val currentPath: String = ""
     override val client = HttpClient {
@@ -34,12 +34,19 @@ class CacophonyApi: Api {
             socketTimeoutMillis = 30000
         }
     }
+
     fun setToTest() {
         println("Setting to test")
         basePath = testUrl
     }
+
     fun setToProd() {
         println("Setting to prod")
         basePath = prodUrl
+    }
+
+    fun setToCustom(url: String) {
+        println("Setting to custom: $url")
+        basePath = url
     }
 }

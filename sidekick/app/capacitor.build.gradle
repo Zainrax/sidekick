@@ -21,6 +21,8 @@ dependencies {
     implementation project(':capacitor-geolocation')
     implementation project(':capacitor-network')
     implementation project(':capacitor-preferences')
+    implementation project(':capgo-camera-preview')
+    implementation project(':capgo-capacitor-uploader')
     implementation project(':sentry-capacitor')
     implementation project(':capacitor-native-settings')
 

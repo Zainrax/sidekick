@@ -2,7 +2,7 @@ import { SQLiteDBConnection } from "@capacitor-community/sqlite";
 import { z } from "zod";
 import { insertIntoTable, insertManyIntoTable } from "..";
 
-const TABLE_NAME = "LocationV2";
+const TABLE_NAME = "LocationV3";
 
 export const createLocationSchema = `
 CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
@@ -14,10 +14,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
   updatedAt TEXT NOT NULL,
   needsCreation INTEGER NOT NULL,
   needsRename INTEGER NOT NULL,
-  updateName TEXT,
-  referencePhotos TEXT,
-  uploadPhotos TEXT,
-  deletePhotos TEXT
+  updateName TEXT
 );
 `;
 
@@ -38,22 +35,7 @@ export const LocationSchema = z.object({
   updateName: z.string().nullish(),
   needsRename: z.coerce.boolean().default(false),
   needsCreation: z.coerce.boolean().default(false),
-  referencePhotos: z.array(z.string()).nullish().default([]),
-  // Photos to upload
-  uploadPhotos: z.array(z.string()).nullish(),
-  // Photos to delete
-  deletePhotos: z.array(z.string()).nullish(),
 });
-
-const StrToArr = z.string().transform((val) => {
-  if (!val) return [];
-  return JSON.parse(val) as string[];
-});
-
-const ArrToString = z
-  .array(z.string())
-  .default([])
-  .transform((val) => JSON.stringify(val));
 
 const transformId = <T extends { id: number; isProd: boolean }>(val: T) => ({
   ...val,
@@ -67,17 +49,11 @@ const reverseTransformId = <T extends { id: number }>(val: T) => ({
 });
 
 export const MutationLocationSchema = LocationSchema.extend({
-  deletePhotos: ArrToString,
-  uploadPhotos: ArrToString,
-  referencePhotos: ArrToString,
   coords: CoordsSchema.transform((val) => JSON.stringify(val)),
 });
 
 export const QueryLocationSchema = MutationLocationSchema.extend({
   coords: z.string().transform((val) => CoordsSchema.parse(JSON.parse(val))),
-  referencePhotos: StrToArr,
-  deletePhotos: StrToArr,
-  uploadPhotos: StrToArr,
 }).transform(reverseTransformId);
 
 export type Location = z.infer<typeof LocationSchema>;

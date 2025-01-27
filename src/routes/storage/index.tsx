@@ -26,6 +26,7 @@ export default function Storage() {
     await storage.deleteRecordings();
     await storage.deleteEvents({ uploaded: false });
     await storage.deleteSyncLocations();
+    await storage.deleteUnuploadedPhotos();
   };
   const headerContext = useHeaderContext();
 
@@ -130,19 +131,20 @@ export default function Storage() {
           </ActionContainer>
         </Show>
       </Show>
-      <ActionContainer icon={ImLocation} header="Locations">
+      <ActionContainer icon={ImLocation} header="Locations & Reference Image">
         <p class="flex items-center text-gray-800">
           <span class="w-32">
             Needs to Sync:{" "}
-            {storage
+            {(storage
               .savedLocations()
-              ?.filter(
-                (loc) =>
-                  loc.isProd &&
-                  (loc.deletePhotos?.length ||
-                    loc.updateName ||
-                    loc.uploadPhotos?.length)
-              ).length ?? 0}{" "}
+              ?.filter((loc) => loc.isProd && loc.updateName).length ?? 0) +
+              (storage
+                .deviceImages()
+                ?.filter(
+                  (image) =>
+                    image.uploadStatus === "pending" ||
+                    image.uploadStatus === "failed"
+                ).length ?? 0)}{" "}
           </span>
         </p>
       </ActionContainer>
@@ -151,14 +153,8 @@ export default function Storage() {
           <p class="flex items-center text-gray-800">
             <span class="w-32">
               Needs to Sync:{" "}
-              {storage
-                .savedLocations()
-                ?.filter(
-                  (loc) =>
-                    loc.deletePhotos?.length ||
-                    loc.updateName ||
-                    loc.uploadPhotos?.length
-                ).length ?? 0}{" "}
+              {storage.savedLocations()?.filter((loc) => loc.updateName)
+                .length ?? 0}{" "}
             </span>
           </p>
         </ActionContainer>

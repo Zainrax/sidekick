@@ -183,7 +183,12 @@ const [LogsProvider, useLogsContext] = createContextProvider(() => {
     const id = generateID();
     const details = log.details ? `${log.details}\n` : "";
     const errorInfo = isErrorLog(log) && log.error ? `${log.error}` : "";
-    console.debug(`[${log.type}] ${log.message} ${details} ${errorInfo}`);
+    if (log.type === "error") {
+      console.error(`[${log.type}] ${log.message} ${details} ${errorInfo}`);
+      console.trace();
+    } else {
+      console.log(`[${log.type}] ${log.message} ${details} ${errorInfo}`);
+    }
     const shouldWarn = log.warn ?? false;
     if (shouldWarn) {
       const existingNotifcation = notifications().find(

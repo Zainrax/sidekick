@@ -52,6 +52,17 @@ function Settings() {
     }
   });
 
+  const [customServer, setCustomServer] = createSignal("");
+
+  const saveCustomServer = () => {
+    try {
+      debugger;
+      userContext.setToCustomServer(customServer());
+    } catch (error) {
+      console.error("Failed to save custom server URL", error);
+    }
+  };
+
   return (
     <section class="pt-bar mt-2 h-full space-y-2 bg-gray-200 px-2">
       <div class="space-y-2 rounded-xl bg-slate-50 p-2">
@@ -97,6 +108,28 @@ function Settings() {
         <Show when={userContext.dev()}>
           <ActionContainer icon={ImCog}>
             <h1>Dev Mode Activated</h1>
+          </ActionContainer>
+          <ActionContainer icon={ImCog} header="Dev Server">
+            <div>
+              <input
+                placeholder={userContext.getServerUrl()}
+                type="url"
+                class="w-full bg-slate-50 p-2"
+                onInput={(e) => setCustomServer(e.currentTarget.value)}
+              />
+              <button
+                classList={{
+                  "bg-blue-500 text-white rounded-md p-2 w-full":
+                    !customServer(),
+                  "bg-slate-50 text-black rounded-md p-2 w-full":
+                    !!customServer(),
+                }}
+                class="w-full"
+                onClick={saveCustomServer}
+              >
+                Save
+              </button>
+            </div>
           </ActionContainer>
         </Show>
       </div>

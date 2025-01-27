@@ -26,56 +26,205 @@ const UserSchema = z.object({
   prod: z.boolean(),
 });
 
+// Keep track of ongoing refresh
+let refreshPromise: Promise<User | null> | null = null;
+
+export async function handleTokenManagement(
+  user: User,
+  log: any
+): Promise<User | null> {
+  if (!user) return null;
+
+  try {
+    const decodedToken = decodeJWT(user.token);
+    if (!decodedToken) {
+      log.logWarning({ message: "Invalid token format" });
+      return null;
+    }
+
+    const now = new Date();
+    const bufferTime = 60000; // 1 minute buffer
+    const tokenExpiry = decodedToken.expiresAt.getTime();
+    const isExpiringSoon = tokenExpiry < now.getTime() + bufferTime;
+
+    // Handle offline scenario
+    if (!navigator.onLine) {
+      // If token is still valid, continue using it
+      if (tokenExpiry > now.getTime()) {
+        log.logWarning({
+          message: "Operating offline with valid token",
+          details: `Token expires in ${Math.floor(
+            (tokenExpiry - now.getTime()) / 1000
+          )} seconds`,
+        });
+        return user;
+      }
+
+      // Provide grace period when offline
+      const offlineGracePeriod = 3600000; // 1 hour
+      if (tokenExpiry + offlineGracePeriod > now.getTime()) {
+        log.logWarning({
+          message: "Operating offline with grace period",
+          details: "Will need to refresh token when back online",
+        });
+        return user;
+      }
+
+      log.logWarning({
+        message: "Token expired and offline - login required when online",
+      });
+      return null;
+    }
+
+    // Handle online token refresh
+    if (isExpiringSoon) {
+      return await refreshUserToken(user, log);
+    }
+
+    return user;
+  } catch (error) {
+    log.logError({
+      message: "Token management error",
+      error,
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+    return null;
+  }
+}
+
+async function refreshUserToken(user: User, log: any): Promise<User | null> {
+  // If already refreshing, wait for that to complete
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  try {
+    refreshPromise = performTokenRefresh(user, log);
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
+}
+
+async function performTokenRefresh(user: User, log: any): Promise<User | null> {
+  try {
+    // Use Effect.retry for automatic retries on network failure
+    const result = await Effect.runPromise(
+      Effect.retry(
+        Effect.tryPromise(() =>
+          CacophonyPlugin.validateToken({ refreshToken: user.refreshToken })
+        ),
+        { times: 2, delay: 1000 } // Retry twice with 1 second delay
+      )
+    );
+
+    if (result.success) {
+      const updatedUser: User = {
+        ...user,
+        token: result.data.token,
+        refreshToken: result.data.refreshToken,
+        expiry: result.data.expiry,
+      };
+
+      await Preferences.set({
+        key: "user",
+        value: JSON.stringify(updatedUser),
+      });
+
+      log.logSuccess({
+        message: "Token refreshed successfully",
+        details: `New token expires at ${result.data.expiry}`,
+      });
+      return updatedUser;
+    }
+    if (result.message?.includes("Failed") && navigator.onLine) {
+      log.logWarning({
+        message: "Token refresh failed - new login required",
+        details: result.message,
+      });
+      return null;
+    }
+
+    // If we get here, something went wrong but we're not sure what
+    // Keep the existing token for now
+    log.logWarning({
+      message: "Token refresh gave unexpected response",
+      details: "Keeping existing token",
+    });
+    return user;
+  } catch (error) {
+    log.logError({
+      message: "Token refresh failed",
+      error,
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+
+    // If we're online, the error is likely permanent
+    if (navigator.onLine) {
+      return null;
+    }
+
+    // If offline, keep existing token
+    return user;
+  }
+}
+
+// Helper function to decode JWT
+function decodeJWT(token: string) {
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) return null;
+
+    const decoded = JSON.parse(atob(payload));
+    return {
+      ...decoded,
+      expiresAt: new Date(decoded.exp * 1000),
+      createdAt: new Date(decoded.iat * 1000),
+    };
+  } catch (error) {
+    return null;
+  }
+}
 export type User = z.infer<typeof UserSchema>;
 
 const [UserProvider, useUserContext] = createContextProvider(() => {
   const log = useLogsContext();
   const nav = useNavigate();
+  const ValidUrl = z.string().url();
+  const [
+    customServer,
+    { refetch: refetchCustomServer, mutate: mutateCustomServer },
+  ] = createResource<string | undefined>(async () => {
+    const pref = ValidUrl.safeParse(
+      (await Preferences.get({ key: "customServer" })).value
+    );
+    console.log(`Custom server: ${pref.data}`);
+    if (pref.success) {
+      await CacophonyPlugin.setToCustomServer({ url: pref.data });
+    }
+    return pref.data;
+  });
 
   // Enhanced error handling by defining a specific type for user data
-  const [data, { mutate: mutateUser, refetch }] = createResource<User | null>(
-    async () => {
+  const [data, { mutate: mutateUser, refetch }] = createResource(
+    getServerUrl,
+    async (server) => {
       try {
+        if (!server) {
+          return null;
+        }
         const storedUser = await Preferences.get({ key: "user" });
-        if (storedUser.value) {
-          const json = JSON.parse(storedUser.value);
-          // Validate that json is not an empty object
-          if (json && Object.keys(json).length === 0) {
-            return null;
-          }
-          const user = UserSchema.parse(json);
-          setServer(user.prod ? "prod" : "test");
+        if (!storedUser.value) return null;
 
-          getValidUser(user).then((user) => {
-            mutateUser(user);
-          });
-          return user;
-        }
+        const json = JSON.parse(storedUser.value);
+        if (!json || Object.keys(json).length === 0) return null;
+
+        const user = UserSchema.parse(json);
+        return await handleTokenManagement(user, log);
       } catch (error) {
-        if (error instanceof z.ZodError) {
-          log.logError({
-            message: "User data validation failed",
-            error,
-            details: error.errors.map((e) => e.message).join(", "),
-          });
-        } else if (error instanceof Error) {
-          log.logError({ message: "Could not retrieve valid user", error });
-        } else {
-          log.logWarning({
-            message: "An unknown error occurred while fetching user data",
-          });
-        }
-        const storedUser = await Preferences.get({ key: "user" });
-        if (storedUser.value) {
-          const user = UserSchema.parse(JSON.parse(storedUser.value));
-          setServer(user.prod ? "prod" : "test");
-          getValidUser(user).then((user) => {
-            mutateUser(user);
-          });
-          return user;
-        }
+        log.logError({ message: "User validation failed", error });
+        return null;
       }
-      return null;
     }
   );
 
@@ -149,8 +298,11 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         )
       );
       if (!authUser.success) {
+        const message = authUser.message.includes("endUserAgreement")
+          ? "Login Failed: Agree to end user agreemen at browse.cacophony.org.nz"
+          : "Login Failed";
         log.logWarning({
-          message: "Login attempt failed",
+          message,
           details: authUser.message,
           warn: true,
         });
@@ -175,7 +327,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   }
 
-  const [server, setServer] = createSignal<"test" | "prod">("prod");
+  const [server, setServer] = createSignal<"test" | "prod" | "custom">("prod");
   const isProd = () => server() === "prod";
 
   const [changeServer] = createResource(server, async (server) => {
@@ -273,16 +425,17 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
               console.info({ message: "Token refreshed successfully" });
               return updatedUser;
             } else {
-              if (result.message.includes("Failed")) {
+              if (
+                result.message.includes("Failed") ||
+                result.message.includes("403")
+              ) {
                 log.logWarning({
                   message: "Token validation failed",
                   details: result.message,
                 });
-                if (navigator.onLine) {
-                  await logout();
-                }
+                await logout();
               }
-              console.warn("Failed to refresh token");
+              console.warn("Failed to refresh token", result);
               return user;
             }
           } catch (networkError) {
@@ -334,6 +487,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         });
         throw new Error("User not authenticated");
       }
+      debugger;
 
       const res = await CapacitorHttp.request({
         method: "POST",
@@ -418,12 +572,17 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       log.logWarning({ message: "Server switch already in progress" });
       return;
     }
-    const newServer = isProd() ? "test" : "prod";
+    const newServer = isProd() ? (customServer() ? "custom" : "test") : "prod";
     setServer(newServer);
     log.logSuccess({ message: `Server toggled to ${newServer}` });
   }
-
   function getServerUrl() {
+    if (customServer.loading) return undefined;
+    const currCustomServer = customServer();
+    console.info("Custom Server", { currCustomServer });
+    if (currCustomServer) {
+      return currCustomServer;
+    }
     return isProd()
       ? "https://api.cacophony.org.nz"
       : "https://api-test.cacophony.org.nz";
@@ -543,6 +702,19 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   });
 
+  const setToCustomServer = async (customUrl: string) => {
+    try {
+      const valid = ValidUrl.safeParse(customUrl);
+      if (valid.success) {
+        await Preferences.set({
+          key: "customServer",
+          value: customUrl,
+        });
+        await refetchCustomServer();
+      }
+    } catch (error) {}
+  };
+
   const toggleDev = async () => {
     try {
       const newDevState = !dev();
@@ -580,6 +752,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     getServerUrl,
     dev,
     toggleDev,
+    setToCustomServer,
     isLoggedIn,
   };
 });

@@ -1,4 +1,5 @@
 import { Camera, CameraResultType, Photo } from "@capacitor/camera";
+import { CameraPreview } from "@capgo/camera-preview";
 import { Dialog as Prompt } from "@capacitor/dialog";
 import { A, useSearchParams } from "@solidjs/router";
 import { AiFillEdit, AiOutlineInfoCircle } from "solid-icons/ai";
@@ -59,6 +60,9 @@ import {
   IOSSettings,
   NativeSettings,
 } from "capacitor-native-settings";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+import { UploadStatus } from "~/database/Entities/DeviceReferenceImages";
+import { Capacitor } from "@capacitor/core";
 type CameraCanvas = HTMLCanvasElement | undefined;
 const colours = ["#ff0000", "#00ff00", "#ffff00", "#80ffff"];
 type SettingProps = { deviceId: DeviceId };
@@ -163,7 +167,6 @@ export function AudioSettingsTab(props: SettingProps) {
     }
   }
   const thermalMode = (): [PercentageRange, PercentageRange | null] | null => {
-    debugger;
     const windowConfig = config()?.values.windows;
     const windowDefaultConfig = config()?.defaults.windows;
     if (!windowConfig) return null;
@@ -379,6 +382,7 @@ export function CameraSettingsTab(props: SettingProps) {
     async (id) => {
       if (!id) return null;
       const res = await context.getAudioStatus(id);
+      console.log("Audio Status: ", res);
       return res;
     }
   );
@@ -742,26 +746,21 @@ export function CameraSettingsTab(props: SettingProps) {
 
   return (
     <section>
-      <Show
-        when={
-          device()?.type !== "tc2" ||
-          audioStatus.loading ||
-          audioStatus()?.status === "ready"
-        }
-        fallback={
-          <p class="flex w-full flex-col items-center gap-y-2 p-8 text-center text-2xl text-neutral-600">
-            <FaSolidSpinner class="animate-spin" size={32} />
+      <Switch>
+        <Match
+          when={audioStatus()?.status !== "ready" && audioMode() !== "Disabled"}
+        >
+          <p class="w-full p-8 text-center text-2xl text-neutral-600">
             Camera not available due to audio recording.
           </p>
-        }
-      >
-        <Show
-          when={audioMode() !== "AudioOnly"}
-          fallback={
-            <p class="w-full p-8 text-center text-2xl text-neutral-600">
-              Preview not available in audio only mode.
-            </p>
-          }
+        </Match>
+        <Match when={audioMode() === "AudioOnly"}>
+          <p class="w-full p-8 text-center text-2xl text-neutral-600">
+            Preview not available in audio only mode.
+          </p>
+        </Match>
+        <Match
+          when={audioStatus() === null || audioStatus()?.status === "ready"}
         >
           <Show
             when={isRecieving()}
@@ -824,8 +823,8 @@ export function CameraSettingsTab(props: SettingProps) {
               </Match>
             </Switch>
           </button>
-        </Show>
-      </Show>
+        </Match>
+      </Switch>
       <div class="px-6 py-2">
         <h1 class="font-semibold text-gray-800">Recording Window</h1>
         <div class="flex w-full justify-between">
@@ -967,6 +966,11 @@ export function LocationSettingsTab(props: SettingProps) {
   const [locationRes, { refetch: refetchLocation }] =
     context.getLocationByDevice(id());
   const location = createMemo(() => locationRes());
+
+  createEffect(() => {
+    console.log("Location: ", location());
+  });
+
   createEffect(() => {
     on(
       () => shouldUpdateLocState(),
@@ -990,149 +994,125 @@ export function LocationSettingsTab(props: SettingProps) {
   };
 
   const [newName, setNewName] = createSignal("");
+  const [photoFileToUpload, setPhotoFileToUpload] = createSignal<{
+    url: string;
+    path?: string;
+    uploadStatus?: "temp";
+  } | null>();
 
-  const [photoFilesToUpload, setPhotoFilesToUpload] = createSignal<
-    { file: string; url: string }[]
-  >([]);
+  const [currentPhoto, { refetch: refetchPhoto }] = createResource(async () => {
+    const device = context.devices.get(id());
+    if (!device) return null;
+    return storage.getDevicePhoto(device);
+  });
 
   const canSave = (): boolean =>
     location() === null
       ? newName() !== ""
-      : newName() !== "" || photoFilesToUpload().length > 0;
+      : newName() !== "" || !!photoFileToUpload();
 
-  const photos = () => [
-    ...(location()?.referencePhotos ?? []),
-    ...(location()?.uploadPhotos ?? []),
-    ...photoFilesToUpload(),
-  ];
-
-  const base64FromPath = async (path: string): Promise<string> => {
-    const response = await fetch(path);
-    const blob = await response.blob();
-
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = reject;
-      reader.onload = () => {
-        const base64Data = (reader.result as string).split(",")[1];
-        resolve(base64Data);
-      };
-      reader.readAsDataURL(blob);
-    });
-  };
-
-  const savePicture = async (photo: Photo) => {
-    // Convert photo to base64 format, required by Filesystem API to save
-    if (!photo.webPath) throw Error("No web path found on photo");
-    const base64Data = await base64FromPath(photo.webPath ?? "");
-
-    // Generate a unique file name
-    const fileName = new Date().getTime() + ".jpeg";
-
-    // Write the file to the data directory
-    const savedFile = await Filesystem.writeFile({
-      path: fileName,
-      data: base64Data,
-      directory: Directory.Data,
-    });
-
-    // Return the file path and webview path
-    return {
-      file: savedFile.uri,
-      url: photo.webPath,
-    };
-  };
-
-  const addPhotoToDevice = async () => {
+  const [addingPhoto, setAddingPhoto] = createSignal(false);
+  async function addPhotoToDevice() {
     try {
+      setAddingPhoto(true);
       const image = await Camera.getPhoto({
         quality: 100,
         allowEditing: false,
         resultType: CameraResultType.Uri,
         width: 500,
       });
-
-      if (image.path && image.webPath) {
-        const savedImageFile = await savePicture(image);
-
-        setPhotoFilesToUpload((curr) => [
-          ...curr,
-          { file: savedImageFile.file, url: savedImageFile.url },
-        ]);
-        setPhotoIndex(photos().length - 1);
+      const url = image.webPath;
+      debugger;
+      if (url) {
+        setPhotoFileToUpload((curr) => ({
+          url,
+          path: image.path,
+        }));
       }
     } catch (error) {
-      log.logWarning({
-        message: "Photo upload failed. Please check your device permissions.",
-        action: <GoToPermissions />,
-      });
+      console.error("Photo upload failed:", error);
+    } finally {
+      setAddingPhoto(false);
     }
-  };
+  }
 
   const [setting, setSetting] = createSignal(false);
   const saveLocationSettings = async () => {
-    if (setting()) return;
-    setSetting(true);
-    const name = newName();
-    const photoPaths = photoFilesToUpload();
-    const deviceLocation = await context.getLocationCoords(id());
-    const loc = location();
-    if (!loc && deviceLocation.success) {
-      try {
-        await storage.createLocation({
-          name,
-          coords: {
-            lat: deviceLocation.data.latitude,
-            lng: deviceLocation.data.longitude,
-          },
-          groupName: groupName(),
-          uploadPhotos: photoPaths.map((photo) => photo.file),
-          isProd: isProd(),
-        });
-        await refetchLocation();
-      } catch (e) {
-        setPhotoFilesToUpload([]);
+    try {
+      if (setting()) return;
+      setSetting(true);
+      const name = newName();
+      const photoToUpload = photoFileToUpload();
+      const deviceLocation = await context.getLocationCoords(id());
+      const loc = location();
+      if (!loc && deviceLocation.success) {
+        try {
+          await storage.createLocation({
+            name,
+            coords: {
+              lat: deviceLocation.data.latitude,
+              lng: deviceLocation.data.longitude,
+            },
+            groupName: groupName(),
+            isProd: isProd(),
+          });
+          await refetchLocation();
+        } catch (e) {
+          setNewName("");
+          toggleEditing(false);
+          setSetting(false);
+        }
         setNewName("");
         toggleEditing(false);
+        setShowLocationSettings(false);
         setSetting(false);
+        return;
       }
-      setPhotoFilesToUpload([]);
-      setNewName("");
-      toggleEditing(false);
-      setShowLocationSettings(false);
-      setSetting(false);
-      return;
-    }
-    if (name) {
-      const loc = location();
-      if (loc) {
-        await storage.updateLocationName(loc, name);
-        setNewName("");
+      if (name) {
+        const loc = location();
+        if (loc) {
+          await storage.updateLocationName(loc, name);
+          setNewName("");
+        }
+        await refetchLocation();
       }
-      await refetchLocation();
-    }
-    if (photoPaths.length > 0) {
-      for (const { file } of photoPaths) {
+      const device = context.devices.get(id());
+      const path = photoFileToUpload()?.path;
+      const url = photoFileToUpload()?.url;
+      debugger;
+      if (url && path && device) {
         try {
-          const loc = location();
-          if (!loc) continue;
-          await storage.updateLocationPhoto(loc, file);
-          setPhotoFilesToUpload((curr) =>
-            curr.filter((photo) => photo.file !== file)
+          await storage.uploadDevicePhoto(
+            id(),
+            device.isProd,
+            path,
+            url,
+            "pov"
           );
+          setPhotoFileToUpload();
         } catch (error) {
           log.logError({
             message: "Could not save location photo",
-            details: `Could not save photo ${file} for location ${loc}`,
+            details: `Could not save photo ${JSON.stringify(
+              photoFileToUpload()
+            )} for location ${JSON.stringify(loc)}`,
             error,
           });
         }
+        await refetchLocation();
       }
-      await refetchLocation();
+      refetchPhoto();
+      toggleEditing(false);
+      setShowLocationSettings(false);
+      setSetting(false);
+    } catch (error) {
+      log.logError({
+        message: "Could not save location settings",
+        error,
+      });
+    } finally {
+      setSetting(false);
     }
-    toggleEditing(false);
-    setShowLocationSettings(false);
-    setSetting(false);
   };
 
   const locationName = () => {
@@ -1142,61 +1122,34 @@ export function LocationSettingsTab(props: SettingProps) {
     if (!loc) return "No Location Name";
     return loc.name;
   };
-
-  const [photoIndex, setPhotoIndex] = createSignal(0);
-  const hasPicture = () => photos().length > 0;
-
-  // Server Side referencePhotos are first in the array
-  const [photoReference] = createResource(
-    () => [location(), photos(), photoIndex()] as const,
-    async (values) => {
-      const [loc, imgs, idx] = values;
-      const img = imgs[idx];
-      if (!img) return "";
-      if (typeof img === "string") {
-        if (!loc) return "";
-        const data = await storage.getReferencePhotoForLocation(loc.id, img);
-        return data ?? img;
-      } else {
-        return img.url;
-      }
-    }
-  );
+  const photo = () => photoFileToUpload() ?? currentPhoto();
+  const hasPicture = () => !!photo();
 
   const isImageToUpload = () => {
-    const idx = photoIndex();
-    const startOfUploads = (location()?.referencePhotos ?? []).length;
-    return idx > startOfUploads;
+    return photoFileToUpload() !== undefined;
   };
 
   const removePhotoReference = async () => {
-    const idx = photoIndex();
-    const image = photos()[idx];
-    if (typeof image === "object") {
-      setPhotoFilesToUpload((curr) => {
-        return curr.filter((file) => file.file !== image.file);
+    try {
+      const img = currentPhoto();
+      const device = context.devices.get(id());
+      if (!img || !device) return;
+      const prompt = await Prompt.confirm({
+        title: "Confirm Deletion",
+        message: "Are you sure you want to delete this photo?",
       });
-      setPhotoIndex((curr) => {
-        if (curr > 0) return curr - 1;
-        return 0;
-      });
-    } else {
-      const loc = location();
-      if (loc) {
-        const prompt = await Prompt.confirm({
-          title: "Confirm Deletion",
-          message: "Are you sure you want to delete this photo?",
+      debugger;
+      if (prompt.value) {
+        const res = await storage.deleteDevicePhoto({
+          filePath: img.filePath,
+          fileKey: img.fileKey,
+          deviceId: parseInt(device.id),
+          isProd: device.isProd,
         });
-        if (prompt.value) {
-          const res = await storage.deleteReferencePhotoForLocation(loc, image);
-          if (res) {
-            setPhotoIndex((curr) => {
-              if (curr > 0) return curr - 1;
-              return 0;
-            });
-          }
-        }
+        refetchPhoto();
       }
+    } catch (error) {
+      console.error(error);
     }
   };
 
@@ -1221,6 +1174,9 @@ export function LocationSettingsTab(props: SettingProps) {
   const hasLocation = () => location() !== null || (lat() !== 0 && lng() !== 0);
   onMount(() => {
     context.refetchDeviceLocToUpdate();
+  });
+  createEffect(() => {
+    console.log("Photo: ", photo());
   });
   return (
     <section class="px-4 py-4">
@@ -1281,7 +1237,7 @@ export function LocationSettingsTab(props: SettingProps) {
       <Show
         when={
           (!locationRes.loading && location()?.updateName) ||
-          location()?.uploadPhotos?.length
+          photo()?.uploadStatus === "pending"
         }
       >
         {(loc) => (
@@ -1306,9 +1262,7 @@ export function LocationSettingsTab(props: SettingProps) {
               <span>{lng()}</span>
             </p>
             <div>
-              <Show
-                when={photoFilesToUpload().length && !newName() && !location()}
-              >
+              <Show when={photoFileToUpload() && !newName() && !location()}>
                 <p class="text-sm text-yellow-400">
                   Add a name to save new location.
                 </p>
@@ -1367,10 +1321,11 @@ export function LocationSettingsTab(props: SettingProps) {
               </Show>
             </div>
             <div>
-              <p class="text-sm text-slate-400">Photo Reference:</p>
+              <p class="text-sm text-slate-400">Camera POV:</p>
+              <div id="cameraPreview"></div>
               <div class="relative rounded-md bg-slate-100">
                 <Switch>
-                  <Match when={photoReference.loading}>
+                  <Match when={photo()}>
                     <div class="absolute flex h-full w-full flex-col justify-between gap-2">
                       <div class="flex w-full justify-between">
                         <button
@@ -1385,81 +1340,6 @@ export function LocationSettingsTab(props: SettingProps) {
                         >
                           <FaRegularTrashCan size={22} />
                         </button>
-                      </div>
-                      <div class="flex w-full justify-between">
-                        <button
-                          class="flex h-10 w-10 items-center justify-center rounded-r-full bg-slate-100 p-2 text-gray-500"
-                          onClick={() =>
-                            setPhotoIndex((i) =>
-                              i === 0 ? photos().length - 1 : i - 1
-                            )
-                          }
-                        >
-                          <ImArrowLeft size={18} />
-                        </button>
-                        <button
-                          class="flex h-10 w-10 items-center justify-center rounded-l-full bg-slate-100 p-2 text-gray-500"
-                          onClick={() =>
-                            setPhotoIndex((i) =>
-                              i === photos().length - 1 ? 0 : i + 1
-                            )
-                          }
-                        >
-                          <ImArrowRight size={18} />
-                        </button>
-                      </div>
-                      <div class="w-fit self-center rounded-lg bg-slate-50 p-1">
-                        {photoIndex() + 1}/{photos().length}
-                      </div>
-                    </div>
-                    <div
-                      class="flex h-[18rem] w-full flex-col items-center justify-center  text-gray-700"
-                      onClick={() => addPhotoToDevice()}
-                    >
-                      <FaSolidSpinner size={28} class="animate-spin" />
-                      <p class="text-sm text-gray-800">Loading...</p>
-                    </div>
-                  </Match>
-                  <Match when={photoReference() && !photoReference.loading}>
-                    <div class="absolute flex h-full w-full flex-col justify-between gap-2">
-                      <div class="flex w-full justify-between">
-                        <button
-                          class="flex h-10 w-10 items-center justify-center rounded-br-lg bg-slate-100 p-2 text-blue-500"
-                          onClick={() => addPhotoToDevice()}
-                        >
-                          <TbCameraPlus size={28} />
-                        </button>
-                        <button
-                          class="flex h-10 w-10 items-center justify-center rounded-bl-lg bg-slate-100 p-2 text-red-500"
-                          onClick={() => removePhotoReference()}
-                        >
-                          <FaRegularTrashCan size={22} />
-                        </button>
-                      </div>
-                      <div class="flex w-full justify-between">
-                        <button
-                          class="flex h-10 w-10 items-center justify-center rounded-r-full bg-slate-100 p-2 text-gray-500"
-                          onClick={() =>
-                            setPhotoIndex((i) =>
-                              i === 0 ? photos().length - 1 : i - 1
-                            )
-                          }
-                        >
-                          <ImArrowLeft size={18} />
-                        </button>
-                        <button
-                          class="flex h-10 w-10 items-center justify-center rounded-l-full bg-slate-100 p-2 text-gray-500"
-                          onClick={() =>
-                            setPhotoIndex((i) =>
-                              i === photos().length - 1 ? 0 : i + 1
-                            )
-                          }
-                        >
-                          <ImArrowRight size={18} />
-                        </button>
-                      </div>
-                      <div class="w-fit self-center rounded-lg bg-slate-50 p-1">
-                        {photoIndex() + 1}/{photos().length}
                       </div>
                     </div>
                     <div
@@ -1468,29 +1348,25 @@ export function LocationSettingsTab(props: SettingProps) {
                       }}
                       class="h-[18rem]"
                     >
-                      <Show
-                        when={
-                          !photoReference.loading &&
-                          !photoReference.error &&
-                          photoReference()
-                        }
-                      >
-                        {(photo) => (
+                      <Show when={photo()}>
+                        {(imgData) => (
                           <img
-                            src={photo()}
+                            src={imgData().url}
                             class="h-[18rem] w-full rounded-md object-cover p-4"
                           />
                         )}
                       </Show>
                     </div>
                   </Match>
-                  <Match when={!photoReference.loading && !photoReference()}>
+                  <Match when={!photo()}>
                     <button
-                      class="flex w-full flex-col items-center justify-center p-8  text-gray-700"
+                      class="flex w-full flex-col items-center justify-center p-8  text-blue-500"
                       onClick={() => addPhotoToDevice()}
                     >
                       <TbCameraPlus size={52} />
-                      <p class="text-sm text-gray-800">Add Photo</p>
+                      <p class="text-sm text-gray-800">
+                        Take a Photo from Camera's perspective
+                      </p>
                     </button>
                   </Match>
                 </Switch>
@@ -1521,7 +1397,7 @@ export function LocationSettingsTab(props: SettingProps) {
                 class="text-gray-400"
                 onClick={() => {
                   setNewName("");
-                  setPhotoFilesToUpload([]);
+                  setPhotoFileToUpload();
                   setShowLocationSettings(false);
                 }}
                 disabled={!canSave()}
@@ -1974,7 +1850,7 @@ export function WifiSettingsTab(props: SettingProps) {
                         modemConnectedToInternet() === "no-modem"
                       }
                     >
-                      <p>No Modem</p>
+                      <p>No Modem Connection</p>
                     </Match>
                     <Match when={modemConnectedToInternet() === "connected"}>
                       <p>Internet Connection</p>
@@ -2755,16 +2631,10 @@ export function DeviceSettingsModal() {
   const user = useUserContext();
   const [params, setParams] = useSearchParams();
   const currTab = () => params.tab ?? "Camera";
-  const [hasAudioCapabilities] = createResource(
-    () => params.deviceSettings,
-    async (id) => {
-      const res = await context.hasAudioCapabilities(id);
-      return res;
-    }
-  );
+  const device = () => context.devices.get(params.deviceSettings);
   const navItems = () => {
     const items = ["Camera", "General", "Network", "Location"] as const;
-    if (hasAudioCapabilities()) {
+    if (device()?.hasAudioCapabilities) {
       return [...items, "Audio"] as const;
     } else {
       return items;
@@ -2850,7 +2720,9 @@ export function DeviceSettingsModal() {
               <Match when={currTab() === "Camera"}>
                 <CameraSettingsTab deviceId={id()} />
               </Match>
-              <Match when={currTab() === "Audio" && hasAudioCapabilities()}>
+              <Match
+                when={currTab() === "Audio" && device()?.hasAudioCapabilities}
+              >
                 <AudioSettingsTab deviceId={id()} />
               </Match>
             </Switch>

@@ -11,41 +11,53 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import nz.org.cacophony.sidekick.cacophony.CacophonyInterface
 
 @CapacitorPlugin(name = "Cacophony")
-class CacophonyPlugin: Plugin() {
+class CacophonyPlugin : Plugin() {
     lateinit var cacophony: CacophonyInterface
 
     override fun load() {
-       cacophony = CacophonyInterface(context.applicationContext.filesDir.absolutePath)
+        cacophony = CacophonyInterface(context.applicationContext.filesDir.absolutePath)
     }
 
     @PluginMethod
     fun authenticateUser(call: PluginCall) {
         cacophony.authenticateUser(pluginCall(call))
     }
+
     @PluginMethod
     fun requestDeletion(call: PluginCall) {
         cacophony.requestDeletion(pluginCall(call))
     }
+
     @PluginMethod
     fun validateToken(call: PluginCall) {
         cacophony.validateToken(pluginCall(call))
     }
+
     @PluginMethod
     fun setToTestServer(call: PluginCall) {
         cacophony.setToTestServer(pluginCall(call))
     }
+
     @PluginMethod
     fun setToProductionServer(call: PluginCall) {
         cacophony.setToProductionServer(pluginCall(call))
     }
+
+    @PluginMethod
+    fun setToCustomServer(call: PluginCall) {
+        cacophony.setToCustomServer(pluginCall(call))
+    }
+
     @PluginMethod
     fun uploadRecording(call: PluginCall) {
         cacophony.uploadRecording(pluginCall(call))
     }
+
     @PluginMethod
     fun uploadEvent(call: PluginCall) {
         cacophony.uploadEvent(pluginCall(call))
     }
+
     @PluginMethod
     fun getDeviceById(call: PluginCall) {
         cacophony.getDeviceById(pluginCall(call))
@@ -75,6 +87,28 @@ class CacophonyPlugin: Plugin() {
     fun getReferencePhoto(call: PluginCall) {
         cacophony.getReferencePhoto(pluginCall(call))
     }
+
+    @PluginMethod
+    fun getReferenceImage(call: PluginCall) {
+        cacophony.getReferenceImage(pluginCall(call))
+    }
+
+
+    @PluginMethod
+    fun saveDeviceImage(call: PluginCall) {
+        cacophony.saveDeviceImage(pluginCall(call))
+    }
+
+    @PluginMethod
+    fun uploadDeviceReferenceImage(call: PluginCall) {
+        cacophony.uploadDeviceReferenceImage(pluginCall(call))
+    }
+
+    @PluginMethod
+    fun deleteReferenceImage(call: PluginCall) {
+        cacophony.deleteReferenceImage(pluginCall(call))
+    }
+
 
     @PluginMethod
     fun deleteReferencePhoto(call: PluginCall) {

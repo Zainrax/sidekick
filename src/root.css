@@ -62,3 +62,6 @@
     margin-right: calc(env(safe-area-inset-right, 2em));
   }
 }
+:root {
+  --ion-background-color: transparent !important;
+}

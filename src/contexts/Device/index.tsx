@@ -5,7 +5,7 @@ import {
   registerPlugin,
 } from "@capacitor/core";
 import { CapacitorHttp } from "@capacitor/core";
-import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
+import { Filesystem } from "@capacitor/filesystem";
 import { Geolocation } from "@capacitor/geolocation";
 import { createContextProvider } from "@solid-primitives/context";
 import { ReactiveMap } from "@solid-primitives/map";
@@ -29,6 +29,7 @@ import DeviceCamera from "./Camera";
 import { Effect } from "effect";
 import { useLogsContext } from "../LogsContext";
 import { useSearchParams } from "@solidjs/router";
+import { useUserContext } from "../User";
 
 const WifiNetwork = z
   .object({
@@ -140,6 +141,7 @@ export type DeviceDetails = {
   locationSet: boolean;
   url: string;
   type: "pi" | "tc2";
+  hasAudioCapabilities: boolean;
   lastUpdated?: Date;
   batteryPercentage?: string;
 };
@@ -243,6 +245,7 @@ type DeviceInfo = z.infer<typeof DeviceInfoSchema>;
 const [DeviceProvider, useDevice] = createContextProvider(() => {
   const storage = useStorage();
   const log = useLogsContext();
+  const user = useUserContext();
 
   const devices = new ReactiveMap<DeviceId, Device>();
   const deviceRecordings = new ReactiveMap<DeviceId, RecordingName[] | null>();
@@ -345,12 +348,14 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       if (!device) throw new Error("Failed to connect to device");
 
       const batteryPercentage = await getBattery(device.url);
+      const hasAudio = await hasAudioCapabilities(device.id);
 
       return {
         ...device,
         host,
         endpoint,
         batteryPercentage: batteryPercentage?.mainBattery,
+        hasAudioCapabilities: hasAudio,
       };
     } catch (error) {
       console.error("Error in endpointToDevice:", error);
@@ -593,6 +598,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
         if (info.success) {
           const battery = await getBattery(device.url);
+          const hasAudio = await hasAudioCapabilities(device.id);
           const updatedDevice: ConnectedDevice = {
             ...device,
             id: info.data.deviceID.toString(),
@@ -602,6 +608,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
               : device.lastUpdated,
             batteryPercentage: battery?.mainBattery,
             isConnected: true,
+            hasAudioCapabilities: hasAudio,
           };
           if (info.data.deviceID.toString() !== device.id) {
             devices.delete(device.id);
@@ -961,6 +968,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     devicesDownloading.add(id);
     await Promise.all([setCurrRecs(device), setCurrEvents(device)]);
     await Promise.all([saveRecordings(device), saveEvents(device)]);
+    log.logSuccess({
+      message: `Successfully saved recordings and events for ${device.name}.`,
+    });
     devicesDownloading.delete(id);
     if (isSupported) {
       await KeepAwake.allowSleep();
@@ -1351,7 +1361,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     voltageArray: number[],
     percentageArray: number[]
   ): number {
-    debugger;
     if (voltage <= voltageArray[0]) return percentageArray[0];
     if (voltage >= voltageArray[voltageArray.length - 1])
       return percentageArray[percentageArray.length - 1];
@@ -1399,7 +1408,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         },
       });
       console.log("BATTERY", res);
-      return dataSchema.safeParse(JSON.parse(res.data)).data;
+      if (res.status !== 200) return;
+      const parsedBattery = dataSchema.safeParse(JSON.parse(res.data)).data;
+      console.log("BATTERY", parsedBattery);
+      return parsedBattery;
     } catch (e) {
       console.error(e);
       return;
@@ -1560,7 +1572,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
-      debugger;
       return res.status === 200 ? tc2ModemSchema.parse(res.data) : null;
     } catch (error) {
       console.error("Get Modem Error:", error);
@@ -2203,6 +2214,72 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       return false;
     }
   };
+
+  const deviceTypes = z.enum([
+    "audio",
+    "thermal",
+    "trailcam",
+    "trapcam",
+    "hybrid-thermal-audio",
+    "unknown",
+  ]);
+
+  createEffect(
+    on(
+      () => [...devices.values()],
+      async (inDevices, prevDevices) => {
+        // Get devices that recently had group and location set
+        const userToken = user.data()?.token;
+        if (!prevDevices || !userToken) return;
+
+        for (const device of inDevices) {
+          const typeRes = await CapacitorHttp.get({
+            url: `${user.getServerUrl()}/api/v1/devices/${device.id}/type`,
+            headers: {
+              Authorization: userToken,
+            },
+          });
+          const data = z.object({ type: deviceTypes }).parse(typeRes.data);
+          const settingsRes = await CapacitorHttp.get({
+            url: `${user.getServerUrl()}/api/v1/devices/${device.id}/settings`,
+            headers: {
+              Authorization: userToken,
+            },
+          });
+          if (
+            data.type === "unknown" ||
+            (data.type === "thermal" && device.hasAudioCapabilities) ||
+            settingsRes.status !== 200
+          ) {
+            const deviceLocation = await getLocationCoords(device.id);
+            const data = {
+              type: device.hasAudioCapabilities
+                ? "hybrid-thermal-audio"
+                : "thermal",
+              ...(deviceLocation.success && {
+                location: {
+                  lat: deviceLocation.data.latitude,
+                  lng: deviceLocation.data.longitude,
+                },
+              }),
+            };
+            const res = await CapacitorHttp.post({
+              url: `${user.getServerUrl()}/api/v1/devices/${
+                device.id
+              }/settings`,
+              headers: {
+                Authorization: userToken,
+                "Content-Type": "application/json",
+              },
+              data,
+            });
+            console.log("Device Settings", res);
+          }
+          console.log("Device Type", data);
+        }
+      }
+    )
+  );
 
   return {
     devices,

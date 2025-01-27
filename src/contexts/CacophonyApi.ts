@@ -69,16 +69,36 @@ export interface CacophonyPlugin {
     id: string;
     name: string;
   }): Result<JSONString>;
-  uploadReferencePhoto(options: {
+  uploadDeviceReferenceImage(options: {
     token: string;
-    station: string;
+    deviceId: string;
     filename: string;
+    type?: "pov" | "in-situ";
+    atTime?: string;
   }): Result<JSONString>;
+  getReferenceImage(options: {
+    token?: string;
+    deviceId: string;
+    fileKey?: string | null;
+    filePath: string;
+  }): Result<string>;
+  saveDeviceImage(options: {
+    token?: string;
+    deviceId: string;
+    filePath: string;
+  }): Result<string>;
+  // Deprecated: Using old location based photos
   getReferencePhoto(options: {
     token?: string;
     station: string;
     fileKey: string;
   }): Result<string>;
+  deleteReferenceImage(options: {
+    token?: string;
+    deviceId: string;
+    filePath: string;
+  }): Result<{ localDeleted: boolean; serverDeleted: boolean }>;
+  // Deprecated: Using old location based photos
   deleteReferencePhoto(options: {
     token?: string;
     station: string;
@@ -94,6 +114,7 @@ export interface CacophonyPlugin {
   }): Result<JSONString>;
   setToProductionServer(): Result;
   setToTestServer(): Result;
+  setToCustomServer(options: { url: string }): Result;
   getAppVersion(): Result<string>;
 }
 
@@ -117,7 +138,6 @@ const ApiLocationSchema = z
     const { settings, location, ...rest } = data;
     return {
       ...rest,
-      referencePhotos: settings?.referenceImages ?? [],
       coords: location,
     };
   });

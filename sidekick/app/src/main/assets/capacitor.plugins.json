@@ -48,6 +48,14 @@
 		"classpath": "com.capacitorjs.plugins.preferences.PreferencesPlugin"
 	},
 	{
+		"pkg": "@capgo/camera-preview",
+		"classpath": "com.ahm.capacitor.camera.preview.CameraPreview"
+	},
+	{
+		"pkg": "@capgo/capacitor-uploader",
+		"classpath": "ee.forgr.capacitor.uploader.UploaderPlugin"
+	},
+	{
 		"pkg": "@sentry/capacitor",
 		"classpath": "io.sentry.capacitor.SentryCapacitor"
 	},
