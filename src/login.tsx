@@ -1,15 +1,8 @@
-import {
-  createComputed,
-  createEffect,
-  createReaction,
-  createSignal,
-  on,
-  Show,
-} from "solid-js";
+import { createComputed, createSignal, on, Show } from "solid-js";
 import { Browser } from "@capacitor/browser";
 import { z } from "zod";
 import CacaophonyLogo from "./components/CacaophonyLogo";
-import { useUserContext } from "./contexts/User";
+import { LoginResult, useUserContext } from "./contexts/User";
 import { ImCog } from "solid-icons/im";
 import { FaRegularEye, FaRegularEyeSlash } from "solid-icons/fa";
 import { useDevice } from "./contexts/Device";
@@ -91,6 +84,40 @@ function Login() {
 
   const [error, setError] = createSignal("");
   const [loggingIn, setLoggingIn] = createSignal(false);
+  const [needsAgreement, setNeedsAgreement] = createSignal(false);
+  const [authToken, setAuthToken] = createSignal<string | null>(null);
+  const [storedEmail, setStoredEmail] = createSignal<string>("");
+  const [storedPassword, setStoredPassword] = createSignal<string>("");
+
+  const openAgreement = () => {
+    Browser.open({
+      url: "https://www.2040.co.nz/pages/2040-end-user-agreement",
+    });
+  };
+  const handleLoginResult = (result: LoginResult | undefined) => {
+    setLoggingIn(false);
+
+    if (!result) {
+      setError("Login failed - please try again");
+      return;
+    }
+
+    switch (result._tag) {
+      case "Success":
+        // Login successful, handled by the login function
+        break;
+
+      case "NeedsAgreement":
+        setAuthToken(result.authToken);
+        setNeedsAgreement(true);
+        break;
+
+      case "Failed":
+        setError(result.message);
+        break;
+    }
+  };
+
   const onSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     const formData = new FormData(form);
@@ -98,44 +125,40 @@ function Login() {
     setEmailError("");
     setPasswordError("");
     setError("");
+    setNeedsAgreement(false);
+
     const email = emailSchema.safeParse(formData.get("email"));
+    const password = passwordSchema.safeParse(formData.get("password"));
+
     if (email.success === false) {
       setEmailError(email.error.message);
+      setLoggingIn(false);
+      return;
     }
-    const password = passwordSchema.safeParse(formData.get("password"));
     if (password.success === false) {
       setPasswordError(password.error.message);
+      setLoggingIn(false);
+      return;
     }
-    const triggerLoginError = () =>
-      setError(
-        navigator.onLine
-          ? "Invalid Email or Password"
-          : "You are offline, or connected to the device."
+
+    // Store the credentials
+    setStoredEmail(email.data);
+    setStoredPassword(password.data);
+
+    if (device.apState() === "connected") {
+      createComputed(
+        on(device.apState, async (ap) => {
+          if (ap === "disconnected" || ap === "default") {
+            const result = await user?.login(email.data, password.data);
+            handleLoginResult(result);
+            untrack(device.apState);
+          }
+        })
       );
-    if (emailError() || passwordError()) {
-      triggerLoginError();
-    }
-    if (email.success && password.success) {
-      if (device.apState() === "connected") {
-        createComputed(
-          on(device.apState, async (ap) => {
-            console.log("LOGGING IN", ap);
-            if (ap === "disconnected" || ap === "default") {
-              await user?.login(email.data, password.data).catch(() => {
-                triggerLoginError();
-              });
-              setLoggingIn(false);
-              untrack(device.apState);
-            }
-          })
-        );
-        await device.disconnectFromDeviceAP();
-      } else {
-        await user?.login(email.data, password.data).catch(() => {
-          triggerLoginError();
-        });
-        setLoggingIn(false);
-      }
+      await device.disconnectFromDeviceAP();
+    } else {
+      const result = await user?.login(email.data, password.data);
+      handleLoginResult(result);
     }
   };
   const onInput = (event: Event) => {
@@ -183,38 +206,111 @@ function Login() {
       >
         <CacaophonyLogo />
       </div>
-      <LoginInput
-        autoComplete="email"
-        type="email"
-        placeholder="example@gmail.com"
-        name="email"
-        label="Email"
-        invalid={Boolean(emailError())}
-        onInput={onInput}
-      />
-      <LoginInput
-        autoComplete="current-password"
-        type="password"
-        name="password"
-        label="Password"
-        invalid={Boolean(passwordError())}
-        onInput={onInput}
-      />
-      <Show when={error} fallback={<div class="h-8" />}>
-        <p class="h-8 text-red-500">{error()}</p>
-      </Show>
-      <button
-        class="mb-8 rounded-md bg-blue-500 py-4 font-semibold text-white"
-        type="submit"
+      <Show
+        when={!needsAgreement()}
+        fallback={
+          <div class="flex flex-col gap-6 rounded-lg border border-gray-100 bg-white px-4 py-6 shadow-md">
+            <div class="space-y-3">
+              <h2 class="text-2xl font-bold text-gray-800">
+                User Agreement Required
+              </h2>
+              <p class="leading-relaxed text-gray-600">
+                Before continuing, please review and accept our user agreement.
+                This agreement outlines the terms and conditions for using the
+                Cacophony Project's services.
+              </p>
+            </div>
+
+            <div class="flex flex-col gap-4">
+              <button
+                type="button"
+                class="flex items-center justify-center gap-2 rounded-md bg-blue-50 px-4 py-3 text-blue-600 transition-colors hover:bg-blue-100 hover:text-blue-700"
+                onClick={openAgreement}
+              >
+                <span class="text-lg">📄</span>
+                <span class="font-medium">Read User Agreement</span>
+              </button>
+
+              <div class="mt-2 flex flex-col gap-3">
+                <button
+                  type="button"
+                  class="w-full rounded-md bg-blue-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-blue-700"
+                  onClick={async () => {
+                    const token = authToken();
+                    if (!token) {
+                      setError("Session expired. Please try logging in again.");
+                      setNeedsAgreement(false);
+                      return;
+                    }
+
+                    const result = await user?.updateUserAgreement(token);
+                    if (result && result._tag === "Right") {
+                      const email = storedEmail();
+                      const password = storedPassword();
+                      if (email && password) {
+                        const loginResult = await user?.login(email, password);
+                        handleLoginResult(loginResult);
+                      } else {
+                        setError("Missing credentials. Please try logging in again.");
+                      }
+                    } else {
+                      setError("Failed to accept agreement. Please try again.");
+                    }
+                  }}
+                >
+                  I Accept the Agreement
+                </button>
+
+                <button
+                  type="button"
+                  class="w-full rounded-md border border-gray-300 px-6 py-3 font-medium text-gray-700 transition-all hover:border-gray-400 hover:bg-gray-50 hover:text-gray-800"
+                  onClick={() => setNeedsAgreement(false)}
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+
+            <p class="mt-4 text-sm text-gray-500">
+              By accepting, you agree to be bound by the terms and conditions
+              outlined in the user agreement.
+            </p>
+          </div>
+        }
       >
-        {loggingIn() ? "Logging In..." : "Login"}
-      </button>
-      <p class="text-base text-gray-600 md:text-base">
-        Don't have a Cacophony Account?
-        <button class="ml-1 text-blue-500" onClick={openRegisterPage}>
-          Register
+        <LoginInput
+          autoComplete="email"
+          type="email"
+          placeholder="example@gmail.com"
+          name="email"
+          label="Email"
+          invalid={Boolean(emailError())}
+          onInput={onInput}
+        />
+        <LoginInput
+          autoComplete="current-password"
+          type="password"
+          name="password"
+          label="Password"
+          invalid={Boolean(passwordError())}
+          onInput={onInput}
+        />
+        <Show when={error} fallback={<div class="h-8" />}>
+          <p class="h-8 text-red-500">{error()}</p>
+        </Show>
+        <button
+          class="mb-8 rounded-md bg-blue-500 py-4 font-semibold text-white"
+          type="submit"
+        >
+          {loggingIn() ? "Logging In..." : "Login"}
         </button>
-      </p>
+        <p class="text-base text-gray-600 md:text-base">
+          Don't have a Cacophony Account?
+          <button class="ml-1 text-blue-500" onClick={openRegisterPage}>
+            Register
+          </button>
+        </p>
+      </Show>
       <button
         class="text-blue-500"
         onClick={(e) => {

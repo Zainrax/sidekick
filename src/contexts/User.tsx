@@ -5,6 +5,7 @@ import {
   on,
   onMount,
 } from "solid-js";
+
 import { createContextProvider } from "@solid-primitives/context";
 import { Preferences } from "@capacitor/preferences";
 import { Result } from ".";
@@ -14,8 +15,74 @@ import { useNavigate } from "@solidjs/router";
 import { CapacitorHttp } from "@capacitor/core";
 import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
 import { useLogsContext } from "./LogsContext";
-import { Effect } from "effect";
-import { url } from "inspector";
+import { Effect, Either } from "effect";
+
+type UserAuthResponse = {
+  success: boolean;
+  messages?: string[];
+  token?: string;
+  refreshToken?: string;
+  expiry?: string;
+  userData?: {
+    email: string;
+    globalPermission: string;
+    endUserAgreement: number | null;
+    emailConfirmed: boolean;
+    settings: {
+      displayMode: Record<string, unknown>;
+      lastKnownTimezone: string;
+      currentSelectedGroup?: {
+        groupName: string;
+        id: number;
+      };
+    };
+    userName: string;
+    id: number;
+  };
+};
+
+const UserAuthResponseSchema = z.object({
+  success: z.boolean(),
+  messages: z.array(z.string()).optional(),
+  token: z.string().optional(),
+  refreshToken: z.string().optional(),
+  expiry: z.string().optional(),
+  userData: z
+    .object({
+      email: z.string(),
+      globalPermission: z.string(),
+      endUserAgreement: z.number().nullable(),
+      emailConfirmed: z.boolean(),
+      settings: z
+        .object({
+          displayMode: z.record(z.unknown()),
+          lastKnownTimezone: z.string(),
+          currentSelectedGroup: z
+            .object({
+              groupName: z.string(),
+              id: z.number(),
+            })
+            .optional(),
+        })
+        .partial()
+        .optional(),
+      userName: z.string(),
+      id: z.number(),
+    })
+    .optional(),
+});
+
+export type EUAResponse = {
+  success: boolean;
+  messages: string[];
+  euaVersion?: number;
+};
+
+const EUAResponseSchema = z.object({
+  success: z.boolean(),
+  messages: z.array(z.string()),
+  euaVersion: z.number().optional(),
+});
 
 const UserSchema = z.object({
   token: z.string(),
@@ -26,6 +93,10 @@ const UserSchema = z.object({
   prod: z.boolean(),
 });
 
+export type LoginResult =
+  | { _tag: "Success"; user: User }
+  | { _tag: "NeedsAgreement"; authToken: string }
+  | { _tag: "Failed"; message: string };
 // Keep track of ongoing refresh
 let refreshPromise: Promise<User | null> | null = null;
 
@@ -284,46 +355,100 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   }
 
-  async function login(email: string, password: string) {
+  async function login(
+    email: string,
+    password: string
+  ): Promise<LoginResult> {
     try {
-      const authUser = await Effect.runPromise(
-        Effect.retry(
-          Effect.tryPromise(() =>
-            CacophonyPlugin.authenticateUser({
-              email,
-              password,
-            })
-          ),
-          { times: 3 }
-        )
-      );
-      if (!authUser.success) {
-        const message = authUser.message.includes("endUserAgreement")
-          ? "Login Failed: Agree to end user agreemen at browse.cacophony.org.nz"
-          : "Login Failed";
+      // First get the latest EUA version
+      const euaResponse = await CapacitorHttp.request({
+        method: "GET",
+        url: `${getServerUrl()}/api/v1/end-user-agreement/latest`,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const euaResult = EUAResponseSchema.safeParse(euaResponse.data);
+      if (
+        !euaResult.success ||
+        !euaResult.data.success ||
+        !euaResult.data.euaVersion
+      ) {
         log.logWarning({
-          message,
-          details: authUser.message,
-          warn: true,
+          message: "Failed to get latest agreement version",
+          warn: false,
         });
-        throw new Error("Authentication failed");
+        return { _tag: "Failed", message: "System error" };
       }
-      const { token, refreshToken, expiry, id } = authUser.data;
+
+      const latestEuaVersion = euaResult.data.euaVersion;
+
+      // Normal authentication flow
+      const authResponse = await CapacitorHttp.request({
+        method: "POST",
+        url: `${getServerUrl()}/authenticate_user`,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        data: {
+          email,
+          password,
+        },
+      });
+
+      const authResult = UserAuthResponseSchema.safeParse(authResponse.data);
+
+      if (
+        !authResult.success ||
+        !authResult.data.success ||
+        !authResult.data.userData
+      ) {
+        log.logWarning({
+          message: "Authentication failed",
+          details: authResult.success
+            ? authResult.data.messages?.join(", ")
+            : `Invalid response format: ${JSON.stringify(
+                authResult.error
+              )}, ${JSON.stringify(authResult.data)}`,
+        });
+        return { _tag: "Failed", message: "Invalid credentials" };
+      }
+
+      // Check if user needs to accept latest agreement
+      const userEuaVersion = authResult.data.userData.endUserAgreement;
+      if (!userEuaVersion || userEuaVersion < latestEuaVersion) {
+        log.logWarning({
+          message: "User agreement needed",
+          details: `User version: ${userEuaVersion}, Latest version: ${latestEuaVersion}`,
+          warn: false,
+        });
+        return {
+          _tag: "NeedsAgreement",
+          authToken: authResult.data.token!,
+        };
+      }
+
+      // Create user object
       const user: User = {
-        token,
-        id,
+        token: authResult.data.token!,
+        id: authResult.data.userData.id.toString(),
         email,
-        refreshToken,
-        expiry,
+        refreshToken: authResult.data.refreshToken!,
+        expiry: authResult.data.expiry,
         prod: isProd(),
       };
+
       await Preferences.set({ key: "skippedLogin", value: "false" });
       await Preferences.set({ key: "user", value: JSON.stringify(user) });
       mutateUser(user);
       mutateSkip(false);
       log.logSuccess({ message: "Login successful" });
+
+      return { _tag: "Success", user };
     } catch (error) {
       log.logError({ message: "Login process failed", error });
+      return { _tag: "Failed", message: "Login process failed" };
     }
   }
 
@@ -735,6 +860,60 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     return !!data();
   };
 
+  async function updateUserAgreement(
+    authToken: string
+  ): Promise<Either<string, boolean>> {
+    try {
+      // Get the latest EUA version
+      const euaResponse = await CapacitorHttp.request({
+        method: "GET",
+        url: `${getServerUrl()}/api/v1/end-user-agreement/latest`,
+        headers: {
+          Authorization: authToken,
+        },
+      });
+
+      const euaResult = EUAResponseSchema.safeParse(euaResponse.data);
+      if (
+        !euaResult.success ||
+        !euaResult.data.success ||
+        !euaResult.data.euaVersion
+      ) {
+        return Either.left("Failed to get latest agreement version");
+      }
+
+      // Update user's agreement version
+      const updateResponse = await CapacitorHttp.request({
+        method: "PATCH",
+        url: `${getServerUrl()}/api/v1/users`,
+        headers: {
+          Authorization: authToken,
+          "Content-Type": "application/json",
+        },
+        data: {
+          endUserAgreement: euaResult.data.euaVersion,
+        },
+      });
+
+      const updateResult = z
+        .object({
+          success: z.boolean(),
+          messages: z.array(z.string()),
+        })
+        .safeParse(updateResponse.data);
+
+      if (!updateResult.success || !updateResult.data.success) {
+        return Either.left("Failed to update user agreement");
+      }
+
+      log.logSuccess({ message: "User agreement updated successfully" });
+      return Either.right(true);
+    } catch (error) {
+      log.logError({ message: "Error updating user agreement", error });
+      return Either.left("Error updating user agreement");
+    }
+  }
+
   return {
     data,
     groups,
@@ -754,6 +933,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     toggleDev,
     setToCustomServer,
     isLoggedIn,
+    updateUserAgreement,
   };
 });
 
