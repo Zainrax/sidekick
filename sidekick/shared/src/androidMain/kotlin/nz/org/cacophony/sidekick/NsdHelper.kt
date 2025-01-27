@@ -10,6 +10,8 @@ import android.os.Looper
 import android.util.Log
 import androidx.annotation.RequiresApi
 import arrow.optics.copy
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -17,6 +19,15 @@ abstract class NsdHelper(private val context: Context) {
     private val nsdManager: NsdManager by lazy {
         context.getSystemService(Context.NSD_SERVICE) as NsdManager
     }
+
+    companion object {
+        const val NSD_SERVICE_TYPE = "_cacophonator-management._tcp."
+        private const val TAG = "NsdHelper"
+        private const val RESOLVE_TIMEOUT = 20000L // 20 seconds
+        private const val MAX_RESOLVE_RETRIES = 5
+        private const val RESOLVE_RETRY_DELAY = 2000L
+    }
+
     private var discoveryListener: NsdManager.DiscoveryListener? = null
     private val resolveListenerBusy = AtomicBoolean(false)
     private val pendingNsdServices = ConcurrentLinkedQueue<NsdServiceInfo>()
@@ -28,14 +39,6 @@ abstract class NsdHelper(private val context: Context) {
         mutableMapOf<NsdServiceInfo, Pair<Runnable, Int>>()
     private val serviceInfoCallbacks =
         mutableMapOf<NsdServiceInfo, NsdManager.ServiceInfoCallback>()
-
-    companion object {
-        const val NSD_SERVICE_TYPE = "_cacophonator-management._tcp."
-        private const val TAG = "NsdHelper"
-        private const val RESOLVE_TIMEOUT = 20000L // 20 seconds
-        private const val RETRY_DELAY = 1000L // 1 second
-        private const val MAX_RETRIES = 3
-    }
 
     fun initializeNsd() {
         initializeDiscoveryListener()
@@ -121,46 +124,17 @@ abstract class NsdHelper(private val context: Context) {
     }
 
     private fun resolveService(service: NsdServiceInfo, retryCount: Int = 0) {
-        // Cancel any existing timeout for this service
-        resolveTimeoutMap[service]?.let { (timeoutRunnable, _) ->
-            handler.removeCallbacks(timeoutRunnable)
+        if (retryCount >= MAX_RESOLVE_RETRIES) {
+            resolveListenerBusy.set(false)
+            resolveNextInQueue()
+            return
         }
-        resolveTimeoutMap.remove(service)
 
         val timeoutRunnable = Runnable {
             if (resolveListenerBusy.get()) {
-                Log.w(
-                    TAG,
-                    "Resolution timeout for service: ${service.serviceName}, retry attempt: $retryCount"
-                )
-                if (retryCount < MAX_RETRIES) {
-                    Log.d(
-                        TAG,
-                        "Retrying resolve for ${service.serviceName}, attempt ${retryCount + 1}"
-                    )
-                    handler.postDelayed({
-                        // Before retry, unregister the previous callback if it exists
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            serviceInfoCallbacks[service]?.let {
-                                nsdManager.unregisterServiceInfoCallback(it)
-                                serviceInfoCallbacks.remove(service)
-                            }
-                        }
-                        resolveService(
-                            service,
-                            retryCount + 1
-                        ) // Use copy() to avoid modifying the original service object
-                    }, RETRY_DELAY)
-                } else {
-                    Log.e(TAG, "Max retries reached for ${service.serviceName}")
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        serviceInfoCallbacks[service]?.let {
-                            nsdManager.unregisterServiceInfoCallback(it)
-                            serviceInfoCallbacks.remove(service)
-                        }
-                    }
-                    resolveNextInQueue()
-                }
+                Handler(Looper.getMainLooper()).postDelayed({
+                    resolveService(service, retryCount + 1)
+                }, RESOLVE_RETRY_DELAY)
             }
         }
         // Schedule the timeout for this specific retry attempt
@@ -250,11 +224,11 @@ abstract class NsdHelper(private val context: Context) {
     }
 
     private fun retryResolve(service: NsdServiceInfo, retryCount: Int) {
-        if (retryCount < MAX_RETRIES) {
+        if (retryCount < MAX_RESOLVE_RETRIES) {
             Log.d(TAG, "Retrying resolve for ${service.serviceName}, attempt ${retryCount + 1}")
             handler.postDelayed({
                 resolveService(service, retryCount + 1)
-            }, RETRY_DELAY)
+            }, RESOLVE_RETRY_DELAY)
         } else {
             Log.e(TAG, "Max retries reached for ${service.serviceName}")
             resolveNextInQueue()
@@ -299,6 +273,17 @@ abstract class NsdHelper(private val context: Context) {
                     break // Assuming service names are unique
                 }
             }
+        }
+    }
+
+    private fun verifyConnection(service: NsdServiceInfo): Boolean {
+        return try {
+            val socket = Socket()
+            socket.connect(InetSocketAddress(service.host, service.port), 1000)
+            socket.close()
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 

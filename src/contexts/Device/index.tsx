@@ -443,7 +443,60 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     console.log("Found Device", newDevice);
     if (shouldConnectToDevice(newDevice)) {
       await connectToDevice(newDevice);
+      const userData = user.data();
+      const device = devices.get(newDevice.endpoint); // Get the device after connecting
+      if (device?.isConnected && userData?.token) {
+        try {
+          // First check the existing device type
+          const typeRes = await CapacitorHttp.get({
+            url: `${user.getServerUrl()}/api/v1/devices/${device.id}/type`,
+            headers: {
+              Authorization: userData.token,
+            },
+          });
+
+          const typeData = z
+            .object({ type: deviceTypes.optional() })
+            .safeParse(typeRes.data);
+          const currentType = typeData.success ? typeData.data.type : undefined;
+
+          // Only update if type is unknown/undefined or if it was thermal but now has audio
+          if (
+            !currentType ||
+            currentType === "unknown" ||
+            (currentType === "thermal" && device.hasAudioCapabilities)
+          ) {
+            const deviceLocation = await getLocationCoords(device.id);
+            const updateData = {
+              type: device.hasAudioCapabilities
+                ? "hybrid-thermal-audio"
+                : "thermal",
+              ...(deviceLocation.success && {
+                location: {
+                  lat: deviceLocation.data.latitude,
+                  lng: deviceLocation.data.longitude,
+                },
+              }),
+            };
+
+            await CapacitorHttp.post({
+              url: `${user.getServerUrl()}/api/v1/devices/${
+                device.id
+              }/settings`,
+              headers: {
+                Authorization: userData.token,
+                "Content-Type": "application/json",
+              },
+              data: updateData,
+            });
+          }
+        } catch (error) {
+          console.error("Error updating device type:", error);
+        }
+      }
+      return device;
     }
+    return undefined;
   };
 
   // Function to remove a device by its saltId
@@ -585,54 +638,79 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   const [searchParams, setSearchParams] = useSearchParams();
   // Function to check if a device is still connected
+  const CONNECTION_CHECK_INTERVAL = 10000; // 10 seconds
+  const CONNECTION_RETRY_ATTEMPTS = 3;
+  const CONNECTION_RETRY_DELAY = 2000; // 2 seconds
+  const DISCOVERY_INTERVAL = 30000; // 30 seconds
+
   const checkDeviceConnection = async (device: Device) => {
-    try {
-      const deviceInfo = await Effect.runPromise(
-        Effect.retry(getDeviceInfo(device.url), { times: 3 })
-      );
+    let attempts = 0;
+    const tryConnection = async (): Promise<ConnectedDevice | undefined> => {
+      try {
+        const deviceInfo = await Effect.runPromise(
+          Effect.retry(getDeviceInfo(device.url), {
+            times: CONNECTION_RETRY_ATTEMPTS,
+            delay: CONNECTION_RETRY_DELAY,
+          })
+        );
 
-      if (deviceInfo.success) {
-        const data = JSON.parse(deviceInfo.data);
-        const info = DeviceInfoSchema.safeParse(data);
-        console.info("DEVICE INFO", data, info);
+        if (deviceInfo.success) {
+          const data = JSON.parse(deviceInfo.data);
+          const info = DeviceInfoSchema.safeParse(data);
 
-        if (info.success) {
-          const battery = await getBattery(device.url);
-          const hasAudio = await hasAudioCapabilities(device.id);
-          const updatedDevice: ConnectedDevice = {
-            ...device,
-            id: info.data.deviceID.toString(),
-            name: info.data.devicename,
-            lastUpdated: info.data.lastUpdated
-              ? new Date(info.data.lastUpdated)
-              : device.lastUpdated,
-            batteryPercentage: battery?.mainBattery,
-            isConnected: true,
-            hasAudioCapabilities: hasAudio,
-          };
-          if (info.data.deviceID.toString() !== device.id) {
-            devices.delete(device.id);
-            if (searchParams.deviceSettings === device.id) {
-              setSearchParams({ deviceSettings: updatedDevice.id });
-            } else if (searchParams.setupDevice === device.id) {
-              setSearchParams({
-                setupDevice: updatedDevice.id,
-              });
-            }
+          if (info.success) {
+            const battery = await getBattery(device.url);
+            const hasAudio = await hasAudioCapabilities(device.id);
+            return {
+              ...device,
+              id: info.data.deviceID.toString(),
+              name: info.data.devicename,
+              lastUpdated: info.data.lastUpdated
+                ? new Date(info.data.lastUpdated)
+                : device.lastUpdated,
+              batteryPercentage: battery?.mainBattery,
+              isConnected: true,
+              hasAudioCapabilities: hasAudio,
+            };
           }
-          devices.set(updatedDevice.id, updatedDevice);
-          return updatedDevice;
+        }
+        return undefined;
+      } catch (error) {
+        if (attempts < CONNECTION_RETRY_ATTEMPTS) {
+          attempts++;
+          await new Promise((resolve) =>
+            setTimeout(resolve, CONNECTION_RETRY_DELAY)
+          );
+          return tryConnection();
+        }
+        return undefined;
+      }
+    };
+
+    const updatedDevice = await tryConnection();
+    if (updatedDevice) {
+      if (updatedDevice.id !== device.id) {
+        devices.delete(device.id);
+        if (searchParams.deviceSettings === device.id) {
+          setSearchParams({ deviceSettings: updatedDevice.id });
+        } else if (searchParams.setupDevice === device.id) {
+          setSearchParams({ setupDevice: updatedDevice.id });
         }
       }
-
-      console.log("DISCONNECT", device);
-      devices.set(device.id, { ...device, isConnected: false });
-      return undefined;
-    } catch (error) {
-      console.log("DISCONNECT", device);
-      devices.set(device.id, { ...device, isConnected: false });
-      return undefined;
+      devices.set(updatedDevice.id, updatedDevice);
+      return updatedDevice;
     }
+
+    // Only mark as disconnected if we're sure
+    if (device.isConnected) {
+      devices.set(device.id, { ...device, isConnected: false });
+      log.logEvent("device_disconnected", {
+        name: device.name,
+        saltId: device.saltId,
+        group: device.group,
+      });
+    }
+    return undefined;
   };
 
   const hasAudioCapabilities = async (deviceId: string) => {
@@ -2223,63 +2301,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     "hybrid-thermal-audio",
     "unknown",
   ]);
-
-  createEffect(
-    on(
-      () => [...devices.values()],
-      async (inDevices, prevDevices) => {
-        // Get devices that recently had group and location set
-        const userToken = user.data()?.token;
-        if (!prevDevices || !userToken) return;
-
-        for (const device of inDevices) {
-          const typeRes = await CapacitorHttp.get({
-            url: `${user.getServerUrl()}/api/v1/devices/${device.id}/type`,
-            headers: {
-              Authorization: userToken,
-            },
-          });
-          const data = z.object({ type: deviceTypes }).parse(typeRes.data);
-          const settingsRes = await CapacitorHttp.get({
-            url: `${user.getServerUrl()}/api/v1/devices/${device.id}/settings`,
-            headers: {
-              Authorization: userToken,
-            },
-          });
-          if (
-            data.type === "unknown" ||
-            (data.type === "thermal" && device.hasAudioCapabilities) ||
-            settingsRes.status !== 200
-          ) {
-            const deviceLocation = await getLocationCoords(device.id);
-            const data = {
-              type: device.hasAudioCapabilities
-                ? "hybrid-thermal-audio"
-                : "thermal",
-              ...(deviceLocation.success && {
-                location: {
-                  lat: deviceLocation.data.latitude,
-                  lng: deviceLocation.data.longitude,
-                },
-              }),
-            };
-            const res = await CapacitorHttp.post({
-              url: `${user.getServerUrl()}/api/v1/devices/${
-                device.id
-              }/settings`,
-              headers: {
-                Authorization: userToken,
-                "Content-Type": "application/json",
-              },
-              data,
-            });
-            console.log("Device Settings", res);
-          }
-          console.log("Device Type", data);
-        }
-      }
-    )
-  );
 
   return {
     devices,

@@ -1,4 +1,5 @@
 package nz.org.cacophony.sidekick
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity.RESULT_OK
@@ -16,6 +17,8 @@ import android.net.wifi.WifiManager
 import android.net.wifi.WifiManager.MulticastLock
 import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.result.ActivityResult
 import androidx.core.content.ContextCompat
 import com.getcapacitor.JSObject
@@ -26,6 +29,8 @@ import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
 import nz.org.cacophony.sidekick.device.DeviceInterface
 import org.json.JSONException
+import java.net.InetSocketAddress
+import java.net.Socket
 
 @CapacitorPlugin(name = "Device")
 class DevicePlugin : Plugin() {
@@ -33,10 +38,13 @@ class DevicePlugin : Plugin() {
 
     private lateinit var nsdHelper: NsdHelper
     private var callQueue: MutableMap<String, CallType> = mutableMapOf()
+    private var discoveryRetryCount = 0
+    private val MAX_DISCOVERY_RETRIES = 3
+    private val DISCOVERY_RETRY_DELAY = 5000L // 5 seconds
 
     private lateinit var device: DeviceInterface
     private var wifiNetwork: Network? = null
-    var currNetworkCallback: ConnectivityManager.NetworkCallback? = null
+    var currNetworkCallback: NetworkCallback? = null
     private var cm: ConnectivityManager? = null
     private lateinit var multicastLock: WifiManager.MulticastLock
     private var isDiscovering: Boolean = false
@@ -55,6 +63,7 @@ class DevicePlugin : Plugin() {
     enum class CallType {
         DISCOVER,
     }
+
     @PluginMethod
     fun discoverDevices(call: PluginCall) {
         if (isDiscovering) {
@@ -63,58 +72,59 @@ class DevicePlugin : Plugin() {
         }
 
         isDiscovering = true
+        discoveryRetryCount = 0
+        startDiscoveryWithRetry(call)
+    }
 
-        // Set the flag for the current discovery
-        multicastLockUsedInCurrentDiscovery = useMulticastLock
+    private fun startDiscoveryWithRetry(call: PluginCall) {
+        try {
+            // Set the flag for the current discovery
+            multicastLockUsedInCurrentDiscovery = useMulticastLock
 
-        // Acquire the multicast lock if needed
-        if (useMulticastLock) {
-            multicastLock.acquire()
+            // Acquire the multicast lock if needed
+            if (useMulticastLock) {
+                multicastLock.acquire()
+            }
+
+            nsdHelper = object : NsdHelper(context.applicationContext) {
+                override fun onNsdServiceResolved(service: NsdServiceInfo) {
+                    val serviceJson = JSObject().apply {
+                        val endpoint = "${service.serviceName}.local"
+                        put("endpoint", endpoint)
+                        put("host", service.host.hostAddress)
+                        put("port", service.port)
+                    }
+                    notifyListeners("onServiceResolved", serviceJson)
+                    // Reset retry count on successful discovery
+                    discoveryRetryCount = 0
+                }
+
+                override fun onNsdServiceLost(service: NsdServiceInfo) {
+                    // Add verification before notifying service lost
+                    if (verifyServiceLost(service)) {
+                        val result = JSObject().apply {
+                            val endpoint = "${service.serviceName}.local"
+                            put("endpoint", endpoint)
+                        }
+                        notifyListeners("onServiceLost", result)
+                    }
+                }
+
+                override fun onDiscoveryFailed(e: Exception) {
+                    handleDiscoveryFailure(e, call)
+                }
+            }
+
+            nsdHelper.initializeNsd()
+            nsdHelper.discoverServices()
+
+            // Flip the flag for the next discovery attempt
+            useMulticastLock = !useMulticastLock
+
+            call.resolve()
+        } catch (e: Exception) {
+            handleDiscoveryFailure(e, call)
         }
-
-        nsdHelper = object : NsdHelper(context.applicationContext) {
-            override fun onNsdServiceResolved(service: NsdServiceInfo) {
-                val serviceJson = JSObject().apply {
-                    val endpoint = "${service.serviceName}.local"
-                    put("endpoint", endpoint)
-                    put("host", service.host.hostAddress)
-                    put("port", service.port)
-                }
-                notifyListeners("onServiceResolved", serviceJson)
-            }
-
-            override fun onNsdServiceLost(service: NsdServiceInfo) {
-                val result = JSObject().apply {
-                    val endpoint = "${service.serviceName}.local"
-                    put("endpoint", endpoint)
-                }
-                notifyListeners("onServiceLost", result)
-            }
-
-            override fun onDiscoveryFailed(e: Exception) {
-                val error = JSObject()
-                // Release the multicast lock if it was used
-                if (multicastLockUsedInCurrentDiscovery && multicastLock.isHeld) {
-                    multicastLock.release()
-                }
-                try {
-                    error.put("message", e.message ?: "Unknown error during discovery")
-                } catch (je: JSONException) {
-                    // Ignore
-                }
-                call.reject("Discovery failed: ${e.message}")
-                isDiscovering = false
-            }
-        }
-
-        nsdHelper.initializeNsd()
-        nsdHelper.discoverServices()
-
-        // Flip the flag for the next discovery attempt
-        useMulticastLock = !useMulticastLock
-
-        // Resolve the call
-        call.resolve()
     }
 
     @PluginMethod
@@ -140,6 +150,7 @@ class DevicePlugin : Plugin() {
             call.resolve(result)
         }
     }
+
     @PluginMethod
     fun checkDeviceConnection(call: PluginCall) {
         device.checkDeviceConnection(pluginCall(call))
@@ -156,7 +167,7 @@ class DevicePlugin : Plugin() {
                     .setSsid(ssid)
                     .setWpa2Passphrase(password)
                     .build()
-                val networkRequest =NetworkRequest.Builder()
+                val networkRequest = NetworkRequest.Builder()
                     .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
                     .setNetworkSpecifier(wifiSpecifier)
                     .build()
@@ -164,7 +175,7 @@ class DevicePlugin : Plugin() {
 
                 cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
                 cm!!.bindProcessToNetwork(null)
-                currNetworkCallback = object : ConnectivityManager.NetworkCallback() {
+                currNetworkCallback = object : NetworkCallback() {
                     override fun onAvailable(network: Network) {
                         super.onAvailable(network)
                         wifiNetwork = network
@@ -173,6 +184,7 @@ class DevicePlugin : Plugin() {
                         result.put("status", "connected")
                         call.resolve(result)
                     }
+
                     override fun onUnavailable() {
                         super.onUnavailable()
                         val result = JSObject()
@@ -181,6 +193,7 @@ class DevicePlugin : Plugin() {
                         wifiNetwork = null
                         cm!!.unregisterNetworkCallback(this)
                     }
+
                     override fun onLost(network: Network) {
                         super.onLost(network)
                         val result = JSObject()
@@ -213,6 +226,34 @@ class DevicePlugin : Plugin() {
         }
     }
 
+    private fun handleDiscoveryFailure(e: Exception, call: PluginCall) {
+        if (discoveryRetryCount < MAX_DISCOVERY_RETRIES) {
+            discoveryRetryCount++
+            Handler(Looper.getMainLooper()).postDelayed({
+                startDiscoveryWithRetry(call)
+            }, DISCOVERY_RETRY_DELAY)
+        } else {
+            // Release the multicast lock if it was used
+            if (multicastLockUsedInCurrentDiscovery && multicastLock.isHeld) {
+                multicastLock.release()
+            }
+            isDiscovering = false
+            call.reject("Discovery failed after $MAX_DISCOVERY_RETRIES attempts: ${e.message}")
+        }
+    }
+
+    private fun verifyServiceLost(service: NsdServiceInfo): Boolean {
+        // Add additional verification before confirming service is lost
+        return try {
+            val socket = Socket()
+            socket.connect(InetSocketAddress(service.host, service.port), 1000)
+            socket.close()
+            false // Service is still available
+        } catch (e: Exception) {
+            true // Service is truly lost
+        }
+    }
+
     @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
     fun disconnectFromDeviceAP(call: PluginCall) {
         try {
@@ -237,7 +278,7 @@ class DevicePlugin : Plugin() {
     @ActivityCallback
     fun connectToWifi(call: PluginCall, result: Instrumentation.ActivityResult) {
         if (result.resultCode == RESULT_OK) {
-            val res= JSObject()
+            val res = JSObject()
             res.put("success", true)
             res.put("data", "Connected to device AP")
             call.resolve(res)
@@ -250,8 +291,14 @@ class DevicePlugin : Plugin() {
     }
 
     @Suppress("DEPRECATION")
-    private fun connectToWifiLegacy(ssid: String, password: String, onConnect: () -> Unit, onFail: () -> Unit) {
-        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    private fun connectToWifiLegacy(
+        ssid: String,
+        password: String,
+        onConnect: () -> Unit,
+        onFail: () -> Unit
+    ) {
+        val wifiManager =
+            context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
         // Enable Wi-Fi if it's not enabled
         if (!wifiManager.isWifiEnabled) {
@@ -282,18 +329,22 @@ class DevicePlugin : Plugin() {
     fun getDeviceInfo(call: PluginCall) {
         device.getDeviceInfo(pluginCall(call))
     }
+
     @PluginMethod
     fun getDeviceConfig(call: PluginCall) {
         device.getDeviceConfig(pluginCall(call))
     }
+
     @PluginMethod
     fun setDeviceConfig(call: PluginCall) {
         device.setDeviceConfig(pluginCall(call))
     }
+
     @PluginMethod
     fun setLowPowerMode(call: PluginCall) {
         device.setLowPowerMode(pluginCall(call))
     }
+
     @PluginMethod
     fun setDeviceLocation(call: PluginCall) {
         device.setDeviceLocation(pluginCall(call))
@@ -303,6 +354,7 @@ class DevicePlugin : Plugin() {
     fun getDeviceLocation(call: PluginCall) {
         device.getDeviceLocation(pluginCall(call))
     }
+
     @PluginMethod
     fun getRecordings(call: PluginCall) {
         device.getRecordings(pluginCall(call))
@@ -317,14 +369,17 @@ class DevicePlugin : Plugin() {
     fun getEvents(call: PluginCall) {
         device.getEvents(pluginCall(call))
     }
+
     @PluginMethod
     fun deleteEvents(call: PluginCall) {
         device.deleteEvents(pluginCall(call))
     }
+
     @PluginMethod
     fun downloadRecording(call: PluginCall) {
         device.downloadRecording(pluginCall(call))
     }
+
     @PluginMethod
     fun deleteRecordings(call: PluginCall) {
         device.deleteRecordings(pluginCall(call))
@@ -357,7 +412,8 @@ class DevicePlugin : Plugin() {
                 result.put("success", true)
                 result.put("connected", isConnected)
             } else {
-                val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                val wifiManager =
+                    context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
                 val wifiInfo = wifiManager.connectionInfo
                 val isConnected = wifiInfo.ssid == "\"bushnet\""
 
@@ -370,6 +426,7 @@ class DevicePlugin : Plugin() {
         }
         call.resolve(result)
     }
+
     @SuppressLint("MissingPermission")
     @PluginMethod
     fun checkIsAPConnected(call: PluginCall) {
@@ -377,7 +434,8 @@ class DevicePlugin : Plugin() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val networkCapabilities = cm?.getNetworkCapabilities(wifiNetwork)
-                val isConnected = networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+                val isConnected =
+                    networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
                 val ssid = if (isConnected) {
                     (context.getSystemService(Context.WIFI_SERVICE) as WifiManager).connectionInfo.ssid
                 } else {
@@ -387,7 +445,8 @@ class DevicePlugin : Plugin() {
                 result.put("success", true)
                 result.put("connected", isConnected && ssid == "\"bushnet\"")
             } else {
-                val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                val wifiManager =
+                    context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
                 val wifiInfo = wifiManager.connectionInfo
                 val isConnected = wifiInfo.ssid == "\"bushnet\""
 
@@ -400,6 +459,7 @@ class DevicePlugin : Plugin() {
         }
         call.resolve(result)
     }
+
     @PluginMethod
     fun reregisterDevice(call: PluginCall) {
         device.reregister(pluginCall(call))
