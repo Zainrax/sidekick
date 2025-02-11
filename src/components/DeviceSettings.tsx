@@ -1,8 +1,7 @@
-import { Camera, CameraResultType, Photo } from "@capacitor/camera";
-import { CameraPreview } from "@capgo/camera-preview";
+import { Camera, CameraResultType } from "@capacitor/camera";
 import { Dialog as Prompt } from "@capacitor/dialog";
 import { A, useSearchParams } from "@solidjs/router";
-import { AiFillEdit, AiOutlineInfoCircle } from "solid-icons/ai";
+import { AiOutlineInfoCircle } from "solid-icons/ai";
 import {
   BiRegularNoSignal,
   BiRegularSave,
@@ -12,7 +11,7 @@ import {
   BiRegularSignal4,
   BiRegularSignal5,
 } from "solid-icons/bi";
-import { BsCameraVideoFill, BsCaretDown, BsWifiOff } from "solid-icons/bs";
+import { BsCameraVideoFill, BsWifiOff } from "solid-icons/bs";
 import {
   FaRegularEye,
   FaRegularEyeSlash,
@@ -25,8 +24,8 @@ import {
   FaSolidSpinner,
   FaSolidVideo,
 } from "solid-icons/fa";
-import { FiCloudOff, FiMapPin } from "solid-icons/fi";
-import { ImArrowLeft, ImArrowRight, ImCog, ImCross } from "solid-icons/im";
+import { FiCloud, FiCloudOff, FiMapPin } from "solid-icons/fi";
+import { ImCog, ImCross } from "solid-icons/im";
 import {
   RiArrowsArrowDownSLine,
   RiArrowsArrowRightSLine,
@@ -60,8 +59,8 @@ import {
   IOSSettings,
   NativeSettings,
 } from "capacitor-native-settings";
+import { Location } from "~/database/Entities/Location";
 import { Filesystem, Directory } from "@capacitor/filesystem";
-import { UploadStatus } from "~/database/Entities/DeviceReferenceImages";
 import { Capacitor } from "@capacitor/core";
 type CameraCanvas = HTMLCanvasElement | undefined;
 const colours = ["#ff0000", "#00ff00", "#ffff00", "#80ffff"];
@@ -934,6 +933,7 @@ export function LocationSettingsTab(props: SettingProps) {
   const log = useLogsContext();
   const context = useDevice();
   const storage = useStorage();
+  const userContext = useUserContext();
   const [showLocationSettings, setShowLocationSettings] = createSignal(false);
   const id = () => props.deviceId;
   const groupName = () => context.devices.get(id())?.group ?? "";
@@ -941,215 +941,146 @@ export function LocationSettingsTab(props: SettingProps) {
   const device = () => context.devices.get(id());
   const shouldUpdateLocState = () => context.shouldDeviceUpdateLocation(id());
 
-  createEffect((prev) => {
-    const currUpdateLocState = shouldUpdateLocState();
-    if (
-      currUpdateLocState === "current" &&
-      prev !== "current" &&
-      prev !== "loading" &&
-      context.devices.size === 1
-    ) {
-      setShowLocationSettings(true);
-    }
-    if (currUpdateLocState !== "loading") {
-      return currUpdateLocState;
-    }
-    return prev;
-  }, "current");
-
-  createEffect(() => {
-    on(showLocationSettings, async (shown) => {
-      if (!shown) return;
-      await context?.setDeviceToCurrLocation(id());
-    });
-  });
+  // Location state management
   const [locationRes, { refetch: refetchLocation }] =
     context.getLocationByDevice(id());
   const location = createMemo(() => locationRes());
-
-  createEffect(() => {
-    console.log("Location: ", location());
-  });
-
-  createEffect(() => {
-    on(
-      () => shouldUpdateLocState(),
-      async (shouldUpdate) => {
-        if (shouldUpdate === "loading") return;
-        refetchLocation();
-      }
-    );
-  });
-
-  const [LocationNameInput, setLocationNameInput] =
-    createSignal<HTMLInputElement>();
-  const [isEditing, setIsEditing] = createSignal(false);
-  const toggleEditing = (state = !isEditing()) => {
-    setIsEditing(state);
-    if (isEditing()) {
-      LocationNameInput()?.focus();
-    } else {
-      LocationNameInput()?.blur();
-    }
-  };
-
   const [newName, setNewName] = createSignal("");
   const [photoFileToUpload, setPhotoFileToUpload] = createSignal<{
     url: string;
     path?: string;
-    uploadStatus?: "temp";
   } | null>();
 
-  const [currentPhoto, { refetch: refetchPhoto }] = createResource(async () => {
-    const device = context.devices.get(id());
-    if (!device) return null;
-    return storage.getDevicePhoto(device);
+  // Photo management
+  const [currentPhoto, { refetch: refetchPhoto }] = createResource(
+    () => storage.deviceImages(),
+    async (images) => {
+      const device = context.devices.get(id());
+      const photo = device ? await storage.getDevicePhoto(device) : null;
+      console.log("Current Photo: ", photo);
+      return photo;
+    }
+  );
+
+  // Location coordinates handling
+  const [locCoords, { refetch: refetchCoords }] = createResource(
+    () => [id(), shouldUpdateLocState()] as const,
+    async ([id]) => {
+      const res = await context.getLocationCoords(id);
+      return res.success ? res.data : null;
+    }
+  );
+
+  const [isSyncing, setIsSyncing] = createSignal(false);
+  // Save location data and handle photo upload
+  const saveLocationSettings = async () => {
+    try {
+      setIsSyncing(true);
+      const deviceLocation = await context.getLocationCoords(id());
+      const loc = location();
+      const photo = photoFileToUpload();
+
+      // Validate device location
+      if (!deviceLocation.success) {
+        throw new Error("Could not get device location coordinates");
+      }
+
+      let savedLocation: Location | undefined;
+      const locationCoords = deviceLocation.data;
+      locationCoords.latitude = parseFloat(locationCoords.latitude.toFixed(6));
+      locationCoords.longitude = parseFloat(
+        locationCoords.longitude.toFixed(6)
+      );
+
+      // Create/update location with proper error handling
+      if (!loc) {
+        savedLocation = await storage.createLocation(
+          {
+            name: newName(),
+            coords: {
+              lat: locationCoords.latitude,
+              lng: locationCoords.longitude,
+            },
+            groupName: groupName(),
+            isProd: isProd(),
+          },
+          context.apState() === "connected"
+        );
+      } else if (newName()) {
+        await storage.updateLocationName(
+          loc,
+          newName(),
+          context.apState() === "connected"
+        );
+        savedLocation = loc;
+      }
+
+      // Handle photo upload with location validation
+      if (photo?.path) {
+        await storage.uploadDevicePhoto(
+          id(),
+          isProd(),
+          photo.path,
+          "pov",
+          context.apState() === "connected",
+          savedLocation?.coords || {
+            // Use saved location or device location
+            lat: locationCoords.latitude,
+            lng: locationCoords.longitude,
+          }
+        );
+      }
+
+      // Update state only after successful operations
+      setNewName("");
+      setPhotoFileToUpload(null);
+      setShowLocationSettings(false);
+      refetchLocation();
+      refetchPhoto();
+    } catch (error) {
+      log.logError({
+        message: "Error saving location settings",
+        error,
+      });
+      // Preserve unsaved changes
+      if (
+        error instanceof Error &&
+        error.message.includes("location coordinates")
+      ) {
+        setShowLocationSettings(true);
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  createEffect(() => {
+    console.log("Location: ", location(), locationRes());
   });
 
-  const canSave = (): boolean =>
-    location() === null
-      ? newName() !== ""
-      : newName() !== "" || !!photoFileToUpload();
-
-  const [addingPhoto, setAddingPhoto] = createSignal(false);
-  async function addPhotoToDevice() {
+  // Add photo handler with offline support
+  const addPhotoToDevice = async () => {
     try {
-      setAddingPhoto(true);
       const image = await Camera.getPhoto({
         quality: 100,
         allowEditing: false,
         resultType: CameraResultType.Uri,
         width: 500,
+        height: 300,
       });
-      const url = image.webPath;
       debugger;
-      if (url) {
-        setPhotoFileToUpload((curr) => ({
-          url,
-          path: image.path,
-        }));
-      }
-    } catch (error) {
-      console.error("Photo upload failed:", error);
-    } finally {
-      setAddingPhoto(false);
-    }
-  }
 
-  const [setting, setSetting] = createSignal(false);
-  const saveLocationSettings = async () => {
-    try {
-      if (setting()) return;
-      setSetting(true);
-      const name = newName();
-      const photoToUpload = photoFileToUpload();
-      const deviceLocation = await context.getLocationCoords(id());
-      const loc = location();
-      if (!loc && deviceLocation.success) {
-        try {
-          await storage.createLocation({
-            name,
-            coords: {
-              lat: deviceLocation.data.latitude,
-              lng: deviceLocation.data.longitude,
-            },
-            groupName: groupName(),
-            isProd: isProd(),
-          });
-          await refetchLocation();
-        } catch (e) {
-          setNewName("");
-          toggleEditing(false);
-          setSetting(false);
-        }
-        setNewName("");
-        toggleEditing(false);
-        setShowLocationSettings(false);
-        setSetting(false);
-        return;
+      if (image.webPath) {
+        setPhotoFileToUpload({
+          url: image.webPath,
+          path: image.path,
+        });
       }
-      if (name) {
-        const loc = location();
-        if (loc) {
-          await storage.updateLocationName(loc, name);
-          setNewName("");
-        }
-        await refetchLocation();
-      }
-      const device = context.devices.get(id());
-      const path = photoFileToUpload()?.path;
-      const url = photoFileToUpload()?.url;
-      debugger;
-      if (url && path && device) {
-        try {
-          await storage.uploadDevicePhoto(
-            id(),
-            device.isProd,
-            path,
-            url,
-            "pov"
-          );
-          setPhotoFileToUpload();
-        } catch (error) {
-          log.logError({
-            message: "Could not save location photo",
-            details: `Could not save photo ${JSON.stringify(
-              photoFileToUpload()
-            )} for location ${JSON.stringify(loc)}`,
-            error,
-          });
-        }
-        await refetchLocation();
-      }
-      refetchPhoto();
-      toggleEditing(false);
-      setShowLocationSettings(false);
-      setSetting(false);
     } catch (error) {
       log.logError({
-        message: "Could not save location settings",
+        message: "Failed to capture photo",
         error,
       });
-    } finally {
-      setSetting(false);
-    }
-  };
-
-  const locationName = () => {
-    const name = newName();
-    if (name) return name;
-    const loc = location();
-    if (!loc) return "No Location Name";
-    return loc.name;
-  };
-  const photo = () => photoFileToUpload() ?? currentPhoto();
-  const hasPicture = () => !!photo();
-
-  const isImageToUpload = () => {
-    return photoFileToUpload() !== undefined;
-  };
-
-  const removePhotoReference = async () => {
-    try {
-      const img = currentPhoto();
-      const device = context.devices.get(id());
-      if (!img || !device) return;
-      const prompt = await Prompt.confirm({
-        title: "Confirm Deletion",
-        message: "Are you sure you want to delete this photo?",
-      });
-      debugger;
-      if (prompt.value) {
-        const res = await storage.deleteDevicePhoto({
-          filePath: img.filePath,
-          fileKey: img.fileKey,
-          deviceId: parseInt(device.id),
-          isProd: device.isProd,
-        });
-        refetchPhoto();
-      }
-    } catch (error) {
-      console.error(error);
     }
   };
 
@@ -1160,36 +1091,77 @@ export function LocationSettingsTab(props: SettingProps) {
       else return false;
     },
   });
-  const [locCoords, { refetch }] = createResource(
-    () => [id(), updateLocation()] as const,
-    async ([id]) => {
-      const res = await context.getLocationCoords(id);
-      if (res.success) return res.data;
-      return null;
+  // Delete photo handler
+  const removePhotoReference = async () => {
+    const img = currentPhoto();
+    if (!img) return;
+
+    const prompt = await Prompt.confirm({
+      title: "Confirm Deletion",
+      message: "Are you sure you want to delete this photo?",
+    });
+
+    if (prompt.value) {
+      await storage.deleteDevicesImages(
+        id(),
+        isProd(),
+        context.apState() === "connected"
+      );
+      refetchPhoto();
+      setPhotoFileToUpload(null);
     }
-  );
-  const lat = () => locCoords()?.latitude ?? "...";
-  const lng = () => locCoords()?.longitude ?? "...";
+  };
   const [settingLocation, setSettingLocation] = createSignal(false);
-  const hasLocation = () => location() !== null || (lat() !== 0 && lng() !== 0);
-  onMount(() => {
-    context.refetchDeviceLocToUpdate();
-  });
+
+  // UI rendering helpers
+  const locationName = () => {
+    if (newName()) return newName();
+    return location()?.updateName || location()?.name || "Unnamed Location";
+  };
+
+  const hasPendingChanges = () => {
+    const hasChanges = !!newName() || !!photoFileToUpload();
+    return hasChanges;
+  };
+
+  const hasChangesToUpload = () => {
+    const loc = location();
+    const needsTo =
+      loc?.updateName ||
+      loc?.needsCreation ||
+      currentPhoto()?.serverStatus === "pending-upload";
+    if (needsTo) {
+      console.log("Needs to upload: ", loc, currentPhoto());
+    }
+    return needsTo;
+  };
+
+  const photoUrl = () =>
+    photoFileToUpload()?.url ??
+    (currentPhoto()?.serverStatus !== "pending-deletion"
+      ? currentPhoto()?.url
+      : undefined);
   createEffect(() => {
-    console.log("Photo: ", photo());
+    console.log("Location: ", location(), locationRes());
   });
   return (
-    <section class="px-4 py-4">
+    <section class="mx-auto w-full max-w-md p-2 sm:p-4">
       <Show
         when={context.locationDisabled() || updateLocation() === "unavailable"}
       >
-        <div class="flex w-full flex-col items-center">
-          <p class="text-sm text-red-500">
+        <div class="flex w-full flex-col items-center space-y-2 sm:space-y-4">
+          <p class="px-2 text-center text-xs text-red-500 sm:text-sm">
             Location services are disabled, please enable to save location
             settings.
           </p>
           <button
-            class=" my-2 flex space-x-2 self-center rounded-md bg-blue-500 px-4 py-2 text-white"
+            class="
+              flex items-center justify-center 
+              space-x-2 
+              rounded-md bg-blue-500 px-3 py-2 
+              text-xs text-white disabled:cursor-not-allowed
+              disabled:opacity-50 sm:text-sm
+            "
             onClick={async () => {
               await NativeSettings.open({
                 optionIOS: IOSSettings.LocationServices,
@@ -1202,211 +1174,187 @@ export function LocationSettingsTab(props: SettingProps) {
             Open Location Settings
           </button>
         </div>
-      </Show>
-      <Show when={updateLocation() === "needsUpdate"}>
-        <div class="flex w-full flex-col items-center">
-          <button
-            class="my-2 flex space-x-2 self-center rounded-md bg-blue-500 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={async () => {
-              try {
-                setSettingLocation(true);
-                await context.setDeviceToCurrLocation(id());
-                await refetch();
-                setSettingLocation(false);
-              } catch (e) {
-                setSettingLocation(false);
-              }
-            }}
-            disabled={settingLocation()}
-          >
-            <Show
-              when={!settingLocation()}
-              fallback={
-                <span class="text-sm">Updating to Current Location...</span>
-              }
-            >
-              <span class="text-sm">Update Device Location</span>
-            </Show>
-            <FiMapPin size={18} />
-          </button>
-        </div>
-        <Show when={!hasLocation()}>
-          <p class="px-1">Locations are needed for recordings to be saved.</p>
+
+        <Show when={context.locationDisabled()}>
+          <GoToPermissions />
         </Show>
       </Show>
+
       <Show
-        when={
-          (!locationRes.loading && location()?.updateName) ||
-          photo()?.uploadStatus === "pending"
+        when={location() || !locationRes.loading}
+        fallback={
+          <div class="flex h-full w-full flex-col items-center justify-center py-8">
+            <FaSolidSpinner size={28} class="animate-spin" />
+            <p class="mt-2 text-sm">Loading Location...</p>
+          </div>
         }
       >
-        {(loc) => (
-          <div class="mb-2 flex items-center space-x-2 rounded-lg border-2 border-blue-500 p-2">
-            <div class="text-blue-600">
-              <FiCloudOff size={18} />
-            </div>
-            <p class="flex space-x-2 text-sm text-blue-600">
-              Unable to sync changes with server, please upload through
-              "Storage" when you have internet.
+        <Show when={hasChangesToUpload()}>
+          <div class="mb-4 flex items-center space-x-2 rounded-lg border-2 border-orange-400 p-2">
+            <FiCloudOff size={18} class="text-orange-400" />
+            <p class="text-xs text-orange-400 sm:text-sm">
+              You have changes waiting to be uploaded. They will upload
+              automatically next time you're online, or you can upload them
+              manually from the Storage tab.
             </p>
           </div>
-        )}
-      </Show>
-      <Show when={hasLocation()}>
-        <div class="w-full">
-          <div class="space-y-2">
-            <p class="flex gap-x-2">
-              <span class="text-slate-400">Lat:</span>
-              <span>{lat()}</span>
-              <span class="text-slate-400">Lng:</span>
-              <span>{lng()}</span>
-            </p>
-            <div>
-              <Show when={photoFileToUpload() && !newName() && !location()}>
-                <p class="text-sm text-yellow-400">
-                  Add a name to save new location.
-                </p>
-              </Show>
-              <p class="text-sm text-slate-400">Name:</p>
-              <Show
-                when={isEditing()}
-                fallback={
-                  <div
-                    class="flex items-center justify-between"
-                    onClick={() => toggleEditing()}
-                  >
-                    <Show
-                      when={!locationRes.loading && location()?.updateName}
-                      fallback={
-                        <>
-                          <h1 class="text-sm text-gray-800">
-                            {locationName()}
-                          </h1>
-                        </>
-                      }
-                    >
-                      {(loc) => (
-                        <h1 class="flex space-x-2 text-sm text-blue-600">
-                          {loc()}
-                        </h1>
-                      )}
-                    </Show>
-                    <button class="flex items-center rounded-lg bg-blue-600 px-2 py-1 text-white">
-                      {!location() ? "Add Location Name" : "Edit"}
-                      <AiFillEdit size={18} />
-                    </button>
-                  </div>
-                }
+        </Show>
+
+        <Switch>
+          <Match when={updateLocation() === "needsUpdate"}>
+            <div class="flex w-full flex-col items-center">
+              <button
+                class="
+                  my-2 flex items-center space-x-2 self-center 
+                  rounded-md bg-blue-500 
+                  px-3 py-2 
+                  text-xs 
+                  text-white disabled:cursor-not-allowed
+                  disabled:opacity-50 sm:text-sm
+                "
+                onClick={async () => {
+                  try {
+                    setSettingLocation(true);
+                    await context.setDeviceToCurrLocation(id());
+                    await refetchLocation();
+                  } catch (e) {
+                    console.error("Failed to update location", e);
+                  } finally {
+                    setSettingLocation(false);
+                  }
+                }}
+                disabled={settingLocation()}
               >
-                <div class="flex">
-                  <input
-                    ref={setLocationNameInput}
-                    type="text"
-                    class="w-full rounded-l bg-slate-50 py-2 pl-2 text-sm text-gray-800 outline-none"
-                    placeholder={locationName() ?? "Location Name"}
-                    onInput={(e) =>
-                      setNewName((e.target as HTMLInputElement).value)
-                    }
-                  />
-                  <button
-                    class="rounded-r bg-slate-50 px-4 py-2 text-gray-500"
-                    onClick={() => {
-                      setNewName("");
-                      toggleEditing();
-                    }}
-                  >
-                    <ImCross size={12} />
-                  </button>
-                </div>
-              </Show>
+                <Show
+                  when={!settingLocation()}
+                  fallback={
+                    <span class="text-xs sm:text-sm">
+                      Updating to Current Location...
+                    </span>
+                  }
+                >
+                  <span class="text-xs sm:text-sm">Update Device Location</span>
+                </Show>
+                <FiMapPin size={18} />
+              </button>
             </div>
-            <div>
-              <p class="text-sm text-slate-400">Camera POV:</p>
-              <div id="cameraPreview"></div>
+          </Match>
+          <Match when={updateLocation() === "current"}>
+            <Show when={hasPendingChanges()}>
+              <div class="mb-4 flex items-center space-x-2 rounded-lg border-2 border-blue-400 p-2">
+                <FiCloud size={18} class="text-blue-400" />
+                <p class="text-xs text-blue-400 sm:text-sm">
+                  {isSyncing() ? "Saving changes..." : "Save to apply changes."}
+                </p>
+              </div>
+            </Show>
+
+            <div class="space-y-4">
+              <Show when={locCoords()}>
+                <FieldWrapper type="custom" title="Coordinates">
+                  <div class="ml-2 flex items-center gap-2 text-xs sm:text-sm">
+                    <span class="font-medium">Lat:</span>
+                    <span>{locCoords()?.latitude.toFixed(3)}</span>
+                    <span class="font-medium">Lng:</span>
+                    <span>{locCoords()?.longitude.toFixed(3)}</span>
+                  </div>
+                </FieldWrapper>
+              </Show>
+
+              <FieldWrapper type="custom" title="Name">
+                <input
+                  type="text"
+                  class="
+                    w-full rounded-md bg-slate-50 
+                    px-2 py-1 
+                    text-xs sm:text-sm
+                  "
+                  placeholder={locationName()}
+                  value={newName()}
+                  onInput={(e) => setNewName(e.currentTarget.value)}
+                />
+              </FieldWrapper>
+
               <div class="relative rounded-md bg-slate-100">
                 <Switch>
-                  <Match when={photo()}>
-                    <div class="absolute flex h-full w-full flex-col justify-between gap-2">
-                      <div class="flex w-full justify-between">
+                  <Match when={photoUrl()}>
+                    <div class="group relative h-64">
+                      <img
+                        src={photoUrl()}
+                        class="h-full w-full rounded-md object-cover"
+                      />
+                      <div
+                        class="
+                          z-100 absolute inset-0 
+                          flex items-start justify-between 
+                          p-2
+                          opacity-80 
+                          transition-opacity group-hover:opacity-100
+                        "
+                      >
                         <button
-                          class="flex h-10 w-10 items-center justify-center rounded-br-lg bg-slate-100 p-2 text-blue-500"
-                          onClick={() => addPhotoToDevice()}
+                          onClick={addPhotoToDevice}
+                          class="rounded-lg bg-white/80 p-2 backdrop-blur-sm"
                         >
-                          <TbCameraPlus size={28} />
+                          <TbCameraPlus size={24} />
                         </button>
                         <button
-                          class="flex h-10 w-10 items-center justify-center rounded-bl-lg bg-slate-100 p-2 text-red-500"
-                          onClick={() => removePhotoReference()}
+                          onClick={removePhotoReference}
+                          class="rounded-lg bg-white/80 p-2 backdrop-blur-sm"
                         >
-                          <FaRegularTrashCan size={22} />
+                          <FaRegularTrashCan size={20} />
                         </button>
                       </div>
                     </div>
-                    <div
-                      classList={{
-                        "outline-blue-500 outline outline-2": isImageToUpload(),
-                      }}
-                      class="h-[18rem]"
-                    >
-                      <Show when={photo()}>
-                        {(imgData) => (
-                          <img
-                            src={imgData().url}
-                            class="h-[18rem] w-full rounded-md object-cover p-4"
-                          />
-                        )}
-                      </Show>
-                    </div>
                   </Match>
-                  <Match when={!photo()}>
+                  <Match when={!photoFileToUpload() && !currentPhoto()}>
                     <button
-                      class="flex w-full flex-col items-center justify-center p-8  text-blue-500"
-                      onClick={() => addPhotoToDevice()}
+                      onClick={addPhotoToDevice}
+                      class="
+                        flex h-48 w-full 
+                        flex-col items-center justify-center gap-2 text-blue-500 
+                        sm:h-64
+                      "
                     >
-                      <TbCameraPlus size={52} />
-                      <p class="text-sm text-gray-800">
-                        Take a Photo from Camera's perspective
+                      <TbCameraPlus size={36} />
+                      <p class="text-xs text-gray-600 sm:text-sm">
+                        Add Camera Perspective Photo
                       </p>
                     </button>
                   </Match>
                 </Switch>
               </div>
-            </div>
-            <div
-              classList={{
-                hidden: !location() && !hasPicture() && !newName(),
-              }}
-              class="mt-4 flex justify-end space-x-2 text-gray-500"
-            >
-              <button
-                classList={{
-                  "bg-blue-500 py-2 px-4 text-white rounded-md": canSave(),
-                  "bg-gray-200 py-2 px-4 text-gray-500 rounded-md": !canSave(),
-                }}
-                disabled={!canSave()}
-                onClick={() => saveLocationSettings()}
-              >
-                <Show
-                  when={!setting() || !canSave()}
-                  fallback={<p>Saving...</p>}
+
+              <div class="flex flex-wrap justify-end gap-2">
+                <button
+                  class="
+                    rounded-md bg-gray-200 
+                    px-4 py-2 
+                    text-xs text-gray-700 sm:text-sm
+                  "
+                  onClick={() => {
+                    setNewName("");
+                    setPhotoFileToUpload(null);
+                  }}
                 >
-                  <p>Save</p>
-                </Show>
-              </button>
-              <button
-                class="text-gray-400"
-                onClick={() => {
-                  setNewName("");
-                  setPhotoFileToUpload();
-                  setShowLocationSettings(false);
-                }}
-                disabled={!canSave()}
-              >
-                <p>Cancel</p>
-              </button>
+                  Reset
+                </button>
+                <button
+                  class="
+                    rounded-md bg-blue-500 
+                    px-4 py-2 
+                    text-xs text-white disabled:opacity-50 
+                    sm:text-sm
+                  "
+                  onClick={saveLocationSettings}
+                  disabled={!hasPendingChanges()}
+                >
+                  {isSyncing() ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
+          </Match>
+        </Switch>
       </Show>
     </section>
   );

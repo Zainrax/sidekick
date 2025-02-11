@@ -1,293 +1,249 @@
-// NsdHelper.kt
 package nz.org.cacophony.sidekick
 
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import androidx.annotation.RequiresApi
-import arrow.optics.copy
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
-abstract class NsdHelper(private val context: Context) {
-    private val nsdManager: NsdManager by lazy {
+/**
+ * A NSD manager for discovering & resolving
+ * `_cacophonator-management._tcp.` services.
+ * This implementation serializes resolve calls so that only one is active at a time.
+ */
+class NsdHelper(private val context: Context) {
+
+    companion object {
+        private const val TAG = "NsdHelper"
+        private const val SERVICE_TYPE = "_cacophonator-management._tcp."
+        private const val MAX_RESOLVE_RETRIES = 3
+        private const val RESOLVE_RETRY_DELAY_MS = 1_000L
+        private const val RESOLVE_SOCKET_CHECK_TIMEOUT_MS = 1_000
+    }
+
+    // Public callbacks for resolved, lost, and error events.
+    var onServiceResolved: ((NsdServiceInfo) -> Unit)? = null
+    var onServiceLost: ((NsdServiceInfo) -> Unit)? = null
+    var onDiscoveryError: ((Throwable) -> Unit)? = null
+
+    private val nsdManager by lazy {
         context.getSystemService(Context.NSD_SERVICE) as NsdManager
     }
 
-    companion object {
-        const val NSD_SERVICE_TYPE = "_cacophonator-management._tcp."
-        private const val TAG = "NsdHelper"
-        private const val RESOLVE_TIMEOUT = 20000L // 20 seconds
-        private const val MAX_RESOLVE_RETRIES = 5
-        private const val RESOLVE_RETRY_DELAY = 2000L
-    }
+    // Only allow one discovery session at a time.
+    private var isDiscovering = false
 
+    // A queue of services waiting to be resolved.
+    private val pendingQueue = ConcurrentLinkedQueue<NsdServiceInfo>()
+
+    // Indicates whether a service resolution is currently in progress.
+    private val isResolving = AtomicBoolean(false)
+
+    // Reference to the active DiscoveryListener.
     private var discoveryListener: NsdManager.DiscoveryListener? = null
-    private val resolveListenerBusy = AtomicBoolean(false)
-    private val pendingNsdServices = ConcurrentLinkedQueue<NsdServiceInfo>()
-    private val resolvedNsdServices = mutableListOf<NsdServiceInfo>()
+
+    // Handler on the main looper for UI and scheduling tasks.
     private val handler = Handler(Looper.getMainLooper())
-    private val timeoutMap = mutableMapOf<NsdServiceInfo, Runnable>()
 
-    private val resolveTimeoutMap =
-        mutableMapOf<NsdServiceInfo, Pair<Runnable, Int>>()
-    private val serviceInfoCallbacks =
-        mutableMapOf<NsdServiceInfo, NsdManager.ServiceInfoCallback>()
-
-    fun initializeNsd() {
-        initializeDiscoveryListener()
-    }
-
-    fun discoverServices() {
-        try {
-            nsdManager.discoverServices(
-                NSD_SERVICE_TYPE,
-                NsdManager.PROTOCOL_DNS_SD,
-                discoveryListener
-            )
-            Log.d(TAG, "Service discovery started")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start service discovery: ${e.message}")
-            onDiscoveryFailed(Exception("Failed to start service discovery: ${e.message}"))
+    /**
+     * Starts service discovery. If a discovery session is already active, this call is ignored.
+     */
+    fun startDiscovery() {
+        if (isDiscovering) {
+            Log.w(TAG, "Discovery is already active, ignoring startDiscovery() call.")
+            return
         }
-    }
+        isDiscovering = true
 
-    fun stopDiscovery() {
-        discoveryListener?.let {
-            try {
-                nsdManager.stopServiceDiscovery(it)
-                Log.d(TAG, "Service discovery stopped")
-            } catch (e: IllegalArgumentException) {
-                Log.e(TAG, "Error stopping discovery: ${e.message}")
-            }
-            discoveryListener = null
-        }
-    }
-
-    private fun initializeDiscoveryListener() {
+        // Create a new DiscoveryListener for this discovery session.
         discoveryListener = object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(regType: String) {
                 Log.d(TAG, "Service discovery started: $regType")
             }
 
             override fun onServiceFound(service: NsdServiceInfo) {
-                Log.d(TAG, "Service discovery success: $service")
-
-                // Error 3 Failure_Already_Active is thrown if the listener is busy adding sleep helps
-                try {
-                    Thread.sleep(50)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-
-                if (service.serviceType == NSD_SERVICE_TYPE) {
-                    pendingNsdServices.offer(service)
-                    if (resolveListenerBusy.compareAndSet(false, true)) {
-                        resolveNextInQueue()
-                    }
+                Log.d(TAG, "Service found: $service")
+                // Check that the discovered service is of the expected type.
+                if (service.serviceType.contains(SERVICE_TYPE)) {
+                    // Add the service to the queue and try resolving it.
+                    pendingQueue.offer(service)
+                    tryResolveNext()
                 }
             }
 
             override fun onServiceLost(service: NsdServiceInfo) {
                 Log.d(TAG, "Service lost: $service")
-                // Remove the service from pendingNsdServices
-                removeServiceFromQueue(pendingNsdServices, service)
-
-                // Remove the service from resolvedNsdServices
-                removeServiceFromResolved(service)
-
-                onNsdServiceLost(service)
+                // Remove the service from the queue (if pending) and notify listeners.
+                removeFromQueue(service)
+                onServiceLost?.invoke(service)
             }
 
             override fun onDiscoveryStopped(serviceType: String) {
-                Log.d(TAG, "Discovery stopped: $serviceType")
+                Log.d(TAG, "Service discovery stopped: $serviceType")
+                isDiscovering = false
             }
 
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-                Log.e(TAG, "Start Discovery failed: Error code: $errorCode")
-                stopDiscovery()
-                onDiscoveryFailed(Exception("Start Discovery failed with error code: $errorCode"))
+                Log.e(TAG, "Start discovery failed: Error $errorCode, $serviceType")
+                stopDiscovery() // stop discovery on failure
+                onDiscoveryError?.invoke(
+                    Exception("StartDiscoveryFailed code=$errorCode type=$serviceType")
+                )
             }
 
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
-                Log.e(TAG, "Stop Discovery failed: Error code: $errorCode")
+                Log.e(TAG, "Stop discovery failed: Error $errorCode, $serviceType")
                 stopDiscovery()
-                onDiscoveryFailed(Exception("Stop Discovery failed with error code: $errorCode"))
+                onDiscoveryError?.invoke(
+                    Exception("StopDiscoveryFailed code=$errorCode type=$serviceType")
+                )
+            }
+        }
+
+        try {
+            nsdManager.discoverServices(
+                SERVICE_TYPE,
+                NsdManager.PROTOCOL_DNS_SD,
+                discoveryListener!!
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "discoverServices exception: ${e.message}")
+            isDiscovering = false
+            onDiscoveryError?.invoke(e)
+        }
+    }
+
+    /**
+     * Stops the current discovery session if one is active.
+     */
+    fun stopDiscovery() {
+        if (!isDiscovering) {
+            Log.d(TAG, "Not currently discovering; ignoring stopDiscovery()")
+            return
+        }
+        try {
+            discoveryListener?.let {
+                nsdManager.stopServiceDiscovery(it)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "stopDiscovery exception: ${e.message}")
+        } finally {
+            discoveryListener = null
+            isDiscovering = false
+            // Clear any queued services and reset the resolving flag.
+            pendingQueue.clear()
+            isResolving.set(false)
+        }
+    }
+
+    /**
+     * Attempts to resolve the next service in the queue if no resolution is currently active.
+     */
+    private fun tryResolveNext() {
+        if (isResolving.compareAndSet(false, true)) {
+            val service = pendingQueue.poll()
+            if (service != null) {
+                resolveService(service, 0)
+            } else {
+                // No service to resolve; release the busy flag.
+                isResolving.set(false)
             }
         }
     }
 
-    private fun resolveService(service: NsdServiceInfo, retryCount: Int = 0) {
-        if (retryCount >= MAX_RESOLVE_RETRIES) {
-            resolveListenerBusy.set(false)
-            resolveNextInQueue()
+    /**
+     * Resolves a given service. Retries up to [MAX_RESOLVE_RETRIES] if necessary.
+     *
+     * @param service The service to resolve.
+     * @param attempt The current attempt count.
+     */
+    private fun resolveService(service: NsdServiceInfo, attempt: Int) {
+        if (attempt >= MAX_RESOLVE_RETRIES) {
+            Log.w(TAG, "Max resolve retries reached for ${service.serviceName}")
+            isResolving.set(false)
+            // Move on to the next service in the queue.
+            tryResolveNext()
             return
         }
 
-        val timeoutRunnable = Runnable {
-            if (resolveListenerBusy.get()) {
-                Handler(Looper.getMainLooper()).postDelayed({
-                    resolveService(service, retryCount + 1)
-                }, RESOLVE_RETRY_DELAY)
-            }
-        }
-        // Schedule the timeout for this specific retry attempt
-        handler.postDelayed(timeoutRunnable, RESOLVE_TIMEOUT)
-        resolveTimeoutMap[service] = Pair(timeoutRunnable, retryCount)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            resolveServiceModern(service, retryCount)
-        } else {
-            resolveServiceLegacy(service, retryCount)
-        }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-    private fun resolveServiceModern(service: NsdServiceInfo, retryCount: Int) {
-        val callback = object : NsdManager.ServiceInfoCallback {
-            override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {
-                Log.e(
-                    TAG,
-                    "Service info callback registration failed: Error code: $errorCode, service: ${service.serviceName}"
-                )
-                // Handle failure, potentially retry
-            }
-
-            override fun onServiceUpdated(serviceInfo: NsdServiceInfo) {
-                Log.d(TAG, "Service updated: $serviceInfo")
-                resolveTimeoutMap[service]?.let { (timeoutRunnable, _) ->
-                    handler.removeCallbacks(timeoutRunnable)
-                }
-                resolveTimeoutMap.remove(service)
-                serviceInfoCallbacks.remove(service)
-
-                synchronized(resolvedNsdServices) {
-                    resolvedNsdServices.add(serviceInfo)
-                }
-                onNsdServiceResolved(serviceInfo)
-                nsdManager.unregisterServiceInfoCallback(this)
-                resolveNextInQueue()
-            }
-
-            override fun onServiceLost() {
-                Log.d(TAG, "Service lost during resolution: ${service.serviceName}")
-                // Handle service loss
-            }
-
-            override fun onServiceInfoCallbackUnregistered() {
-                Log.d(TAG, "Service info callback unregistered: ${service.serviceName}")
-                // Handle unregistration
-            }
-        }
-        serviceInfoCallbacks[service] = callback
-
-        try {
-            nsdManager.registerServiceInfoCallback(service, context.mainExecutor, callback)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to register ServiceInfoCallback: ${e.message}")
-            resolveTimeoutMap[service]?.let { (timeoutRunnable, _) ->
-                handler.removeCallbacks(timeoutRunnable)
-            }
-            resolveTimeoutMap.remove(service)
-            serviceInfoCallbacks.remove(service)
-            // Handle the exception, potentially retry
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun resolveServiceLegacy(service: NsdServiceInfo, retryCount: Int) {
-        nsdManager.resolveService(service, object : NsdManager.ResolveListener {
+        val resolveListener = object : NsdManager.ResolveListener {
             override fun onServiceResolved(resolvedService: NsdServiceInfo) {
                 Log.d(TAG, "Service resolved: $resolvedService")
-                timeoutMap[service]?.let { handler.removeCallbacks(it) }
-                timeoutMap.remove(service)
-                synchronized(resolvedNsdServices) {
-                    resolvedNsdServices.add(resolvedService)
-                }
-                onNsdServiceResolved(resolvedService)
-                resolveNextInQueue()
+                // Once resolved, perform an extra check: can we connect via socket?
+                checkIfStillReachable(resolvedService)
             }
 
-            override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                Log.e(TAG, "Resolve failed: $serviceInfo - Error code: $errorCode")
-                timeoutMap[service]?.let { handler.removeCallbacks(it) }
-                timeoutMap.remove(service)
-                retryResolve(service, retryCount)
-            }
-        })
-    }
-
-    private fun retryResolve(service: NsdServiceInfo, retryCount: Int) {
-        if (retryCount < MAX_RESOLVE_RETRIES) {
-            Log.d(TAG, "Retrying resolve for ${service.serviceName}, attempt ${retryCount + 1}")
-            handler.postDelayed({
-                resolveService(service, retryCount + 1)
-            }, RESOLVE_RETRY_DELAY)
-        } else {
-            Log.e(TAG, "Max retries reached for ${service.serviceName}")
-            resolveNextInQueue()
-        }
-    }
-
-    private fun resolveNextInQueue() {
-        synchronized(this) {
-            if (!resolveListenerBusy.get()) return // Prevent starting a new resolution if one is already in progress
-
-            val nextNsdService = pendingNsdServices.poll()
-            if (nextNsdService != null) {
-                resolveListenerBusy.set(true) // Mark as busy before starting resolution
-                resolveService(nextNsdService)
-            } else {
-                resolveListenerBusy.set(false) // Only mark as not busy if the queue is empty
+            override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) {
+                Log.w(
+                    TAG,
+                    "onResolveFailed: ${info.serviceName}, code=$errorCode, attempt=$attempt"
+                )
+                // Wait a moment and retry the resolution.
+                handler.postDelayed({
+                    resolveService(info, attempt + 1)
+                }, RESOLVE_RETRY_DELAY_MS)
             }
         }
-    }
 
-    private fun removeServiceFromQueue(
-        queue: ConcurrentLinkedQueue<NsdServiceInfo>,
-        service: NsdServiceInfo
-    ) {
-        val iterator = queue.iterator()
-        while (iterator.hasNext()) {
-            val currentService = iterator.next()
-            if (currentService.serviceName == service.serviceName) {
-                iterator.remove()
-                break // Assuming service names are unique
-            }
-        }
-    }
-
-    private fun removeServiceFromResolved(service: NsdServiceInfo) {
-        synchronized(resolvedNsdServices) {
-            val iterator = resolvedNsdServices.iterator()
-            while (iterator.hasNext()) {
-                val currentService = iterator.next()
-                if (currentService.serviceName == service.serviceName) {
-                    iterator.remove()
-                    break // Assuming service names are unique
-                }
-            }
-        }
-    }
-
-    private fun verifyConnection(service: NsdServiceInfo): Boolean {
-        return try {
-            val socket = Socket()
-            socket.connect(InetSocketAddress(service.host, service.port), 1000)
-            socket.close()
-            true
+        try {
+            nsdManager.resolveService(service, resolveListener)
         } catch (e: Exception) {
-            false
+            Log.e(TAG, "resolveService exception: ${e.message}")
+            // Wait and retry if an exception is thrown.
+            handler.postDelayed({
+                resolveService(service, attempt + 1)
+            }, RESOLVE_RETRY_DELAY_MS)
         }
     }
 
-    abstract fun onNsdServiceResolved(service: NsdServiceInfo)
-    abstract fun onNsdServiceLost(service: NsdServiceInfo)
-    abstract fun onDiscoveryFailed(e: Exception)
+    /**
+     * Verifies the resolved service is reachable by attempting to open a socket.
+     * If reachable, [onServiceResolved] is called; otherwise, [onServiceLost] is triggered.
+     */
+    private fun checkIfStillReachable(service: NsdServiceInfo) {
+        Thread {
+            val success = try {
+                Socket().use { socket ->
+                    socket.connect(
+                        InetSocketAddress(service.host, service.port),
+                        RESOLVE_SOCKET_CHECK_TIMEOUT_MS
+                    )
+                }
+                true
+            } catch (e: Exception) {
+                false
+            }
+
+            handler.post {
+                if (success) {
+                    onServiceResolved?.invoke(service)
+                } else {
+                    Log.w(TAG, "Resolved service not reachable: ${service.serviceName}")
+                    onServiceLost?.invoke(service)
+                }
+                // Mark resolution as complete and proceed to the next queued service.
+                isResolving.set(false)
+                tryResolveNext()
+            }
+        }.start()
+    }
+
+    /**
+     * Removes the specified service from the pending resolution queue.
+     */
+    private fun removeFromQueue(service: NsdServiceInfo) {
+        val iter = pendingQueue.iterator()
+        while (iter.hasNext()) {
+            val queuedService = iter.next()
+            if (queuedService.serviceName == service.serviceName) {
+                iter.remove()
+                break
+            }
+        }
+    }
 }

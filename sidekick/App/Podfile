@@ -10,7 +10,6 @@ install! 'cocoapods', :disable_input_output_paths => true
 def capacitor_pods
   pod 'Capacitor', :path => '../../node_modules/.pnpm/@capacitor+ios@6.1.2_@capacitor+core@6.1.2/node_modules/@capacitor/ios'
   pod 'CapacitorCordova', :path => '../../node_modules/.pnpm/@capacitor+ios@6.1.2_@capacitor+core@6.1.2/node_modules/@capacitor/ios'
-  pod 'CapacitorCommunityCameraPreview', :path => '../../node_modules/.pnpm/@capacitor-community+camera-preview@6.0.1_@capacitor+core@6.1.2/node_modules/@capacitor-community/camera-preview'
   pod 'CapacitorCommunityKeepAwake', :path => '../../node_modules/.pnpm/@capacitor-community+keep-awake@5.0.1_@capacitor+core@6.1.2/node_modules/@capacitor-community/keep-awake'
   pod 'CapacitorCommunitySqlite', :path => '../../node_modules/.pnpm/@capacitor-community+sqlite@6.0.1_@capacitor+core@6.1.2/node_modules/@capacitor-community/sqlite'
   pod 'CapacitorFirebaseCrashlytics', :path => '../../node_modules/.pnpm/@capacitor-firebase+crashlytics@6.0.0_@capacitor+core@6.1.2_firebase@10.14.1/node_modules/@capacitor-firebase/crashlytics'

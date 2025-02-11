@@ -142,8 +142,8 @@ export default function Storage() {
                 .deviceImages()
                 ?.filter(
                   (image) =>
-                    image.uploadStatus === "pending" ||
-                    image.uploadStatus === "failed"
+                    image.serverStatus === "pending-upload" ||
+                    image.serverStatus === "pending-deletion"
                 ).length ?? 0)}{" "}
           </span>
         </p>

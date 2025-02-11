@@ -8,18 +8,17 @@ const TABLE_CONTENTS = `id INTEGER PRIMARY KEY AUTOINCREMENT,
   filePath TEXT NOT NULL,
   timestamp TEXT NOT NULL,
   type TEXT CHECK(type IN ('pov', 'in-situ')) NOT NULL,
-  uploadStatus TEXT CHECK(uploadStatus IN ('pending', 'uploading', 'failed')),
+  serverStatus TEXT CHECK(serverStatus IN ('pending-upload', 'pending-deletion')),
   isProd INTEGER NOT NULL,
-  UNIQUE(deviceId, fileKey, type)
+  lat REAL,
+  lng REAL,
+  UNIQUE(deviceId, type, serverStatus)
 `;
-const TABLE_NAME = "DeviceReferenceImageV4";
+const TABLE_NAME = "DeviceReferenceImageV9";
 export const createDeviceReferenceImageSchema = `
 CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
 ${TABLE_CONTENTS}
 );`;
-
-export const UploadStatus = z.enum(["pending", "uploading", "failed"]);
-export type UploadStatus = z.infer<typeof UploadStatus>;
 
 export const DeviceReferenceImageSchema = z.object({
   id: z.number().optional(),
@@ -29,8 +28,10 @@ export const DeviceReferenceImageSchema = z.object({
   filePath: z.string(),
   timestamp: z.string(),
   type: z.enum(["pov", "in-situ"]),
-  uploadStatus: UploadStatus.nullish(),
+  serverStatus: z.enum(["pending-upload", "pending-deletion"]).nullish(),
   isProd: z.boolean(),
+  lat: z.number().nullish(),
+  lng: z.number().nullish(),
 });
 export const QueryDeviceReferenceImageSchema = z.object({
   id: z.number(),
@@ -40,8 +41,10 @@ export const QueryDeviceReferenceImageSchema = z.object({
   filePath: z.string(),
   timestamp: z.string(),
   type: z.enum(["pov", "in-situ"]),
-  uploadStatus: UploadStatus.nullish(),
+  serverStatus: z.enum(["pending-upload", "pending-deletion"]).nullish(),
   isProd: z.number().transform((val) => Boolean(val)),
+  lat: z.number().nullish(),
+  lng: z.number().nullish(),
 });
 
 export type DeviceReferenceImage = z.infer<typeof DeviceReferenceImageSchema>;
@@ -98,10 +101,61 @@ export const deleteDeviceReferenceImage =
       filePath,
     ]);
 
-const getAllDeviceReferenceImagesSql = `SELECT * FROM ${TABLE_NAME} WHE`;
+const getAllDeviceReferenceImagesSql = `SELECT * FROM ${TABLE_NAME}`;
 export const getAllDeviceReferenceImages =
   (db: SQLiteDBConnection) => async (): Promise<DeviceReferenceImage[]> => {
     const result = await db.query(getAllDeviceReferenceImagesSql);
     if (!result.values) return [];
     return result.values.map((row) => QueryImageSchema.parse(row));
+  };
+
+const markPhotoForServerOperationSql = `
+  UPDATE ${TABLE_NAME} 
+  SET serverStatus = ?, lat = ?, lng = ?
+  WHERE deviceId = ? AND filePath = ?
+`;
+
+export const markPhotoForServerOperation =
+  (db: SQLiteDBConnection) =>
+  async (
+    deviceId: number,
+    isProd: boolean,
+    filePath: string,
+    operation: "pending-upload" | "pending-deletion" | null,
+    location?: { lat: number; lng: number }
+  ) => {
+    return db.run(markPhotoForServerOperationSql, [
+      operation,
+      location?.lat ?? null,
+      location?.lng ?? null,
+      transformId({ deviceId, isProd }).deviceId,
+      filePath,
+    ]);
+  };
+
+const getPendingServerOperationsSql = `
+  SELECT * FROM ${TABLE_NAME} 
+  WHERE serverStatus IS NOT NULL
+`;
+
+export const getPendingServerOperations =
+  (db: SQLiteDBConnection) => async (): Promise<DeviceReferenceImage[]> => {
+    const result = await db.query(getPendingServerOperationsSql);
+    if (!result.values) return [];
+    return result.values.map((row) => QueryImageSchema.parse(row));
+  };
+
+const clearServerOperationStatusSql = `
+  UPDATE ${TABLE_NAME} 
+  SET serverStatus = NULL 
+  WHERE deviceId = ? AND filePath = ?
+`;
+
+export const clearServerOperationStatus =
+  (db: SQLiteDBConnection) =>
+  async (deviceId: number, isProd: boolean, filePath: string) => {
+    return db.run(clearServerOperationStatusSql, [
+      transformId({ deviceId, isProd }).deviceId,
+      filePath,
+    ]);
   };

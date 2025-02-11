@@ -29,7 +29,6 @@
 		}
 	},
 	"packageClassList": [
-		"CameraPreview",
 		"KeepAwakePlugin",
 		"CapacitorSQLitePlugin",
 		"FirebaseCrashlyticsPlugin",
@@ -42,6 +41,7 @@
 		"GeolocationPlugin",
 		"CAPNetworkPlugin",
 		"PreferencesPlugin",
+		"CameraPreview",
 		"UploaderPlugin",
 		"SentryCapacitor",
 		"NativeSettingsPlugin"

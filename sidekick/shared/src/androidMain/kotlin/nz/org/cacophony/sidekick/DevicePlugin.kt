@@ -34,9 +34,6 @@ import java.net.Socket
 
 @CapacitorPlugin(name = "Device")
 class DevicePlugin : Plugin() {
-    private val type = "_cacophonator-management._tcp."
-
-    private lateinit var nsdHelper: NsdHelper
     private var callQueue: MutableMap<String, CallType> = mutableMapOf()
     private var discoveryRetryCount = 0
     private val MAX_DISCOVERY_RETRIES = 3
@@ -47,6 +44,9 @@ class DevicePlugin : Plugin() {
     var currNetworkCallback: NetworkCallback? = null
     private var cm: ConnectivityManager? = null
     private lateinit var multicastLock: WifiManager.MulticastLock
+    private val type = "_cacophonator-management._tcp."
+
+    private var nsdHelper: NsdHelper? = null
     private var isDiscovering: Boolean = false
 
     // Add a flag to keep track of whether to use the multicast lock
@@ -58,6 +58,36 @@ class DevicePlugin : Plugin() {
         device = DeviceInterface(context.applicationContext.filesDir.absolutePath)
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         multicastLock = wifi.createMulticastLock("multicastLock")
+
+        // Create once
+        nsdHelper = NsdHelper(context.applicationContext).apply {
+            onServiceResolved = { service ->
+                val serviceJson = JSObject().apply {
+                    val endpoint = "${service.serviceName}.local"
+                    put("endpoint", endpoint)
+                    put("host", service.host.hostAddress)
+                    put("port", service.port)
+                }
+                notifyListeners("onServiceResolved", serviceJson)
+            }
+
+            onServiceLost = { service ->
+                val result = JSObject().apply {
+                    val endpoint = "${service.serviceName}.local"
+                    put("endpoint", endpoint)
+                }
+                notifyListeners("onServiceLost", result)
+            }
+
+            onDiscoveryError = { err ->
+                // Optionally we can emit an event or finish the plugin call with an error
+                // We'll also log it
+                val errMsg = "Discovery error: ${err.message}"
+                notifyListeners("onDiscoveryError", JSObject().apply {
+                    put("error", errMsg)
+                })
+            }
+        }
     }
 
     enum class CallType {
@@ -67,63 +97,24 @@ class DevicePlugin : Plugin() {
     @PluginMethod
     fun discoverDevices(call: PluginCall) {
         if (isDiscovering) {
-            call.reject("Discovery already in progress")
+            call.reject("Discovery is already in progress")
             return
         }
 
         isDiscovering = true
-        discoveryRetryCount = 0
-        startDiscoveryWithRetry(call)
-    }
-
-    private fun startDiscoveryWithRetry(call: PluginCall) {
         try {
-            // Set the flag for the current discovery
-            multicastLockUsedInCurrentDiscovery = useMulticastLock
-
-            // Acquire the multicast lock if needed
-            if (useMulticastLock) {
+            // Acquire the multicast lock if you want
+            if (!multicastLock.isHeld) {
                 multicastLock.acquire()
             }
-
-            nsdHelper = object : NsdHelper(context.applicationContext) {
-                override fun onNsdServiceResolved(service: NsdServiceInfo) {
-                    val serviceJson = JSObject().apply {
-                        val endpoint = "${service.serviceName}.local"
-                        put("endpoint", endpoint)
-                        put("host", service.host.hostAddress)
-                        put("port", service.port)
-                    }
-                    notifyListeners("onServiceResolved", serviceJson)
-                    // Reset retry count on successful discovery
-                    discoveryRetryCount = 0
-                }
-
-                override fun onNsdServiceLost(service: NsdServiceInfo) {
-                    // Add verification before notifying service lost
-                    if (verifyServiceLost(service)) {
-                        val result = JSObject().apply {
-                            val endpoint = "${service.serviceName}.local"
-                            put("endpoint", endpoint)
-                        }
-                        notifyListeners("onServiceLost", result)
-                    }
-                }
-
-                override fun onDiscoveryFailed(e: Exception) {
-                    handleDiscoveryFailure(e, call)
-                }
-            }
-
-            nsdHelper.initializeNsd()
-            nsdHelper.discoverServices()
-
-            // Flip the flag for the next discovery attempt
-            useMulticastLock = !useMulticastLock
-
+            nsdHelper?.startDiscovery()
             call.resolve()
         } catch (e: Exception) {
-            handleDiscoveryFailure(e, call)
+            isDiscovering = false
+            if (multicastLock.isHeld) {
+                multicastLock.release()
+            }
+            call.reject("Failed to start discovery: ${e.message}")
         }
     }
 
@@ -136,19 +127,17 @@ class DevicePlugin : Plugin() {
             return
         }
         try {
-            // Release the multicast lock if it was used
-            if (multicastLockUsedInCurrentDiscovery && multicastLock.isHeld) {
+            if (multicastLock.isHeld) {
                 multicastLock.release()
             }
-            nsdHelper.stopDiscovery()
+            nsdHelper?.stopDiscovery()
             isDiscovering = false
             result.put("success", true)
-            call.resolve(result)
         } catch (e: Exception) {
             result.put("success", false)
             result.put("message", e.message)
-            call.resolve(result)
         }
+        call.resolve(result)
     }
 
     @PluginMethod
@@ -223,34 +212,6 @@ class DevicePlugin : Plugin() {
             result.put("success", false)
             result.put("message", e.message)
             call.resolve(result)
-        }
-    }
-
-    private fun handleDiscoveryFailure(e: Exception, call: PluginCall) {
-        if (discoveryRetryCount < MAX_DISCOVERY_RETRIES) {
-            discoveryRetryCount++
-            Handler(Looper.getMainLooper()).postDelayed({
-                startDiscoveryWithRetry(call)
-            }, DISCOVERY_RETRY_DELAY)
-        } else {
-            // Release the multicast lock if it was used
-            if (multicastLockUsedInCurrentDiscovery && multicastLock.isHeld) {
-                multicastLock.release()
-            }
-            isDiscovering = false
-            call.reject("Discovery failed after $MAX_DISCOVERY_RETRIES attempts: ${e.message}")
-        }
-    }
-
-    private fun verifyServiceLost(service: NsdServiceInfo): Boolean {
-        // Add additional verification before confirming service is lost
-        return try {
-            val socket = Socket()
-            socket.connect(InetSocketAddress(service.host, service.port), 1000)
-            socket.close()
-            false // Service is still available
-        } catch (e: Exception) {
-            true // Service is truly lost
         }
     }
 

@@ -258,10 +258,10 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         if (!server) {
           return null;
         }
-        
+
         // Add slightly longer delay to ensure loading screen appears first
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
         const storedUser = await Preferences.get({ key: "user" });
         if (!storedUser.value) return null;
 
@@ -275,10 +275,10 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         return null;
       }
     },
-    { 
+    {
       initialValue: undefined,
       // Add SSR option to prevent hydration mismatch
-      ssrLoadFrom: 'initial'
+      ssrLoadFrom: "initial",
     }
   );
 
@@ -840,9 +840,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     return !!data();
   };
 
-  async function updateUserAgreement(
-    authToken: string
-  ): Promise<Either<string, boolean>> {
+  async function updateUserAgreement(authToken: string) {
     try {
       // Get the latest EUA version
       const euaResponse = await CapacitorHttp.request({
@@ -893,7 +891,19 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       return Either.left("Error updating user agreement");
     }
   }
-
+  const clearCustomServer = async () => {
+    try {
+      await Preferences.remove({ key: "customServer" });
+      mutateCustomServer(undefined);
+      setServer("prod");
+      log.logSuccess({
+        message: "Custom server cleared. Reverted to production server.",
+      });
+      await logout();
+    } catch (error) {
+      log.logError({ message: "Failed to clear custom server", error });
+    }
+  };
   return {
     data,
     groups,
@@ -914,6 +924,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     setToCustomServer,
     isLoggedIn,
     updateUserAgreement,
+    clearCustomServer,
   };
 });
 

@@ -231,13 +231,13 @@ const FieldWrapper: Component<
 > = (props) => {
   return (
     <div class="flex rounded-lg border">
-      <div class="flex w-[52%] items-center justify-start border-r bg-gray-50 px-4 py-2">
+      <div class="min-w-24 items-center justify-start border-r bg-gray-50 px-4 py-2">
         <div class="text-xs font-light text-gray-700">
           <Show
             when={typeof props.title === "string" && props.title}
             fallback={props.title}
           >
-            {(val) => <span>{val()}</span>}
+            {(val) => <span class="text-nowrap">{val()}</span>}
           </Show>
         </div>
       </div>

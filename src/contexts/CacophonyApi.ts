@@ -162,7 +162,7 @@ const LocationResSchema = z.discriminatedUnion("success", [
 
 export async function getLocationsForUser(
   token: string
-): Promise<ApiLocation[]> {
+): Promise<ApiLocation[] | null> {
   const locationJson = await CacophonyPlugin.getStationsForUser({ token });
   if (locationJson.success) {
     const json = JSON.parse(locationJson.data);
@@ -172,6 +172,6 @@ export async function getLocationsForUser(
     }
     return locationRes.stations;
   } else {
-    return [];
+    return null;
   }
 }
