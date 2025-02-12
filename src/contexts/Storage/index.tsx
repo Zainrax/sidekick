@@ -38,10 +38,11 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
       await recording.uploadRecordings(warn);
       await location.resyncLocations();
       await deviceImages.syncPendingPhotos();
+      setIsUploading(false);
+      await event.uploadEvents();
       if (await KeepAwake.isSupported()) {
         await KeepAwake.allowSleep();
       }
-      setIsUploading(false);
     } catch (error) {
       log.logError({
         message: "Error during uploading events/recordings/locations",

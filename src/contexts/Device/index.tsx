@@ -267,12 +267,30 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     deviceEventKeys.set(device.id, await getEventKeys(device));
 
   const clearUploaded = async (device: ConnectedDevice) => {
+    debugger;
     if (devicesDownloading.has(device.id)) return;
     await deleteUploadedRecordings(device);
     await deleteUploadedEvents(device);
     await setCurrRecs(device);
     await setCurrEvents(device);
   };
+
+  // Regularly Poll recordings and events to clear uploaded
+  const CLEAR_UPLOADED_INTERVAL = 3000; // 5 seconds
+  onMount(() => {
+    const interval = setInterval(async () => {
+      await Promise.all(
+        devices
+          .values()
+          .filter((d) => d.isConnected)
+          .map(clearUploaded)
+      );
+    }, CLEAR_UPLOADED_INTERVAL);
+    onCleanup(() => {
+      clearInterval(interval);
+    });
+  });
+
   // Function to fetch device info from a URL
   const fetchDeviceInfo = async (url: string): Promise<DeviceInfo> => {
     try {
@@ -351,7 +369,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       if (!device) throw new Error("Failed to connect to device");
 
       const batteryPercentage = await getBattery(device.url);
-      const hasAudio = await hasAudioCapabilities(device.id);
+      const hasAudio = await hasAudioCapabilities(device.url);
 
       return {
         ...device,
@@ -708,7 +726,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
             if (info.success) {
               const battery = await getBattery(device.url);
-              const hasAudio = await hasAudioCapabilities(device.id);
+              const hasAudio = await hasAudioCapabilities(device.url);
               return {
                 ...device,
                 id: info.data.deviceID.toString(),
@@ -762,9 +780,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     return undefined;
   };
 
-  const hasAudioCapabilities = async (deviceId: string) => {
+  const hasAudioCapabilities = async (url: string) => {
     try {
-      const res = await getAudioMode(deviceId);
+      const res = await getAudioMode(url);
       if (res !== null) return true;
     } catch (error) {
       console.error(error);
@@ -903,6 +921,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           } else {
             continue;
           }
+        } else {
+          await storage.deleteRecording(rec);
         }
       }
     } catch (error) {
@@ -984,6 +1004,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   };
 
   const deleteUploadedEvents = async (device: ConnectedDevice) => {
+    debugger;
     try {
       const { url } = device;
       const currEvents = await getEventKeys(device);
@@ -1503,7 +1524,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   };
 
   const AP_CHECK_RETRIES = 3;
-  const AP_CHECK_RETRY_DELAY = 1000; // 1 second
+  const AP_CHECK_RETRY_DELAY = 20000; // 20 second
 
   const LimePercent = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
@@ -1989,11 +2010,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
   };
 
-  const getAudioMode = async (deviceId: DeviceId) => {
+  const getAudioMode = async (url: string) => {
     try {
-      const device = devices.get(deviceId);
-      if (!device || !device.isConnected) return null;
-      const { url } = device;
       const res = await CapacitorHttp.get({
         url: `${url}/api/audiorecording`,
         headers: { ...headers, "Content-Type": "application/json" },

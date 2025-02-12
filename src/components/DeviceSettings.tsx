@@ -121,7 +121,9 @@ export function AudioSettingsTab(props: SettingProps) {
     id,
     async (id) => {
       if (!id) return null;
-      const res = await context.getAudioMode(id);
+      const device = context.devices.get(id);
+      if (!device) return null;
+      const res = await context.getAudioMode(device.url);
       return res;
     }
   );
@@ -730,7 +732,9 @@ export function CameraSettingsTab(props: SettingProps) {
 
   const [audioMode] = createResource(async () => {
     try {
-      const res = await context.getAudioMode(id());
+      const device = context.devices.get(id());
+      if (!device) return null;
+      const res = await context.getAudioMode(device.url);
       return res;
     } catch (error) {
       console.error(error);

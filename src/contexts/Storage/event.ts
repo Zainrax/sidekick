@@ -65,6 +65,7 @@ export function useEventStorage() {
   };
 
   const uploadEvents = async () => {
+    debugger;
     const user = await userContext.getUser();
     if (!user) return;
     setShouldUpload(true);

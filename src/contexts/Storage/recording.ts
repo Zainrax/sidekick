@@ -54,6 +54,7 @@ export function useRecordingStorage() {
     const res = await DevicePlugin.deleteRecording({
       recordingPath: recording.name,
     });
+    debugger;
     if (!res.success) {
       log.logWarning({
         message: "Failed to delete recording",
@@ -215,6 +216,41 @@ export function useRecordingStorage() {
     return unuploadedRecordings().length > 0;
   });
 
+  const deleteUploadedRecordings = async (deviceId: string) => {
+    debugger;
+    try {
+      const toDelete = savedRecordings().filter(
+        (r) => r.isUploaded && r.device === deviceId
+      );
+      if (!toDelete.length) return;
+
+      // Attempt to delete from the device file system
+      for (const rec of toDelete) {
+        const res = await DevicePlugin.deleteRecording({
+          recordingPath: rec.name,
+        });
+        if (!res.success) {
+          log.logWarning({
+            message: `Failed to delete uploaded recording ${rec.name}`,
+            details: res.message,
+          });
+        }
+      }
+
+      // Delete from the DB
+      await deleteRecordingsFromDb(db)(toDelete);
+
+      // Remove from our local signal
+      setSavedRecordings((prev) =>
+        prev.filter((r) => !(r.isUploaded && r.device === deviceId))
+      );
+    } catch (error) {
+      log.logError({
+        message: "Failed to delete uploaded recordings",
+        error,
+      });
+    }
+  };
   onMount(async () => {
     try {
       await db.execute(createRecordingSchema);
@@ -238,5 +274,6 @@ export function useRecordingStorage() {
     uploadRecordings,
     getSavedRecordings,
     hasItemsToUpload,
+    deleteUploadedRecordings,
   };
 }

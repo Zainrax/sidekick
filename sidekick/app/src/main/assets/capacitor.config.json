@@ -7,7 +7,7 @@
 	"server": {
 		"hostname": "cacophony.org.nz",
 		"androidScheme": "http",
-		"url": "http://localhost:5174"
+		"url": "http://localhost:5173"
 	},
 	"android": {
 		"path": "sidekick"

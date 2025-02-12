@@ -904,6 +904,17 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       log.logError({ message: "Failed to clear custom server", error });
     }
   };
+
+  createEffect(() => {
+    if (customServer()) return;
+    const user = data();
+    if (user?.prod) {
+      setServer("prod");
+    } else {
+      setServer("test");
+    }
+  });
+
   return {
     data,
     groups,
