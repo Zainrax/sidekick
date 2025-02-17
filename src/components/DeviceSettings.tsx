@@ -1061,6 +1061,114 @@ export function LocationSettingsTab(props: SettingProps) {
     }
   };
 
+  async function centerCropImage(
+    webPath: string,
+    outWidth: number,
+    outHeight: number
+  ): Promise<{ url: string; filePath: string }> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = async () => {
+        try {
+          // Create an offscreen canvas
+          const canvas = document.createElement("canvas");
+          canvas.width = outWidth;
+          canvas.height = outHeight;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject("Could not get 2D context from canvas.");
+            return;
+          }
+
+          // Original image width/height
+          const imgWidth = img.width;
+          const imgHeight = img.height;
+          // Desired aspect ratio we want to crop to
+          const desiredAspect = outWidth / outHeight;
+          // Original aspect ratio
+          const imgAspect = imgWidth / imgHeight;
+
+          let renderWidth, renderHeight, offsetX, offsetY;
+
+          if (imgAspect > desiredAspect) {
+            // Image is relatively wider than our desired aspect → match height
+            renderHeight = outHeight;
+            renderWidth = imgWidth * (renderHeight / imgHeight);
+            offsetX = -(renderWidth - outWidth) / 2;
+            offsetY = 0;
+          } else {
+            // Image is relatively taller or same ratio → match width
+            renderWidth = outWidth;
+            renderHeight = imgHeight * (renderWidth / imgWidth);
+            offsetX = 0;
+            offsetY = -(renderHeight - outHeight) / 2;
+          }
+
+          // Draw to canvas
+          ctx.drawImage(img, offsetX, offsetY, renderWidth, renderHeight);
+
+          // Convert to blob
+          canvas.toBlob(
+            async (blob) => {
+              if (!blob) {
+                reject("Failed converting canvas to Blob.");
+                return;
+              }
+
+              // Convert Blob → base64, so we can save via Capacitor Filesystem
+              const base64Data = await blobToBase64(blob);
+              const fileName = `cropped_${Date.now()}.jpg`;
+
+              // Write the file to the device (using a temporary location)
+              await Filesystem.writeFile({
+                path: fileName,
+                data: base64Data,
+                directory: Directory.Cache, // or Directory.Data if you prefer
+              });
+
+              // Grab the URI so we can later upload
+              const fileUri = await Filesystem.getUri({
+                path: fileName,
+                directory: Directory.Cache,
+              });
+
+              // Create an object URL for quick previews in the app (optional)
+              const objectUrl = URL.createObjectURL(blob);
+
+              resolve({
+                url: objectUrl, // for immediate preview (e.g. <img src={url} />)
+                filePath: fileUri.uri, // the actual local URI of the cropped file
+              });
+            },
+            "image/jpeg",
+            0.9
+          );
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = reject;
+      img.src = webPath; // Kick off loading
+    });
+  }
+
+  // Utility to convert Blob → base64 string
+  function blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        // DataURL format: "data:image/jpeg;base64,...."
+        // We just want the base64 portion after the comma
+        const base64String = dataUrl.split(",")[1];
+        resolve(base64String);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
   // Add photo handler with offline support
   const addPhotoToDevice = async () => {
     try {
@@ -1068,14 +1176,18 @@ export function LocationSettingsTab(props: SettingProps) {
         quality: 100,
         allowEditing: false,
         resultType: CameraResultType.Uri,
-        width: 640,
-        height: 480,
       });
 
       if (image.webPath) {
+        const { url, filePath } = await centerCropImage(
+          image.webPath,
+          640,
+          480
+        );
+
         setPhotoFileToUpload({
-          url: image.webPath,
-          path: image.path,
+          url,
+          path: filePath,
         });
       }
     } catch (error) {
@@ -1286,11 +1398,11 @@ export function LocationSettingsTab(props: SettingProps) {
               <div class="relative rounded-md bg-slate-100">
                 <Switch>
                   <Match when={photoUrl()}>
-                    <div class="group relative h-64">
-                      <img
-                        src={photoUrl()}
-                        class="h-full w-full rounded-md object-cover"
-                      />
+                    <div
+                      style={{ "aspect-ratio": "4/3" }}
+                      class=" group relative w-full"
+                    >
+                      <img src={photoUrl()} class="h-full w-full rounded-md" />
                       <div
                         class="
                           z-100 absolute inset-0 
@@ -1319,9 +1431,9 @@ export function LocationSettingsTab(props: SettingProps) {
                     <button
                       onClick={addPhotoToDevice}
                       class="
-                        flex h-48 w-full 
-                        flex-col items-center justify-center gap-2 text-blue-500 
-                        sm:h-64
+                        aspect-4/3 flex h-48 
+                        w-full flex-col items-center justify-center gap-2 
+                        text-blue-500 
                       "
                     >
                       <TbCameraPlus size={36} />

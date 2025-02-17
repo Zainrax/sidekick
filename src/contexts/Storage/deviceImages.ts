@@ -298,7 +298,7 @@ export function useDeviceImagesStorage() {
               return { status: 0 };
             });
 
-            if (res.status === 200) {
+            if (res.status === 200 || res.status === 403) {
               await Filesystem.deleteFile({ path: op.filePath }).catch(
                 (error) => {
                   console.error("Error deleting file", error);
@@ -446,21 +446,13 @@ export function useDeviceImagesStorage() {
           break;
         case 404: // No image on server
         case 403: // Unauthorized
-          if (
-            localImage &&
-            (localImage.serverStatus === "pending-deletion" ||
-              !localImage.serverStatus)
-          ) {
+          if (localImage && localImage.serverStatus === "pending-deletion") {
             console.log("403 Delete Device Photo", localImage);
             await deleteDevicePhoto(localImage, false);
           }
           break;
         case 422: // Unprocessable entity
-          if (
-            localImage &&
-            (localImage.serverStatus === "pending-deletion" ||
-              !localImage.serverStatus)
-          ) {
+          if (localImage && localImage.serverStatus === "pending-deletion") {
             console.log("422 Delete Device Photo", localImage);
             await deleteDevicePhoto(localImage, false);
           }
