@@ -1,6 +1,6 @@
 import { Camera, CameraResultType } from "@capacitor/camera";
 import { Dialog as Prompt } from "@capacitor/dialog";
-import { A, useSearchParams } from "@solidjs/router";
+import { A, useParams, useSearchParams } from "@solidjs/router";
 import { AiOutlineInfoCircle } from "solid-icons/ai";
 import {
   BiRegularNoSignal,
@@ -978,6 +978,7 @@ export function LocationSettingsTab(props: SettingProps) {
   const [isSyncing, setIsSyncing] = createSignal(false);
   // Save location data and handle photo upload
   const saveLocationSettings = async () => {
+    debugger;
     try {
       setIsSyncing(true);
       const deviceLocation = await context.getLocationCoords(id());
@@ -1069,8 +1070,8 @@ export function LocationSettingsTab(props: SettingProps) {
         quality: 100,
         allowEditing: false,
         resultType: CameraResultType.Uri,
-        width: 500,
-        height: 300,
+        width: 640,
+        height: 480,
       });
       debugger;
 
@@ -2301,6 +2302,7 @@ export function GroupSelect(props: SettingProps) {
       console.error(e);
     }
   });
+  const [params, setSearchParams] = useSearchParams();
   const setGroup = async (v: string) => {
     if (!user.groups()?.some((g) => g.groupName === v)) {
       const res = await user.createGroup(v);
@@ -2310,9 +2312,16 @@ export function GroupSelect(props: SettingProps) {
       log.logEvent("group_create", { name: v });
     }
     const token = user.data()?.token;
+    debugger;
     if (token) {
       log.logEvent("group_change", { name: v });
-      const res = await context.changeGroup(id(), v, token);
+      const [currId, success] = await context.changeGroup(id(), v, token);
+      if (params.deviceSettings) {
+        setSearchParams({ deviceSettings: currId, tab: params.tab });
+      }
+      if (params.setupDevice) {
+        setSearchParams({ setupDevice: currId, step: params.step });
+      }
     }
   };
 
@@ -2329,7 +2338,10 @@ export function GroupSelect(props: SettingProps) {
 
   const onOpenGroups = async () => {
     try {
-      const sameServer = user.isProd() === device()?.isProd;
+      const userIsProd = user.isProd();
+      const deviceIsProd = device()?.isProd ?? true;
+      const sameServer = deviceIsProd === userIsProd;
+      debugger;
       const notifyUser = !user.isLoggedIn() || !sameServer;
       if (notifyUser) {
         // Prompt to login
@@ -2620,7 +2632,7 @@ export function DeviceSettingsModal() {
   };
 
   const setCurrNav = (nav: ReturnType<typeof navItems>[number]) => {
-    setParams({ tab: nav });
+    setParams({ tab: nav, deviceSettings: params.deviceSettings });
   };
   return (
     <Show when={show()}>

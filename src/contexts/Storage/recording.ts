@@ -54,7 +54,6 @@ export function useRecordingStorage() {
     const res = await DevicePlugin.deleteRecording({
       recordingPath: recording.name,
     });
-    debugger;
     if (!res.success) {
       log.logWarning({
         message: "Failed to delete recording",
@@ -84,9 +83,9 @@ export function useRecordingStorage() {
 
   const uploadRecordings = async (warn = true) => {
     setShouldUpload(true);
-    let recordings = unuploadedRecordings().filter(
-      (rec) => rec.isProd === userContext.isProd()
-    );
+    const userProd = userContext.isProd();
+    const recs = unuploadedRecordings();
+    let recordings = recs.filter((rec) => rec.isProd === userProd);
     for (let i = 0; i < recordings.length; i++) {
       const shouldCancel = !shouldUpload();
       if (shouldCancel) return;
@@ -132,7 +131,6 @@ export function useRecordingStorage() {
           warn,
         });
       } else if (res.message.includes("recordingDateTime")) {
-        debugger;
         // This is a temporary fix for the issue where the audio file is corrupted, simply mark it as uploaded
         recording.isUploaded = true;
         recording.uploadId = null;
@@ -217,7 +215,6 @@ export function useRecordingStorage() {
   });
 
   const deleteUploadedRecordings = async (deviceId: string) => {
-    debugger;
     try {
       const toDelete = savedRecordings().filter(
         (r) => r.isUploaded && r.device === deviceId

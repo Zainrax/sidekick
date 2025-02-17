@@ -643,7 +643,6 @@ export function useDeviceImagesStorage() {
       const user = await userContext.getUser();
       if (!user) return;
       const pendingPhotos = itemsToUpload();
-      debugger;
 
       for (const photo of pendingPhotos) {
         try {

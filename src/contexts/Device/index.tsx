@@ -30,7 +30,6 @@ import { Effect } from "effect";
 import { useLogsContext } from "../LogsContext";
 import { useSearchParams } from "@solidjs/router";
 import { useUserContext } from "../User";
-import { Network } from "@capacitor/network";
 
 const WifiNetwork = z
   .object({
@@ -267,7 +266,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     deviceEventKeys.set(device.id, await getEventKeys(device));
 
   const clearUploaded = async (device: ConnectedDevice) => {
-    debugger;
     if (devicesDownloading.has(device.id)) return;
     await deleteUploadedRecordings(device);
     await deleteUploadedEvents(device);
@@ -276,16 +274,17 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   };
 
   // Regularly Poll recordings and events to clear uploaded
-  const CLEAR_UPLOADED_INTERVAL = 3000; // 5 seconds
+  const DEVICE_POLL_INTERVAL = 10000; // 10 seconds
   onMount(() => {
     const interval = setInterval(async () => {
-      await Promise.all(
-        devices
-          .values()
-          .filter((d) => d.isConnected)
-          .map(clearUploaded)
-      );
-    }, CLEAR_UPLOADED_INTERVAL);
+      for (const device of devices.values()) {
+        await storage.syncWithServer(device.id, device.isProd);
+        if (device.isConnected) {
+          await clearUploaded(device);
+          await refreshCheckAudioCapabilities(device);
+        }
+      }
+    }, DEVICE_POLL_INTERVAL);
     onCleanup(() => {
       clearInterval(interval);
     });
@@ -329,7 +328,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     try {
       const info = await fetchDeviceInfo(url);
       const id: DeviceId = info.deviceID.toString();
-      debugger;
       const type = info.type || "pi";
 
       return {
@@ -347,6 +345,21 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       };
     } catch (error) {
       throw new Error(`Could not create device from URL ${url}: ${error}`);
+    }
+  };
+
+  const refreshCheckAudioCapabilities = async (device: ConnectedDevice) => {
+    try {
+      const hasAudio = await hasAudioCapabilities(device.url);
+      if (hasAudio) {
+        device.hasAudioCapabilities = true;
+        devices.set(device.id, device);
+      }
+    } catch (error) {
+      log.logError({
+        message: "Error checking audio capabilities",
+        error,
+      });
     }
   };
 
@@ -370,6 +383,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
       const batteryPercentage = await getBattery(device.url);
       const hasAudio = await hasAudioCapabilities(device.url);
+      debugger;
 
       return {
         ...device,
@@ -467,6 +481,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       console.log("Connecting to device", newDevice);
       const device = await connectToDevice(newDevice);
       const userData = user.data();
+      debugger;
       if (device?.isConnected && userData?.token && apState() !== "connected") {
         try {
           // First check the existing device type
@@ -509,7 +524,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
               }),
             };
 
-            await CapacitorHttp.post({
+            const res = await CapacitorHttp.post({
               url: `${user.getServerUrl()}/api/v1/devices/${
                 device.id
               }/settings`,
@@ -519,6 +534,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
               },
               data: updateData,
             });
+            console.log("Update Device Type", res, updateData);
           }
         } catch (error) {
           console.error("Error updating device type:", error);
@@ -1004,7 +1020,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   };
 
   const deleteUploadedEvents = async (device: ConnectedDevice) => {
-    debugger;
     try {
       const { url } = device;
       const currEvents = await getEventKeys(device);
@@ -2101,9 +2116,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     deviceId: DeviceId,
     group: string,
     token: string
-  ) => {
+  ): Promise<[DeviceId, boolean]> => {
     const device = devices.get(deviceId);
-    if (!device || !device.isConnected) return false;
+    if (!device || !device.isConnected) return [deviceId, false];
     const { url } = device;
     const res = await CapacitorHttp.post({
       url: `${url}/api/reregister-authorized`,
@@ -2122,10 +2137,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
       devices.set(id, {
         ...device,
+        id,
         group,
       });
       devices.delete(deviceId);
-      return true;
+      return [id, true];
     } else if (res.status === 404 || res.status === 400) {
       const res = await DevicePlugin.reregisterDevice({
         url,
@@ -2137,10 +2153,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       if (res.success) {
         devices.set(id, {
           ...device,
+          id,
           group,
         });
         devices.delete(deviceId);
-        return true;
+        return [id, true];
       }
     }
     throw new Error("Could not change group");
@@ -2362,7 +2379,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   const isDeviceUpdating = (deviceId: DeviceId) => {
     const device = updatingDevice.get(deviceId);
-    debugger;
     return (
       device?.pending ||
       (device?.RunningUpdate && device?.LastCallSuccess !== false)
@@ -2440,18 +2456,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     "hybrid-thermal-audio",
     "unknown",
   ]);
-
-  createEffect(
-    on(
-      () => [...devices.values()],
-      async (devices) => {
-        if (apState() === "connected") return;
-        for (const device of devices) {
-          await storage.syncWithServer(device.id, device.isProd);
-        }
-      }
-    )
-  );
 
   return {
     devices,

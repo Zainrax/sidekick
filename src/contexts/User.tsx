@@ -433,29 +433,37 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
   }
 
   const [server, setServer] = createSignal<"test" | "prod" | "custom">("prod");
-  const isProd = () => server() === "prod";
+  const isProd = () => server() === "prod" || server() === "custom";
 
-  const [changeServer] = createResource(server, async (server) => {
-    try {
-      const res =
-        server === "prod"
-          ? await CacophonyPlugin.setToProductionServer()
-          : await CacophonyPlugin.setToTestServer();
+  const [changeServer] = createResource(
+    () => [server(), customServer()] as const,
+    async ([server, customServer]) => {
+      try {
+        debugger;
+        if (customServer) {
+          await CacophonyPlugin.setToCustomServer({ url: customServer });
+          return;
+        }
+        const res =
+          server === "prod"
+            ? await CacophonyPlugin.setToProductionServer()
+            : await CacophonyPlugin.setToTestServer();
 
-      if (!res.success) {
-        log.logWarning({
-          message: "Server switch failed",
-          details: res.message,
+        if (!res.success) {
+          log.logWarning({
+            message: "Server switch failed",
+            details: res.message,
+          });
+          throw new Error(`Failed to switch to ${server} server`);
+        }
+        console.info({
+          message: `Switched to ${server} server successfully`,
         });
-        throw new Error(`Failed to switch to ${server} server`);
+      } catch (error) {
+        log.logError({ message: "Error changing server", error });
       }
-      console.info({
-        message: `Switched to ${server} server successfully`,
-      });
-    } catch (error) {
-      log.logError({ message: "Error changing server", error });
     }
-  });
+  );
 
   interface JwtTokenPayload<
     T =
@@ -906,12 +914,13 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
   };
 
   createEffect(() => {
-    if (customServer()) return;
     const user = data();
-    if (user?.prod) {
-      setServer("prod");
-    } else {
+    if (customServer()) {
+      setServer("custom");
+    } else if (user && !user.prod) {
       setServer("test");
+    } else {
+      setServer("prod");
     }
   });
 
