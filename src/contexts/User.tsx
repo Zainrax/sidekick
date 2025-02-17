@@ -439,7 +439,6 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     () => [server(), customServer()] as const,
     async ([server, customServer]) => {
       try {
-        debugger;
         if (customServer) {
           await CacophonyPlugin.setToCustomServer({ url: customServer });
           return;
@@ -600,7 +599,6 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         });
         throw new Error("User not authenticated");
       }
-      debugger;
 
       const res = await CapacitorHttp.request({
         method: "POST",

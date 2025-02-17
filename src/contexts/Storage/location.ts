@@ -171,36 +171,40 @@ export function useLocationStorage() {
       }
     }
     const user = await userContext.getUser();
-    return await Promise.all(
-      locations.map(async (location) => {
-        if (!user || location.isProd !== user?.prod) return location;
-        if (location.needsCreation) {
-          const res = await createLocation(
-            {
-              ...location,
-              name: location.updateName ?? location.name,
-            },
-            false
-          );
-          return res;
-        }
-        if (location.updateName) {
-          let name = location.updateName;
-          // Make sure the name is unique
-          while (locations.some((loc) => loc.name === name)) {
-            name = `${location.updateName}(${Math.floor(Math.random() * 100)})`;
+    return (
+      await Promise.all(
+        locations.map(async (location) => {
+          if (!user || location.isProd !== user?.prod) return location;
+          if (location.needsCreation) {
+            const res = await createLocation(
+              {
+                ...location,
+                name: location.updateName ?? location.name,
+              },
+              false
+            );
+            return res;
           }
-          const synced = await syncLocationName(location, name);
-          if (synced) {
-            location.name = name;
-            location.updateName = undefined;
-          } else {
-            location.updateName = name;
+          if (location.updateName) {
+            let name = location.updateName;
+            // Make sure the name is unique
+            while (locations.some((loc) => loc.name === name)) {
+              name = `${location.updateName}(${Math.floor(
+                Math.random() * 100
+              )})`;
+            }
+            const synced = await syncLocationName(location, name);
+            if (synced) {
+              location.name = name;
+              location.updateName = undefined;
+            } else {
+              location.updateName = name;
+            }
           }
-        }
-        return location;
-      })
-    );
+          return location;
+        })
+      )
+    ).filter((location) => location !== undefined);
   }
 
   const [savedLocations, { mutate, refetch }] = createResource(
@@ -341,6 +345,7 @@ export function useLocationStorage() {
     }
     await insertLocation(db)(newLocation);
     mutate((locations) => [...(locations ?? []), newLocation.data]);
+    refetch();
   };
 
   // Update location name on server with retry
@@ -371,6 +376,8 @@ export function useLocationStorage() {
         isProd: loc.isProd,
         updateName: name,
       });
+    } finally {
+      refetch();
     }
     return false;
   };
@@ -384,112 +391,120 @@ export function useLocationStorage() {
       name?: string | null;
     },
     isConnectedToDeviceAp: boolean
-  ): Promise<Location> => {
-    const user = await userContext.getUser();
-    const fromDate = new Date().toISOString();
-    const newId = getNextLocationId();
-
-    // Validate coordinates
-    if (
-      !settings.coords ||
-      typeof settings.coords.lat !== "number" ||
-      typeof settings.coords.lng !== "number"
-    ) {
-      throw new Error("Invalid coordinates provided for location creation");
-    }
-
-    // Base local location object
-    const baseLocation: Location = {
-      id: newId,
-      ...settings,
-      name: settings.name || `New Location ${new Date().toLocaleDateString()}`,
-      updatedAt: fromDate,
-      needsCreation: true,
-      coords: settings.coords,
-      updateName: undefined,
-      needsRename: false,
-    };
-
-    // NEW: Try to find existing station on the server with same group & near coords
-    const renameIfServerHasSameCoords = async () => {
-      if (!user) return false;
-      if (user.prod !== settings.isProd) return false;
-      // If connected to device AP, we skip server calls
-      if (isConnectedToDeviceAp) return false;
-
-      // Get all server locations
-      const serverLocs = await getLocationsForUser(user.token);
-      if (!serverLocs) return false;
-
-      // Find any server station in same groupName & within ~30m or so (use your isWithinRange or direct distance)
-      const match = serverLocs.find((loc) => {
-        return (
-          loc.groupName === settings.groupName &&
-          isWithinRange(
-            [loc.coords.lat, loc.coords.lng],
-            [settings.coords.lat, settings.coords.lng],
-            0 /* accuracy */
-          )
-        );
-      });
-      if (!match) return false;
-
-      // If found, rename that station to baseLocation.name
-      const rename = await CacophonyPlugin.updateStation({
-        token: user.token,
-        id: match.id.toString(),
-        name: baseLocation.name!,
-      });
-      if (rename.success) {
-        // Reflect in baseLocation
-        baseLocation.id = match.id; // reuse existing ID from server
-        baseLocation.needsCreation = false;
-        return true;
-      }
-      return false;
-    };
-
+  ): Promise<Location | undefined> => {
     try {
-      // 1) If the server already has a station near these coords, rename it
-      const foundExisting = await renameIfServerHasSameCoords();
-      if (!foundExisting) {
-        // 2) If no existing station, create a new one on the server
-        if (user && user.prod === settings.isProd && !isConnectedToDeviceAp) {
-          await retry(async () => {
-            const res = await CacophonyPlugin.createStation({
-              token: user.token,
-              name: baseLocation.name!,
-              groupName: settings.groupName,
-              lat: settings.coords.lat.toString(),
-              lng: settings.coords.lng.toString(),
-              fromDate,
-            });
-            if (res.success) {
-              // Successfully created on server
-              baseLocation.id = parseInt(res.data);
-              baseLocation.needsCreation = false;
-            }
-          }, 3);
+      const user = await userContext.getUser();
+      const fromDate = new Date().toISOString();
+      const newId = getNextLocationId();
+
+      // Validate coordinates
+      if (
+        !settings.coords ||
+        typeof settings.coords.lat !== "number" ||
+        typeof settings.coords.lng !== "number"
+      ) {
+        throw new Error("Invalid coordinates provided for location creation");
+      }
+
+      // Base local location object
+      const baseLocation: Location = {
+        id: newId,
+        ...settings,
+        name:
+          settings.name || `New Location ${new Date().toLocaleDateString()}`,
+        updatedAt: fromDate,
+        needsCreation: true,
+        coords: settings.coords,
+        updateName: undefined,
+        needsRename: false,
+      };
+
+      // NEW: Try to find existing station on the server with same group & near coords
+      const renameIfServerHasSameCoords = async () => {
+        if (!user) return false;
+        if (user.prod !== settings.isProd) return false;
+        // If connected to device AP, we skip server calls
+        if (isConnectedToDeviceAp) return false;
+
+        // Get all server locations
+        const serverLocs = await getLocationsForUser(user.token);
+        if (!serverLocs) return false;
+
+        // Find any server station in same groupName & within ~30m or so (use your isWithinRange or direct distance)
+        const match = serverLocs.find((loc) => {
+          return (
+            loc.groupName === settings.groupName &&
+            isWithinRange(
+              [loc.coords.lat, loc.coords.lng],
+              [settings.coords.lat, settings.coords.lng],
+              0 /* accuracy */
+            )
+          );
+        });
+        if (!match) return false;
+
+        // If found, rename that station to baseLocation.name
+        const rename = await CacophonyPlugin.updateStation({
+          token: user.token,
+          id: match.id.toString(),
+          name: baseLocation.name!,
+        });
+        if (rename.success) {
+          // Reflect in baseLocation
+          baseLocation.id = match.id; // reuse existing ID from server
+          baseLocation.needsCreation = false;
+          return true;
         }
+        return false;
+      };
+
+      try {
+        // 1) If the server already has a station near these coords, rename it
+        const foundExisting = await renameIfServerHasSameCoords();
+        if (!foundExisting) {
+          // 2) If no existing station, create a new one on the server
+          if (user && user.prod === settings.isProd && !isConnectedToDeviceAp) {
+            await retry(async () => {
+              const res = await CacophonyPlugin.createStation({
+                token: user.token,
+                name: baseLocation.name!,
+                groupName: settings.groupName,
+                lat: settings.coords.lat.toString(),
+                lng: settings.coords.lng.toString(),
+                fromDate,
+              });
+              if (res.success) {
+                // Successfully created on server
+                baseLocation.id = parseInt(res.data);
+                baseLocation.needsCreation = false;
+              }
+            }, 3);
+          }
+        }
+      } catch (e) {
+        log.logWarning({
+          message: "Location created locally - will sync with server later",
+          details: "Device is offline or server communication failed",
+        });
+      } finally {
+        // Cleanup old local location if it had an ID
+        if (settings.id) {
+          await deleteLocation(db)(settings.id.toString(), settings.isProd);
+        }
+        // Upsert our new local location
+        await insertLocation(db)(baseLocation);
+        mutate((locations) => [
+          ...(locations ?? []).filter((loc) => loc.id !== settings.id),
+          baseLocation,
+        ]);
       }
-    } catch (e) {
-      log.logWarning({
-        message: "Location created locally - will sync with server later",
-        details: "Device is offline or server communication failed",
-      });
+      return baseLocation;
+    } catch (error) {
+      log.logError({ error, message: "Failed to create location" });
+      return undefined;
     } finally {
-      // Cleanup old local location if it had an ID
-      if (settings.id) {
-        await deleteLocation(db)(settings.id.toString(), settings.isProd);
-      }
-      // Upsert our new local location
-      await insertLocation(db)(baseLocation);
-      mutate((locations) => [
-        ...(locations ?? []).filter((loc) => loc.id !== settings.id),
-        baseLocation,
-      ]);
+      refetch();
     }
-    return baseLocation;
   };
 
   const deleteSyncLocations = async () => {

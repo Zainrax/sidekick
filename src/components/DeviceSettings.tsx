@@ -978,7 +978,6 @@ export function LocationSettingsTab(props: SettingProps) {
   const [isSyncing, setIsSyncing] = createSignal(false);
   // Save location data and handle photo upload
   const saveLocationSettings = async () => {
-    debugger;
     try {
       setIsSyncing(true);
       const deviceLocation = await context.getLocationCoords(id());
@@ -987,7 +986,10 @@ export function LocationSettingsTab(props: SettingProps) {
 
       // Validate device location
       if (!deviceLocation.success) {
-        throw new Error("Could not get device location coordinates");
+        log.logWarning({
+          message: "No device location found.",
+        });
+        return;
       }
 
       let savedLocation: Location | undefined;
@@ -1059,10 +1061,6 @@ export function LocationSettingsTab(props: SettingProps) {
     }
   };
 
-  createEffect(() => {
-    console.log("Location: ", location(), locationRes());
-  });
-
   // Add photo handler with offline support
   const addPhotoToDevice = async () => {
     try {
@@ -1073,7 +1071,6 @@ export function LocationSettingsTab(props: SettingProps) {
         width: 640,
         height: 480,
       });
-      debugger;
 
       if (image.webPath) {
         setPhotoFileToUpload({
@@ -1096,9 +1093,10 @@ export function LocationSettingsTab(props: SettingProps) {
       else return false;
     },
   });
+
   // Delete photo handler
   const removePhotoReference = async () => {
-    const img = currentPhoto();
+    const img = photoUrl();
     if (!img) return;
 
     const prompt = await Prompt.confirm({
@@ -1107,12 +1105,14 @@ export function LocationSettingsTab(props: SettingProps) {
     });
 
     if (prompt.value) {
-      await storage.deleteDevicesImages(
-        id(),
-        isProd(),
-        context.apState() === "connected"
-      );
-      refetchPhoto();
+      if (currentPhoto()) {
+        await storage.deleteDevicesImages(
+          id(),
+          isProd(),
+          context.apState() === "connected"
+        );
+        refetchPhoto();
+      }
       setPhotoFileToUpload(null);
     }
   };
@@ -1146,9 +1146,11 @@ export function LocationSettingsTab(props: SettingProps) {
     (currentPhoto()?.serverStatus !== "pending-deletion"
       ? currentPhoto()?.url
       : undefined);
-  createEffect(() => {
-    console.log("Location: ", location(), locationRes());
+
+  onMount(async () => {
+    await context.refetchDeviceLocToUpdate();
   });
+
   return (
     <section class="mx-auto w-full max-w-md p-2 sm:p-4">
       <Show
@@ -1221,6 +1223,7 @@ export function LocationSettingsTab(props: SettingProps) {
                   try {
                     setSettingLocation(true);
                     await context.setDeviceToCurrLocation(id());
+                    await context.refetchDeviceLocToUpdate();
                     await refetchLocation();
                   } catch (e) {
                     console.error("Failed to update location", e);
@@ -2312,7 +2315,6 @@ export function GroupSelect(props: SettingProps) {
       log.logEvent("group_create", { name: v });
     }
     const token = user.data()?.token;
-    debugger;
     if (token) {
       log.logEvent("group_change", { name: v });
       const [currId, success] = await context.changeGroup(id(), v, token);
@@ -2341,7 +2343,6 @@ export function GroupSelect(props: SettingProps) {
       const userIsProd = user.isProd();
       const deviceIsProd = device()?.isProd ?? true;
       const sameServer = deviceIsProd === userIsProd;
-      debugger;
       const notifyUser = !user.isLoggedIn() || !sameServer;
       if (notifyUser) {
         // Prompt to login
@@ -2628,12 +2629,23 @@ export function DeviceSettingsModal() {
   const show = () => !params.step && params.deviceSettings;
 
   const clearParams = () => {
+    console.log("Clearing Params");
     setParams({ deviceSettings: null, tab: null });
   };
 
   const setCurrNav = (nav: ReturnType<typeof navItems>[number]) => {
+    console.log("Setting Nav Params", nav);
     setParams({ tab: nav, deviceSettings: params.deviceSettings });
   };
+  createEffect(() => {
+    // path
+    console.log(
+      "Location Settings Tab",
+      params.step,
+      params.deviceSettings,
+      show()
+    );
+  });
   return (
     <Show when={show()}>
       {(id) => {

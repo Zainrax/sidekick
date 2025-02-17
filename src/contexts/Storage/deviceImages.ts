@@ -210,7 +210,6 @@ export function useDeviceImagesStorage() {
       });
 
       if (res.status === 200) {
-        debugger;
         return res.data as string;
       }
       return null;
@@ -452,6 +451,7 @@ export function useDeviceImagesStorage() {
             (localImage.serverStatus === "pending-deletion" ||
               !localImage.serverStatus)
           ) {
+            console.log("403 Delete Device Photo", localImage);
             await deleteDevicePhoto(localImage, false);
           }
           break;
@@ -461,6 +461,7 @@ export function useDeviceImagesStorage() {
             (localImage.serverStatus === "pending-deletion" ||
               !localImage.serverStatus)
           ) {
+            console.log("422 Delete Device Photo", localImage);
             await deleteDevicePhoto(localImage, false);
           }
           break;

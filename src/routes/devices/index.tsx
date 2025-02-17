@@ -377,7 +377,6 @@ function Devices() {
           {(state) => (
             <button
               onClick={async () => {
-                debugger;
                 try {
                   if (state() === "connected") {
                     if (tryDisconnect()) return;
@@ -450,6 +449,7 @@ function Devices() {
               });
               if (value) {
                 setSearchParams({
+                  ...searchParams,
                   setupDevice: devicesToUpdate[0],
                   step: "wifiSetup",
                 });
@@ -458,8 +458,9 @@ function Devices() {
               }
               setIsDialogOpen(false);
             } else {
-              const message = `${context.devices.get(devicesToUpdate[0])?.name
-                } has a different location stored. Would you like to update it to your current location?`;
+              const message = `${
+                context.devices.get(devicesToUpdate[0])?.name
+              } has a different location stored. Would you like to update it to your current location?`;
 
               setIsDialogOpen(true);
               const { value } = await Prompt.confirm({
@@ -470,6 +471,7 @@ function Devices() {
               if (value) {
                 await context.setDeviceToCurrLocation(devicesToUpdate[0]);
                 setSearchParams({
+                  ...searchParams,
                   deviceSettings: devicesToUpdate[0],
                   tab: "Location",
                 });
@@ -497,6 +499,7 @@ function Devices() {
               await context.setDeviceToCurrLocation(device);
             }
             setSearchParams({
+              ...searchParams,
               deviceSettings: devicesToUpdate[0],
               tab: "Location",
             });
@@ -509,33 +512,38 @@ function Devices() {
   );
 
   const findDevice = () => {
-    debugger;
     log.logEvent("Find Device");
-    setSearchParams({ step: "chooseDevice" });
+    setSearchParams({
+      ...searchParams,
+      step: "chooseDevice",
+    });
   };
 
-  const [promptedPermission, setPromptedPermission] = createSignal(false)
+  const [promptedPermission, setPromptedPermission] = createSignal(false);
   const [permission, { refetch }] = createResource(async () => {
     try {
       if (Capacitor.getPlatform() === "android") return true;
       const res = await DevicePlugin.checkPermissions();
-      console.log("PERMISSIONS", res.granted)
+      console.log("PERMISSIONS", res.granted);
       if (!res.granted && !promptedPermission()) {
         try {
-
-          const promptRes = await Prompt.confirm({ title: "Network Permssions", message: "You don't have local network permissions for sidekick which is essential for app functionality. Would you like open settings to change the permission?" })
+          const promptRes = await Prompt.confirm({
+            title: "Network Permssions",
+            message:
+              "You don't have local network permissions for sidekick which is essential for app functionality. Would you like open settings to change the permission?",
+          });
           if (promptRes.value) {
             NativeSettings.open({
               optionAndroid: AndroidSettings.ApplicationDetails,
               optionIOS: IOSSettings.App,
-            })
+            });
           }
         } catch (e) {
-          console.error("Permssions Error", e)
+          console.error("Permssions Error", e);
         }
-        setPromptedPermission(true)
+        setPromptedPermission(true);
       }
-      return res.granted
+      return res.granted;
     } catch (error) {
       console.error("Permissions Error:", error);
       return null;
@@ -546,6 +554,10 @@ function Devices() {
     App.addListener("appStateChange", () => {
       refetch();
     });
+  });
+  createEffect(() => {
+    //log devices
+    console.log("DEVICES", devices());
   });
 
   return (

@@ -383,7 +383,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
       const batteryPercentage = await getBattery(device.url);
       const hasAudio = await hasAudioCapabilities(device.url);
-      debugger;
 
       return {
         ...device,
@@ -481,7 +480,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       console.log("Connecting to device", newDevice);
       const device = await connectToDevice(newDevice);
       const userData = user.data();
-      debugger;
       if (device?.isConnected && userData?.token && apState() !== "connected") {
         try {
           // First check the existing device type
@@ -959,12 +957,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   const saveRecordings = async (device: ConnectedDevice) => {
     const recs = deviceRecordings.get(device.id);
     const savedRecs = storage.savedRecordings();
-    debugger;
     if (!recs) return;
     const nonSavedRecs = recs.filter(
       (r) => !savedRecs.find((s) => s.name === r && s.device === device.id)
     );
-    debugger;
     if (!nonSavedRecs.length) return;
     // Filter out recordings that have already been saved
     for (const rec of nonSavedRecs) {
@@ -2034,8 +2030,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           credentials: "include",
         },
       });
-      console.log("Audio mode", res);
-      console.trace();
       return res.status === 200
         ? AudioModeResSchema.parse(JSON.parse(res.data))["audio-mode"]
         : null;
@@ -2135,12 +2129,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const info = await fetchDeviceInfo(url);
       const id: DeviceId = info.deviceID.toString();
 
+      devices.delete(deviceId);
       devices.set(id, {
         ...device,
         id,
         group,
       });
-      devices.delete(deviceId);
       return [id, true];
     } else if (res.status === 404 || res.status === 400) {
       const res = await DevicePlugin.reregisterDevice({
@@ -2151,12 +2145,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const info = await fetchDeviceInfo(url);
       const id: DeviceId = info.deviceID.toString();
       if (res.success) {
+        devices.delete(deviceId);
         devices.set(id, {
           ...device,
           id,
           group,
         });
-        devices.delete(deviceId);
         return [id, true];
       }
     }
