@@ -3,9 +3,7 @@
 // and will be used to manage the state of the notifications
 // such as error messages, success messages, and loading messages
 
-import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
 import { JSX, createSignal } from "solid-js";
-import StackTrace from "stacktrace-js";
 
 type NotifcationType = "error" | "warning" | "sync" | "success" | "loading";
 type NotificationID = string;
@@ -90,18 +88,6 @@ const logAction = async (log: AnyLog) => {
     ]);
     if (log.type === "success" || log.type === "loading" || log.timeout) {
       hideNotification(id, log.timeout ?? defaultDuration);
-    }
-  }
-  if (isErrorLog(log)) {
-    const message = `message: ${log.message} details: ${log.details}`;
-    if (log.error && log.error instanceof Error) {
-      const stacktrace = await StackTrace.fromError(log.error);
-      await FirebaseCrashlytics.recordException({
-        message,
-        stacktrace,
-      });
-    } else {
-      await FirebaseCrashlytics.recordException({ message });
     }
   }
 };

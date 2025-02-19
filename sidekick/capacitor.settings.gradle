@@ -8,9 +8,6 @@ project(':capacitor-community-keep-awake').projectDir = new File('../node_module
 include ':capacitor-community-sqlite'
 project(':capacitor-community-sqlite').projectDir = new File('../node_modules/.pnpm/@capacitor-community+sqlite@6.0.1_@capacitor+core@6.1.2/node_modules/@capacitor-community/sqlite/android')
 
-include ':capacitor-firebase-crashlytics'
-project(':capacitor-firebase-crashlytics').projectDir = new File('../node_modules/.pnpm/@capacitor-firebase+crashlytics@6.0.0_@capacitor+core@6.1.2_firebase@10.14.1/node_modules/@capacitor-firebase/crashlytics/android')
-
 include ':capacitor-app'
 project(':capacitor-app').projectDir = new File('../node_modules/.pnpm/@capacitor+app@6.0.1_@capacitor+core@6.1.2/node_modules/@capacitor/app/android')
 
@@ -37,12 +34,6 @@ project(':capacitor-network').projectDir = new File('../node_modules/.pnpm/@capa
 
 include ':capacitor-preferences'
 project(':capacitor-preferences').projectDir = new File('../node_modules/.pnpm/@capacitor+preferences@6.0.2_@capacitor+core@6.1.2/node_modules/@capacitor/preferences/android')
-
-include ':capgo-camera-preview'
-project(':capgo-camera-preview').projectDir = new File('../node_modules/.pnpm/@capgo+camera-preview@6.5.19_@capacitor+core@6.1.2/node_modules/@capgo/camera-preview/android')
-
-include ':capgo-capacitor-uploader'
-project(':capgo-capacitor-uploader').projectDir = new File('../node_modules/.pnpm/@capgo+capacitor-uploader@0.0.27_@capacitor+core@6.1.2/node_modules/@capgo/capacitor-uploader/android')
 
 include ':sentry-capacitor'
 project(':sentry-capacitor').projectDir = new File('../node_modules/.pnpm/@sentry+capacitor@1.0.2_@capacitor+core@6.1.2/node_modules/@sentry/capacitor/android')

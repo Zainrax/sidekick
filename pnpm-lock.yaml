@@ -14,9 +14,6 @@ importers:
       '@capacitor-community/sqlite':
         specifier: 6.0.1
         version: 6.0.1(@capacitor/core@6.1.2)
-      '@capacitor-firebase/crashlytics':
-        specifier: 6.0.0
-        version: 6.0.0(@capacitor/core@6.1.2)(firebase@10.14.1)
       '@capacitor/android':
         specifier: ^6.1.0
         version: 6.1.2(@capacitor/core@6.1.2)
@@ -53,12 +50,6 @@ importers:
       '@capacitor/preferences':
         specifier: ^6.0.1
         version: 6.0.2(@capacitor/core@6.1.2)
-      '@capgo/camera-preview':
-        specifier: ^6.5.19
-        version: 6.5.19(@capacitor/core@6.1.2)
-      '@capgo/capacitor-uploader':
-        specifier: ^0.0.27
-        version: 0.0.27(@capacitor/core@6.1.2)
       '@libsql/client':
         specifier: ^0.12.0
         version: 0.12.0
@@ -356,15 +347,6 @@ packages:
     peerDependencies:
       '@capacitor/core': ^6.0.0
 
-  '@capacitor-firebase/crashlytics@6.0.0':
-    resolution: {integrity: sha512-gd7o2krsKw0yYjMMUQSdu1JNVex1WvRThr9xRdPKvMyBhkmg8xPJP+1RveCqXjvjg2OdBgEfevxDe2fYRblViw==}
-    peerDependencies:
-      '@capacitor/core': ^6.0.0
-      firebase: '*'
-    peerDependenciesMeta:
-      firebase:
-        optional: true
-
   '@capacitor/android@6.1.2':
     resolution: {integrity: sha512-Yh0gQDY1bgRrL25J6ecIlvvs2kF8iNSwIPXjyw6Yz9mnwYxBazF5KZbjpKtGPnJgicJhFkYGsqOkEtxrve0EoQ==}
     peerDependencies:
@@ -435,16 +417,6 @@ packages:
 
   '@capacitor/preferences@6.0.2':
     resolution: {integrity: sha512-ccD4/9ybnipJncLeCWlRPNQS2jv3nn8ivVLKzdVIWkiUHLo/hvuSSP7awVzvBwDNtAhNxIipjjWH6TyzZgLCcg==}
-    peerDependencies:
-      '@capacitor/core': ^6.0.0
-
-  '@capgo/camera-preview@6.5.19':
-    resolution: {integrity: sha512-raqWgJnBjO3MXlNH13yXzYM7LKqsDAImMCy7OoDt98PqbxFOr9q8qxB4zSpbAazHhnCLql5tM1zSzQI2r9eA7A==}
-    peerDependencies:
-      '@capacitor/core': ^6.0.0
-
-  '@capgo/capacitor-uploader@0.0.27':
-    resolution: {integrity: sha512-tCku2CO84uAsZkauOylwgHEgf4SL3sT1Vory7Kz6ktr6n9P2kXLYy1EwuMh71OkskvgHg3z4MqfiXrgRGEaPKw==}
     peerDependencies:
       '@capacitor/core': ^6.0.0
 
@@ -4732,12 +4704,6 @@ snapshots:
       '@capacitor/core': 6.1.2
       jeep-sqlite: 2.8.0
 
-  '@capacitor-firebase/crashlytics@6.0.0(@capacitor/core@6.1.2)(firebase@10.14.1)':
-    dependencies:
-      '@capacitor/core': 6.1.2
-    optionalDependencies:
-      firebase: 10.14.1
-
   '@capacitor/android@6.1.2(@capacitor/core@6.1.2)':
     dependencies:
       '@capacitor/core': 6.1.2
@@ -4850,14 +4816,6 @@ snapshots:
       '@capacitor/core': 6.1.2
 
   '@capacitor/preferences@6.0.2(@capacitor/core@6.1.2)':
-    dependencies:
-      '@capacitor/core': 6.1.2
-
-  '@capgo/camera-preview@6.5.19(@capacitor/core@6.1.2)':
-    dependencies:
-      '@capacitor/core': 6.1.2
-
-  '@capgo/capacitor-uploader@0.0.27(@capacitor/core@6.1.2)':
     dependencies:
       '@capacitor/core': 6.1.2
 

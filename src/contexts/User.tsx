@@ -13,7 +13,6 @@ import { z } from "zod";
 import { CacophonyPlugin } from "./CacophonyApi";
 import { useNavigate } from "@solidjs/router";
 import { CapacitorHttp } from "@capacitor/core";
-import { FirebaseCrashlytics } from "@capacitor-firebase/crashlytics";
 import { useLogsContext } from "./LogsContext";
 import { Effect, Either } from "effect";
 
@@ -307,24 +306,6 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       return false;
     }
   );
-
-  createEffect(() => {
-    on(data, async (user) => {
-      try {
-        if (user) {
-          await FirebaseCrashlytics.setUserId({ userId: user.id });
-        } else {
-          await FirebaseCrashlytics.setUserId({ userId: "" });
-        }
-      } catch (error) {
-        log.logError({
-          message: "Failed to set user ID in Crashlytics",
-          error,
-        });
-      }
-    });
-  });
-
   async function logout() {
     console.trace();
     try {

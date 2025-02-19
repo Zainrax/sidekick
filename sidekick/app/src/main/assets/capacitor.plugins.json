@@ -8,10 +8,6 @@
 		"classpath": "com.getcapacitor.community.database.sqlite.CapacitorSQLitePlugin"
 	},
 	{
-		"pkg": "@capacitor-firebase/crashlytics",
-		"classpath": "io.capawesome.capacitorjs.plugins.firebase.crashlytics.FirebaseCrashlyticsPlugin"
-	},
-	{
 		"pkg": "@capacitor/app",
 		"classpath": "com.capacitorjs.plugins.app.AppPlugin"
 	},
@@ -46,14 +42,6 @@
 	{
 		"pkg": "@capacitor/preferences",
 		"classpath": "com.capacitorjs.plugins.preferences.PreferencesPlugin"
-	},
-	{
-		"pkg": "@capgo/camera-preview",
-		"classpath": "com.ahm.capacitor.camera.preview.CameraPreview"
-	},
-	{
-		"pkg": "@capgo/capacitor-uploader",
-		"classpath": "ee.forgr.capacitor.uploader.UploaderPlugin"
 	},
 	{
 		"pkg": "@sentry/capacitor",

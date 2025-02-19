@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("com.google.gms.google-services")
@@ -16,7 +17,7 @@ val sdk = 34
 val minSdkVersion = 22
 val majorVersion = 3
 val minorVersion = 10
-val patchVersion = 0
+val patchVersion = 1
 android {
     buildToolsVersion = "34.0.0"
     namespace = "nz.org.cacophony.sidekick"
@@ -27,14 +28,16 @@ android {
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
                 storeFile = file(keystoreProperties.getProperty("storeFile"))
-                storePassword = keystoreProperties.getProperty("storePassword")            }
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
         }
     }
     defaultConfig {
         applicationId = "nz.org.cacophony.sidekick"
         minSdk = minSdkVersion
         targetSdk = sdk
-        versionCode =  minSdkVersion * 10000000 + majorVersion * 10000 + minorVersion * 100 + patchVersion
+        versionCode =
+            minSdkVersion * 10000000 + majorVersion * 10000 + minorVersion * 100 + patchVersion
         versionName = "$majorVersion.$minorVersion.$patchVersion"
     }
     buildFeatures {
@@ -49,7 +52,7 @@ android {
         }
     }
     buildTypes {
-        getByName("release")  {
+        getByName("release") {
             signingConfig = signingConfigs.getByName("debug")
             if (performSigning) {
                 signingConfig = signingConfigs.getByName("config")
