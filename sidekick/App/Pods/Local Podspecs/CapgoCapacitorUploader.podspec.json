@@ -1,0 +1,23 @@
+{
+  "name": "CapgoCapacitorUploader",
+  "version": "0.0.27",
+  "summary": "Upload file natively",
+  "license": "MIT",
+  "homepage": "git+https://github.com/Cap-go/capacitor-uploader.git",
+  "authors": "Martin Donadieu <martin@capgo.app>",
+  "source": {
+    "git": "git+https://github.com/Cap-go/capacitor-uploader.git",
+    "tag": "0.0.27"
+  },
+  "source_files": "ios/Sources/**/*.{swift,h,m,c,cc,mm,cpp}",
+  "platforms": {
+    "ios": "13.0"
+  },
+  "dependencies": {
+    "Capacitor": [
+
+    ]
+  },
+  "swift_versions": "5.1",
+  "swift_version": "5.1"
+}

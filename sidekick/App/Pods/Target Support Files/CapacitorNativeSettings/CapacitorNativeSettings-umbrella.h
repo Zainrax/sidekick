@@ -10,7 +10,6 @@
 #endif
 #endif
 
-#import "NativeSettingsPlugin.h"
 
 FOUNDATION_EXPORT double CapacitorNativeSettingsVersionNumber;
 FOUNDATION_EXPORT const unsigned char CapacitorNativeSettingsVersionString[];

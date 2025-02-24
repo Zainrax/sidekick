@@ -20,9 +20,11 @@ public class CacophonyPlugin: CAPPlugin, CAPBridgedPlugin {
     CAPPluginMethod(name:"validateToken", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"setToTestServer", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"setToProductionServer", returnType: CAPPluginReturnPromise),
+    CAPPluginMethod(name:"setToCustomServer", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"uploadRecording", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"getStationsForUser", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"updateStation", returnType: CAPPluginReturnPromise),
+    CAPPluginMethod(name:"getReferenceImage", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"getReferencePhoto", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"uploadReferencePhoto", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"deleteReferencePhoto", returnType: CAPPluginReturnPromise),
@@ -57,6 +59,11 @@ public class CacophonyPlugin: CAPPlugin, CAPBridgedPlugin {
             self?.cacophony.setToProductionServer(call: pluginCall(call: call))
         }
     }
+    @objc func setToCustomServer(_ call: CAPPluginCall) {
+        DispatchQueue.global().async { [weak self] in
+            self?.cacophony.setToCustomServer(call: pluginCall(call: call))
+        }
+    }
     @objc func uploadRecording(_ call: CAPPluginCall) {
         DispatchQueue.global().async { [weak self] in
             self?.cacophony.uploadRecording(call: pluginCall(call: call))
@@ -80,6 +87,11 @@ public class CacophonyPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func uploadReferencePhoto(_ call:CAPPluginCall) {
         DispatchQueue.global().async { [weak self] in
             self?.cacophony.uploadReferencePhoto(call: pluginCall(call: call))
+        }
+    }
+    @objc func getReferenceImage(_ call:CAPPluginCall) {
+        DispatchQueue.global().async { [weak self] in
+            self?.cacophony.getReferenceImage(call: pluginCall(call: call))
         }
     }
     @objc func getReferencePhoto(_ call:CAPPluginCall) {
