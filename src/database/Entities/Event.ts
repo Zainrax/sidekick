@@ -4,7 +4,7 @@ import { removeEscapedQuotes } from "..";
 
 const DBName = "events";
 
-// sqlite schem
+// SQLite schema
 export const createEventSchema = `
 CREATE TABLE IF NOT EXISTS ${DBName} (
   key TEXT PRIMARY KEY,
@@ -42,8 +42,8 @@ export const insertEvent = (db: SQLiteDBConnection) => async (event: Event) => {
     event.type,
     event.device,
     event.details,
-    event.isUploaded,
-    event.isProd,
+    event.isUploaded ? 1 : 0,
+    event.isProd ? 1 : 0,
   ];
   return db.run(sql, values);
 };
@@ -82,6 +82,25 @@ export const updateEvent = (db: SQLiteDBConnection) => async (event: Event) => {
   return db.run(sql);
 };
 
+/**
+ * Updates multiple events in a batch
+ * @param db SQLite database connection
+ * @returns Promise that resolves when update is complete
+ */
+export const updateEvents =
+  (db: SQLiteDBConnection) => async (events: Event[]) => {
+    if (events.length === 0) return;
+
+    // Create update statements for all events
+    const statements = events.map((event) => ({
+      statement: `UPDATE ${DBName} SET isUploaded = ? WHERE key = ?;`,
+      values: [event.isUploaded ? 1 : 0, event.key],
+    }));
+
+    // Execute all updates in one batch
+    return await db.executeSet(statements);
+  };
+
 export const deleteEvent = (db: SQLiteDBConnection) => async (event: Event) => {
   const sql = `DELETE FROM ${DBName} WHERE key = '${event.key}';`;
   return db.run(sql);
@@ -90,9 +109,10 @@ export const deleteEvent = (db: SQLiteDBConnection) => async (event: Event) => {
 export const deleteEvents =
   (db: SQLiteDBConnection) => async (events: Event[]) => {
     if (events.length === 0) return;
+
+    // Simple SQL statement to delete multiple records
     const sql = `DELETE FROM ${DBName} WHERE key IN (${events
       .map((e) => `'${e.key}'`)
       .join(",")});`;
-
-    return db.run(sql);
+    return await db.run(sql);
   };

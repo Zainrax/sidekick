@@ -1,67 +1,74 @@
 package nz.org.cacophony.sidekick
 
-import android.Manifest
-import android.annotation.SuppressLint
-import android.app.Activity.RESULT_OK
-import android.app.Instrumentation
 import android.content.Context
 import android.net.ConnectivityManager
-import android.net.ConnectivityManager.NetworkCallback
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
-import android.net.nsd.NsdManager
-import android.net.nsd.NsdServiceInfo
-import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiManager
-import android.net.wifi.WifiManager.MulticastLock
-import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import androidx.activity.result.ActivityResult
-import androidx.core.content.ContextCompat
+import android.util.Log
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
-import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import nz.org.cacophony.sidekick.device.DeviceInterface
-import org.json.JSONException
-import java.net.InetSocketAddress
-import java.net.Socket
 
 @CapacitorPlugin(name = "Device")
 class DevicePlugin : Plugin() {
-    private var callQueue: MutableMap<String, CallType> = mutableMapOf()
-    private var discoveryRetryCount = 0
-    private val MAX_DISCOVERY_RETRIES = 3
-    private val DISCOVERY_RETRY_DELAY = 5000L // 5 seconds
 
+    companion object {
+        private const val TAG = "DevicePlugin"
+    }
+
+    // Main device interface
     private lateinit var device: DeviceInterface
-    private var wifiNetwork: Network? = null
-    var currNetworkCallback: NetworkCallback? = null
-    private var cm: ConnectivityManager? = null
+
+    // Enhanced NSD discovery component
+    private lateinit var nsdHelper: NsdHelper
+
+    // Enhanced AP connection component
+    private lateinit var apConnector: ApConnector
+
+    // Multicast lock for NSD
     private lateinit var multicastLock: WifiManager.MulticastLock
-    private val type = "_cacophonator-management._tcp."
 
-    private var nsdHelper: NsdHelper? = null
-    private var isDiscovering: Boolean = false
+    // Coroutine scope for async operations
+    private val coroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-    // Add a flag to keep track of whether to use the multicast lock
-    private var useMulticastLock = false
-    private var multicastLockUsedInCurrentDiscovery = false
+    // For tracking long-running operations
+    private var discoveryActive = false
 
+    // Main handler for UI updates
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Plugin initialization
+     */
     override fun load() {
         super.load()
-        device = DeviceInterface(context.applicationContext.filesDir.absolutePath)
-        val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        multicastLock = wifi.createMulticastLock("multicastLock")
+        Log.d(TAG, "Loading DevicePlugin")
 
-        // Create once
+        // Initialize device interface
+        device = DeviceInterface(context.applicationContext.filesDir.absolutePath)
+
+        // Initialize multicast lock for NSD
+        val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        multicastLock = wifi.createMulticastLock("deviceMulticastLock").apply {
+            setReferenceCounted(true)
+        }
+
+        // Initialize enhanced NSD helper
         nsdHelper = NsdHelper(context.applicationContext).apply {
             onServiceResolved = { service ->
+                Log.d(TAG, "Service resolved: ${service.serviceName}")
                 val serviceJson = JSObject().apply {
                     val endpoint = "${service.serviceName}.local"
                     put("endpoint", endpoint)
@@ -72,6 +79,7 @@ class DevicePlugin : Plugin() {
             }
 
             onServiceLost = { service ->
+                Log.d(TAG, "Service lost: ${service.serviceName}")
                 val result = JSObject().apply {
                     val endpoint = "${service.serviceName}.local"
                     put("endpoint", endpoint)
@@ -79,211 +87,351 @@ class DevicePlugin : Plugin() {
                 notifyListeners("onServiceLost", result)
             }
 
-            onDiscoveryError = { err ->
-                // Optionally we can emit an event or finish the plugin call with an error
-                // We'll also log it
-                val errMsg = "Discovery error: ${err.message}"
-                notifyListeners("onDiscoveryError", JSObject().apply {
-                    put("error", errMsg)
-                })
+            onServiceResolveFailed = { serviceName, errorCode, message ->
+                Log.d(TAG, "Service resolve failed: $serviceName, code=$errorCode")
+                val result = JSObject().apply {
+                    put("endpoint", serviceName)
+                    put("errorCode", errorCode)
+                    put("message", message)
+                }
+                notifyListeners("onServiceResolveFailed", result)
+            }
+
+            onDiscoveryError = { error, isFatal ->
+                Log.e(TAG, "Discovery error: ${error.message}, fatal=$isFatal")
+                val obj = JSObject().apply {
+                    put("error", error.message)
+                    put("fatal", isFatal)
+                }
+                notifyListeners("onDiscoveryError", obj)
+
+                if (isFatal) {
+                    discoveryActive = false
+                }
+            }
+
+            onDiscoveryStateChanged = { newState ->
+                Log.d(TAG, "Discovery state changed: $newState")
+                val obj = JSObject().apply {
+                    put("state", newState.name)
+                }
+                notifyListeners("onDiscoveryStateChanged", obj)
+
+                // Update tracking flag based on state
+                discoveryActive = when (newState) {
+                    NsdHelper.DiscoveryState.ACTIVE,
+                    NsdHelper.DiscoveryState.STARTING,
+                    NsdHelper.DiscoveryState.RESTARTING -> true
+
+                    else -> false
+                }
             }
         }
+
+        // Initialize enhanced AP connector
+        apConnector = ApConnector(context.applicationContext)
+
+        // Register AP connection callbacks
+        apConnector.addConnectionCallback(object : ApConnector.ConnectionCallbacks {
+            override fun onStateChanged(newState: ApConnector.ConnectionState) {
+                val stateObj = JSObject().apply {
+                    put("state", newState.name)
+                }
+                notifyListeners("onAPConnectionStateChanged", stateObj)
+            }
+
+            override fun onConnected() {
+                val result = JSObject().apply {
+                    put("status", "connected")
+                }
+                notifyListeners("onAPConnected", result)
+            }
+
+            override fun onDisconnected() {
+                val result = JSObject().apply {
+                    put("status", "disconnected")
+                }
+                notifyListeners("onAPDisconnected", result)
+            }
+
+            override fun onConnectionFailed(reason: String, canRetry: Boolean) {
+                val result = JSObject().apply {
+                    put("status", "error")
+                    put("error", reason)
+                    put("canRetry", canRetry)
+                }
+                notifyListeners("onAPConnectionFailed", result)
+            }
+
+            override fun onConnectionLost() {
+                val result = JSObject().apply {
+                    put("status", "lost")
+                }
+                notifyListeners("onAPConnectionLost", result)
+            }
+        })
     }
 
-    enum class CallType {
-        DISCOVER,
+    /**
+     * Plugin cleanup
+     */
+    override fun handleOnDestroy() {
+        super.handleOnDestroy()
+        Log.d(TAG, "Destroying DevicePlugin")
+
+        // Clean up all resources
+        stopDiscovery()
+
+        if (multicastLock.isHeld) {
+            multicastLock.release()
+        }
+
+        nsdHelper.cleanup()
+        apConnector.cleanup()
+        coroutineScope.cancel()
     }
 
+    // -----------------------------
+    // DISCOVERY
+    // -----------------------------
+    /**
+     * Start device discovery
+     */
     @PluginMethod
     fun discoverDevices(call: PluginCall) {
-        if (isDiscovering) {
+        Log.d(TAG, "Starting device discovery")
+
+        if (discoveryActive) {
             call.reject("Discovery is already in progress")
             return
         }
 
-        isDiscovering = true
         try {
-            // Acquire the multicast lock if you want
+            // Acquire multicast lock if needed
             if (!multicastLock.isHeld) {
                 multicastLock.acquire()
             }
-            nsdHelper?.startDiscovery()
+
+            // Start enhanced discovery
+            nsdHelper.startDiscovery()
+            discoveryActive = true
+
             call.resolve()
         } catch (e: Exception) {
-            isDiscovering = false
+            Log.e(TAG, "Failed to start discovery: ${e.message}")
             if (multicastLock.isHeld) {
                 multicastLock.release()
             }
+            discoveryActive = false
             call.reject("Failed to start discovery: ${e.message}")
         }
     }
 
+    /**
+     * Stop device discovery
+     */
     @PluginMethod
     fun stopDiscoverDevices(call: PluginCall) {
+        Log.d(TAG, "Stopping device discovery")
+
         val result = JSObject()
-        if (!isDiscovering) {
-            result.put("success", true)
-            call.resolve(result)
-            return
-        }
+
         try {
+            // Stop NSD discovery
+            nsdHelper.stopDiscovery()
+
+            // Release multicast lock
             if (multicastLock.isHeld) {
                 multicastLock.release()
             }
-            nsdHelper?.stopDiscovery()
-            isDiscovering = false
+
+            discoveryActive = false
+            result.put("success", true)
+            call.resolve(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping discovery: ${e.message}")
+            result.put("success", false)
+            result.put("message", e.message)
+            call.resolve(result)
+        }
+    }
+
+    // -----------------------------
+    // CONNECT / DISCONNECT from bushnet
+    // -----------------------------
+    /**
+     * Connect to device AP
+     */
+    @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
+    fun connectToDeviceAP(call: PluginCall) {
+        Log.d(TAG, "Connecting to device AP")
+
+        coroutineScope.launch(Dispatchers.Main) {
+            try {
+                // Check current state
+                if (apConnector.connectionState == ApConnector.ConnectionState.CONNECTED) {
+                    val result = JSObject().apply {
+                        put("status", "connected")
+                    }
+                    call.resolve(result)
+                    return@launch
+                }
+
+                // Start connection attempt
+                val started = apConnector.connect()
+
+                if (!started) {
+                    val result = JSObject().apply {
+                        put("status", "error")
+                        put("error", "Could not start connection process")
+                    }
+                    call.resolve(result)
+                    return@launch
+                }
+
+                // Connection process started successfully
+                // Wait for callbacks to handle the rest
+                // We'll resolve immediately to let the UI know we're connecting
+                val result = JSObject().apply {
+                    put("status", "connecting")
+                }
+                call.resolve(result)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error connecting to AP: ${e.message}")
+                val result = JSObject().apply {
+                    put("status", "error")
+                    put("error", e.message)
+                }
+                call.resolve(result)
+            }
+        }
+    }
+
+    /**
+     * Disconnect from device AP
+     */
+    @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
+    fun disconnectFromDeviceAP(call: PluginCall) {
+        Log.d(TAG, "Disconnecting from device AP")
+
+        coroutineScope.launch(Dispatchers.Main) {
+            try {
+                // Check current state
+                if (apConnector.connectionState != ApConnector.ConnectionState.CONNECTED &&
+                    apConnector.connectionState != ApConnector.ConnectionState.CONNECTION_LOST
+                ) {
+                    val result = JSObject().apply {
+                        put("success", true)
+                        put("message", "Already disconnected")
+                    }
+                    call.resolve(result)
+                    return@launch
+                }
+
+                // Start disconnect
+                val started = apConnector.disconnect()
+
+                if (!started) {
+                    val result = JSObject().apply {
+                        put("success", false)
+                        put("message", "Could not start disconnect process")
+                    }
+                    call.resolve(result)
+                    return@launch
+                }
+
+                // Disconnect process started
+                // We'll resolve immediately to let the UI know we're disconnecting
+                val result = JSObject().apply {
+                    put("success", true)
+                    put("message", "Disconnecting from device AP")
+                }
+                call.resolve(result)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error disconnecting from AP: ${e.message}")
+                val result = JSObject().apply {
+                    put("success", false)
+                    put("message", e.message)
+                }
+                call.resolve(result)
+            }
+        }
+    }
+
+    /**
+     * Check if AP connection is active
+     */
+    @PluginMethod
+    fun checkIsAPConnected(call: PluginCall) {
+        Log.d(TAG, "Checking AP connection")
+
+        val result = JSObject()
+        try {
+            val connected = apConnector.isConnected()
+            result.put("connected", connected)
             result.put("success", true)
         } catch (e: Exception) {
+            Log.e(TAG, "Error checking AP connection: ${e.message}")
+            result.put("connected", false)
             result.put("success", false)
             result.put("message", e.message)
         }
         call.resolve(result)
     }
 
+    /**
+     * Check if we have an active network connection
+     */
+    @PluginMethod
+    fun hasConnection(call: PluginCall) {
+        Log.d(TAG, "Checking network connection")
+
+        val result = JSObject()
+        try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+            val isConnected = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val network = cm.activeNetwork
+                val capabilities = cm.getNetworkCapabilities(network)
+                capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+            } else {
+                @Suppress("DEPRECATION")
+                val networkInfo = cm.activeNetworkInfo
+                networkInfo?.isConnected == true
+            }
+
+            result.put("success", true)
+            result.put("connected", isConnected)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking connection: ${e.message}")
+            result.put("success", false)
+            result.put("connected", false)
+            result.put("message", e.message)
+        }
+        call.resolve(result)
+    }
+
+    // -----------------------------
+    // Helper methods
+    // -----------------------------
+    /**
+     * Safely stop discovery
+     */
+    private fun stopDiscovery() {
+        try {
+            nsdHelper.stopDiscovery()
+            discoveryActive = false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping discovery: ${e.message}")
+        }
+    }
+
+    // -----------------------------
+    // Other plugin calls (delegated to device interface)
+    // -----------------------------
     @PluginMethod
     fun checkDeviceConnection(call: PluginCall) {
         device.checkDeviceConnection(pluginCall(call))
-    }
-
-    @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
-    fun connectToDeviceAP(call: PluginCall) {
-        try {
-            val ssid = "bushnet"
-            val password = "feathers"
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // ask for permission
-                val wifiSpecifier = WifiNetworkSpecifier.Builder()
-                    .setSsid(ssid)
-                    .setWpa2Passphrase(password)
-                    .build()
-                val networkRequest = NetworkRequest.Builder()
-                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                    .setNetworkSpecifier(wifiSpecifier)
-                    .build()
-
-
-                cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                cm!!.bindProcessToNetwork(null)
-                currNetworkCallback = object : NetworkCallback() {
-                    override fun onAvailable(network: Network) {
-                        super.onAvailable(network)
-                        wifiNetwork = network
-                        cm!!.bindProcessToNetwork(network)
-                        val result = JSObject()
-                        result.put("status", "connected")
-                        call.resolve(result)
-                    }
-
-                    override fun onUnavailable() {
-                        super.onUnavailable()
-                        val result = JSObject()
-                        result.put("status", "disconnected")
-                        call.resolve(result)
-                        wifiNetwork = null
-                        cm!!.unregisterNetworkCallback(this)
-                    }
-
-                    override fun onLost(network: Network) {
-                        super.onLost(network)
-                        val result = JSObject()
-                        result.put("status", "disconnected")
-                        call.resolve(result)
-                        cm!!.bindProcessToNetwork(null)
-                        wifiNetwork = null
-                        cm!!.unregisterNetworkCallback(this)
-                        call.resolve(result)
-                    }
-                }
-
-                cm!!.requestNetwork(networkRequest, currNetworkCallback!!)
-            } else {
-                connectToWifiLegacy(ssid, password, {
-                    val result = JSObject()
-                    result.put("status", "connected")
-                    call.resolve(result)
-                }, {
-                    val result = JSObject()
-                    result.put("status", "disconnected")
-                    call.resolve(result)
-                })
-            }
-        } catch (e: Exception) {
-            val result = JSObject()
-            result.put("success", false)
-            result.put("message", e.message)
-            call.resolve(result)
-        }
-    }
-
-    @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
-    fun disconnectFromDeviceAP(call: PluginCall) {
-        try {
-            cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                cm?.bindProcessToNetwork(null)
-                currNetworkCallback?.let { cm?.unregisterNetworkCallback(it) }
-            }
-
-            val result = JSObject()
-            result.put("success", true)
-            result.put("message", "Disconnected from device AP")
-            call.resolve(result)
-        } catch (e: Exception) {
-            val result = JSObject()
-            result.put("success", false)
-            result.put("message", e.message)
-            call.resolve(result)
-        }
-    }
-
-    @ActivityCallback
-    fun connectToWifi(call: PluginCall, result: Instrumentation.ActivityResult) {
-        if (result.resultCode == RESULT_OK) {
-            val res = JSObject()
-            res.put("success", true)
-            res.put("data", "Connected to device AP")
-            call.resolve(res)
-        } else {
-            val res = JSObject()
-            res.put("success", false)
-            res.put("message", "Failed to connect to device AP")
-            call.resolve(res)
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun connectToWifiLegacy(
-        ssid: String,
-        password: String,
-        onConnect: () -> Unit,
-        onFail: () -> Unit
-    ) {
-        val wifiManager =
-            context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-
-        // Enable Wi-Fi if it's not enabled
-        if (!wifiManager.isWifiEnabled) {
-            wifiManager.isWifiEnabled = true
-        }
-
-        val wifiConfig = WifiConfiguration().apply {
-            SSID = "\"" + ssid + "\""
-            preSharedKey = "\"" + password + "\""
-        }
-
-        // Add the Wi-Fi configuration
-        val networkId = wifiManager.addNetwork(wifiConfig)
-
-        if (networkId != -1) {
-            // Enable the network
-            wifiManager.enableNetwork(networkId, true)
-
-            // Reconnect to the network
-            wifiManager.reconnect()
-            onConnect()
-        } else {
-            onFail()
-        }
     }
 
     @PluginMethod
@@ -304,6 +452,11 @@ class DevicePlugin : Plugin() {
     @PluginMethod
     fun setLowPowerMode(call: PluginCall) {
         device.setLowPowerMode(pluginCall(call))
+    }
+
+    @PluginMethod
+    fun updateRecordingWindow(call: PluginCall) {
+        device.updateRecordingWindow(pluginCall(call))
     }
 
     @PluginMethod
@@ -352,83 +505,8 @@ class DevicePlugin : Plugin() {
     }
 
     @PluginMethod
-    fun unbindConnection(call: PluginCall) {
-        call.resolve()
-    }
-
-    @PluginMethod
-    fun rebindConnection(call: PluginCall) {
-        call.resolve()
-    }
-
-    @PluginMethod
-    fun hasConnection(call: PluginCall) {
-        val result = JSObject()
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val isConnected = cm?.getNetworkCapabilities(wifiNetwork)
-                    ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-                    ?: false
-
-                result.put("success", true)
-                result.put("connected", isConnected)
-            } else {
-                val wifiManager =
-                    context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                val wifiInfo = wifiManager.connectionInfo
-                val isConnected = wifiInfo.ssid == "\"bushnet\""
-
-                result.put("success", true)
-                result.put("connected", isConnected)
-            }
-        } catch (e: Exception) {
-            result.put("success", false)
-            result.put("message", e.message)
-        }
-        call.resolve(result)
-    }
-
-    @SuppressLint("MissingPermission")
-    @PluginMethod
-    fun checkIsAPConnected(call: PluginCall) {
-        val result = JSObject()
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val networkCapabilities = cm?.getNetworkCapabilities(wifiNetwork)
-                val isConnected =
-                    networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-                val ssid = if (isConnected) {
-                    (context.getSystemService(Context.WIFI_SERVICE) as WifiManager).connectionInfo.ssid
-                } else {
-                    ""
-                }
-
-                result.put("success", true)
-                result.put("connected", isConnected && ssid == "\"bushnet\"")
-            } else {
-                val wifiManager =
-                    context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                val wifiInfo = wifiManager.connectionInfo
-                val isConnected = wifiInfo.ssid == "\"bushnet\""
-
-                result.put("success", true)
-                result.put("connected", isConnected)
-            }
-        } catch (e: Exception) {
-            result.put("success", false)
-            result.put("message", e.message)
-        }
-        call.resolve(result)
-    }
-
-    @PluginMethod
     fun reregisterDevice(call: PluginCall) {
         device.reregister(pluginCall(call))
-    }
-
-    @PluginMethod
-    fun updateRecordingWindow(call: PluginCall) {
-        device.updateRecordingWindow(pluginCall(call))
     }
 
     @PluginMethod
@@ -439,5 +517,26 @@ class DevicePlugin : Plugin() {
     @PluginMethod
     fun turnOnModem(call: PluginCall) {
         device.turnOnModem(pluginCall(call))
+    }
+
+    @PluginMethod
+    fun checkPermission(call: PluginCall) {
+        val result = JSObject().apply {
+            // Check for required permissions
+            val fineLocationGranted =
+                context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+                        android.content.pm.PackageManager.PERMISSION_GRANTED
+
+            put("granted", fineLocationGranted)
+        }
+        call.resolve(result)
+    }
+
+    @PluginMethod
+    fun getTestText(call: PluginCall) {
+        val result = JSObject().apply {
+            put("text", "Test successful! Plugin is working correctly.")
+        }
+        call.resolve(result)
     }
 }

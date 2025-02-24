@@ -394,6 +394,10 @@ function Devices() {
                   }
                 } catch (error) {
                   console.error("Error in disconnecting from device", error);
+                  log.logError({
+                    message: "Error connecting/disconnecting",
+                    error,
+                  });
                 } finally {
                   setTryDisconnect(false);
                 }

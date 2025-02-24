@@ -15,7 +15,9 @@ import { useNavigate } from "@solidjs/router";
 import { CapacitorHttp } from "@capacitor/core";
 import { useLogsContext } from "./LogsContext";
 import { Effect, Either } from "effect";
+import { createTokenService, User, UserSchema } from "./TokenService";
 
+// Response schema definitions
 export type UserAuthResponse = z.infer<typeof UserAuthResponseSchema>;
 
 const UserAuthResponseSchema = z.object({
@@ -57,184 +59,26 @@ const EUAResponseSchema = z.object({
   euaVersion: z.number().optional(),
 });
 
-const UserSchema = z.object({
-  token: z.string(),
-  id: z.string(),
-  email: z.string().email(),
-  expiry: z.string().optional(),
-  refreshToken: z.string(),
-  prod: z.boolean(),
-});
-
 export type LoginResult =
   | { _tag: "Success"; user: User }
   | { _tag: "NeedsAgreement"; authToken: string }
   | { _tag: "Failed"; message: string };
-// Keep track of ongoing refresh
-let refreshPromise: Promise<User | null> | null = null;
-
-export async function handleTokenManagement(
-  user: User,
-  log: any
-): Promise<User | null> {
-  if (!user) return null;
-
-  try {
-    const decodedToken = decodeJWT(user.token);
-    if (!decodedToken) {
-      log.logWarning({ message: "Invalid token format" });
-      return null;
-    }
-
-    const now = new Date();
-    const bufferTime = 60000; // 1 minute buffer
-    const tokenExpiry = decodedToken.expiresAt.getTime();
-    const isExpiringSoon = tokenExpiry < now.getTime() + bufferTime;
-
-    // Handle offline scenario
-    if (!navigator.onLine) {
-      // If token is still valid, continue using it
-      if (tokenExpiry > now.getTime()) {
-        log.logWarning({
-          message: "Operating offline with valid token",
-          details: `Token expires in ${Math.floor(
-            (tokenExpiry - now.getTime()) / 1000
-          )} seconds`,
-        });
-        return user;
-      }
-
-      // Provide grace period when offline
-      const offlineGracePeriod = 3600000; // 1 hour
-      if (tokenExpiry + offlineGracePeriod > now.getTime()) {
-        log.logWarning({
-          message: "Operating offline with grace period",
-          details: "Will need to refresh token when back online",
-        });
-        return user;
-      }
-
-      log.logWarning({
-        message: "Token expired and offline - login required when online",
-      });
-      return null;
-    }
-
-    // Handle online token refresh
-    if (isExpiringSoon) {
-      return await refreshUserToken(user, log);
-    }
-
-    return user;
-  } catch (error) {
-    log.logError({
-      message: "Token management error",
-      error,
-      details: error instanceof Error ? error.message : "Unknown error",
-    });
-    return null;
-  }
-}
-
-async function refreshUserToken(user: User, log: any): Promise<User | null> {
-  // If already refreshing, wait for that to complete
-  if (refreshPromise) {
-    return refreshPromise;
-  }
-
-  try {
-    refreshPromise = performTokenRefresh(user, log);
-    return await refreshPromise;
-  } finally {
-    refreshPromise = null;
-  }
-}
-
-async function performTokenRefresh(user: User, log: any): Promise<User | null> {
-  try {
-    // Use Effect.retry for automatic retries on network failure
-    const result = await Effect.runPromise(
-      Effect.retry(
-        Effect.tryPromise(() =>
-          CacophonyPlugin.validateToken({ refreshToken: user.refreshToken })
-        ),
-        { times: 2, delay: 1000 } // Retry twice with 1 second delay
-      )
-    );
-
-    if (result.success) {
-      const updatedUser: User = {
-        ...user,
-        token: result.data.token,
-        refreshToken: result.data.refreshToken,
-        expiry: result.data.expiry,
-      };
-
-      await Preferences.set({
-        key: "user",
-        value: JSON.stringify(updatedUser),
-      });
-
-      log.logSuccess({
-        message: "Token refreshed successfully",
-        details: `New token expires at ${result.data.expiry}`,
-      });
-      return updatedUser;
-    }
-    if (result.message?.includes("Failed") && navigator.onLine) {
-      log.logWarning({
-        message: "Token refresh failed - new login required",
-        details: result.message,
-      });
-      return null;
-    }
-
-    // If we get here, something went wrong but we're not sure what
-    // Keep the existing token for now
-    log.logWarning({
-      message: "Token refresh gave unexpected response",
-      details: "Keeping existing token",
-    });
-    return user;
-  } catch (error) {
-    log.logError({
-      message: "Token refresh failed",
-      error,
-      details: error instanceof Error ? error.message : "Unknown error",
-    });
-
-    // If we're online, the error is likely permanent
-    if (navigator.onLine) {
-      return null;
-    }
-
-    // If offline, keep existing token
-    return user;
-  }
-}
-
-// Helper function to decode JWT
-function decodeJWT(token: string) {
-  try {
-    const [, payload] = token.split(".");
-    if (!payload) return null;
-
-    const decoded = JSON.parse(atob(payload));
-    return {
-      ...decoded,
-      expiresAt: new Date(decoded.exp * 1000),
-      createdAt: new Date(decoded.iat * 1000),
-    };
-  } catch (error) {
-    return null;
-  }
-}
-export type User = z.infer<typeof UserSchema>;
 
 const [UserProvider, useUserContext] = createContextProvider(() => {
   const log = useLogsContext();
   const nav = useNavigate();
   const ValidUrl = z.string().url();
+
+  // Initialize token service
+  const tokenService = createTokenService({
+    logger: log,
+    bufferTimeMs: 60000, // 1 minute buffer before token expiry
+    offlineGracePeriodMs: 3600000, // 1 hour grace period when offline
+    maxRetries: 2,
+    retryDelayMs: 1000,
+  });
+
+  // Server URL management
   const [
     customServer,
     { refetch: refetchCustomServer, mutate: mutateCustomServer },
@@ -242,14 +86,29 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     const pref = ValidUrl.safeParse(
       (await Preferences.get({ key: "customServer" })).value
     );
-    console.log(`Custom server: ${pref.data}`);
+    console.log(`Custom server: ${pref.success ? pref.data : "none"}`);
     if (pref.success) {
       await CacophonyPlugin.setToCustomServer({ url: pref.data });
     }
-    return pref.data;
+    return pref.success ? pref.data : undefined;
   });
 
-  // Enhanced error handling by defining a specific type for user data
+  // Server type state management
+  const [server, setServer] = createSignal<"test" | "prod" | "custom">("prod");
+  const isProd = () => server() === "prod" || server() === "custom";
+
+  const getServerUrl = () => {
+    if (customServer.loading) return undefined;
+    const currCustomServer = customServer();
+    if (currCustomServer) {
+      return currCustomServer;
+    }
+    return isProd()
+      ? "https://api.cacophony.org.nz"
+      : "https://api-test.cacophony.org.nz";
+  };
+
+  // User data resource with enhanced error handling
   const [data, { mutate: mutateUser, refetch }] = createResource(
     getServerUrl,
     async (server) => {
@@ -264,13 +123,22 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         const storedUser = await Preferences.get({ key: "user" });
         if (!storedUser.value) return null;
 
-        const json = JSON.parse(storedUser.value);
-        if (!json || Object.keys(json).length === 0) return null;
+        try {
+          const json = JSON.parse(storedUser.value);
+          if (!json || Object.keys(json).length === 0) return null;
 
-        const user = UserSchema.parse(json);
-        return await handleTokenManagement(user, log);
+          const user = UserSchema.parse(json);
+          return await tokenService.validateToken(user);
+        } catch (error) {
+          log.logError({
+            message: "User data validation failed",
+            error,
+            details: error instanceof Error ? error.message : "Unknown error",
+          });
+          return null;
+        }
       } catch (error) {
-        log.logError({ message: "User validation failed", error });
+        log.logError({ message: "User fetch failed", error });
         return null;
       }
     },
@@ -281,6 +149,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   );
 
+  // Update logger user context when user data changes
   createEffect(() => {
     const user = data();
     if (user) {
@@ -290,6 +159,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   });
 
+  // Skipped login state management
   const [skippedLogin, { mutate: mutateSkip }] = createResource<boolean>(
     async () => {
       try {
@@ -306,10 +176,11 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       return false;
     }
   );
+
+  // Logout functionality
   async function logout() {
-    console.trace();
     try {
-      await Preferences.set({ key: "user", value: "" });
+      await tokenService.clearUser();
       await Preferences.set({ key: "skippedLogin", value: "false" });
       mutateSkip(false);
       await refetch();
@@ -319,6 +190,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   }
 
+  // Login functionality
   async function login(email: string, password: string): Promise<LoginResult> {
     try {
       // First get the latest EUA version
@@ -401,7 +273,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       };
 
       await Preferences.set({ key: "skippedLogin", value: "false" });
-      await Preferences.set({ key: "user", value: JSON.stringify(user) });
+      await tokenService.saveUser(user);
       mutateUser(user);
       mutateSkip(false);
       log.logSuccess({ message: "Login successful" });
@@ -413,9 +285,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   }
 
-  const [server, setServer] = createSignal<"test" | "prod" | "custom">("prod");
-  const isProd = () => server() === "prod" || server() === "custom";
-
+  // Server change management
   const [changeServer] = createResource(
     () => [server(), customServer()] as const,
     async ([server, customServer]) => {
@@ -445,241 +315,22 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   );
 
-  interface JwtTokenPayload<
-    T =
-      | "user"
-      | "device"
-      | "reset-password"
-      | "confirm-email"
-      | "join-group"
-      | "invite-new-user"
-      | "invite-existing-user"
-      | "refresh"
-  > {
-    exp: number;
-    iat: number;
-    _type: T;
-    createdAt: Date;
-    expiresAt: Date;
-  }
-
-  const decodeJWT = (jwtString: string): JwtTokenPayload | null => {
-    const parts = jwtString.split(".");
-    if (parts.length !== 3) {
-      log.logWarning({ message: "Invalid JWT format" });
-      return null;
-    }
-    try {
-      const decodedToken = JSON.parse(atob(parts[1]));
-      return {
-        ...decodedToken,
-        expiresAt: new Date(decodedToken.exp * 1000),
-        createdAt: new Date(decodedToken.iat * 1000),
-      };
-    } catch (e) {
-      log.logError({ message: "Failed to decode JWT", error: e });
-      return null;
-    }
-  };
-
-  let refreshingToken = false;
-
-  async function getValidUser(user: User): Promise<User | null> {
-    try {
-      const { token, refreshToken, email, id } = user;
-      const decodedToken = decodeJWT(token);
-      if (!decodedToken) return null;
-
-      const now = new Date();
-      const bufferTime = 10000; // 10 second buffer
-
-      if (decodedToken.expiresAt.getTime() < now.getTime() + bufferTime) {
-        if (!refreshingToken) {
-          refreshingToken = true;
-          // Token is about to expire, try to refresh
-          try {
-            const result = await CacophonyPlugin.validateToken({
-              refreshToken,
-            });
-
-            if (result.success) {
-              const updatedUser: User = {
-                token: result.data.token,
-                refreshToken: result.data.refreshToken,
-                id,
-                email,
-                expiry: result.data.expiry,
-                prod: isProd(),
-              };
-              await Preferences.set({
-                key: "user",
-                value: JSON.stringify(updatedUser),
-              });
-              console.info({ message: "Token refreshed successfully" });
-              return updatedUser;
-            } else {
-              if (
-                result.message.includes("Failed") ||
-                result.message.includes("403")
-              ) {
-                log.logWarning({
-                  message: "Token validation failed",
-                  details: result.message,
-                });
-                await logout();
-              }
-              console.warn("Failed to refresh token", result);
-              return user;
-            }
-          } catch (networkError) {
-            log.logError({
-              message: "Network error during token validation",
-              error: networkError,
-            });
-            // If network error, check if token is still valid
-            if (decodedToken.expiresAt.getTime() > now.getTime()) {
-              // Token is still valid, allow user to stay logged in
-              log.logWarning({
-                message: "Offline",
-                details:
-                  "You're currently offline. Some features may be unavailable.",
-              });
-              mutateUser(() => user);
-              return user;
-            } else {
-              // Token expired and cannot refresh
-              await logout();
-              return null;
-            }
-          }
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          return getValidUser(user);
-        }
-      } else {
-        mutateUser(() => user);
-        return user;
-      }
-    } catch (error) {
-      log.logError({ message: "Error validating current token", error });
-      return null;
-    }
-  }
-
-  const CreateGroupResSchema = z.object({
-    success: z.boolean(),
-    messages: z.array(z.string()),
-  });
-
-  async function createGroup(groupName: string) {
-    try {
-      const user = await getUser();
-      if (!user) {
-        log.logWarning({
-          message: "Attempted to create group without a valid user",
-        });
-        throw new Error("User not authenticated");
-      }
-
-      const res = await CapacitorHttp.request({
-        method: "POST",
-        url: `${getServerUrl()}/api/v1/groups`,
-        headers: {
-          Authorization: user.token,
-          "Content-Type": "application/json",
-        },
-        data: { groupName },
-      });
-
-      const parsed = CreateGroupResSchema.safeParse(res.data);
-      if (!parsed.success || !parsed.data.success) {
-        log.logWarning({
-          message: "Group creation failed",
-          details: parsed.success
-            ? parsed.data.messages.join(", ")
-            : "Invalid response format",
-        });
-        throw new Error("Failed to create group");
-      }
-
-      log.logSuccess({ message: "Group created successfully" });
-      return parsed.data;
-    } catch (error) {
-      log.logError({ message: "Error creating group", error });
-      throw error;
-    }
-  }
-
-  async function getUser(): Promise<User | undefined | null> {
+  // Get user with token validation
+  async function getUser(): Promise<User | null | undefined> {
     try {
       if (data.loading) return undefined;
       const user = data();
       if (!user) {
-        log.logWarning({ message: "No user data available" });
         return null;
       }
-      const validUser = await getValidUser(user);
-      if (validUser) {
-        mutateUser(validUser);
-        return validUser;
-      }
-      return null;
+      return user;
     } catch (error) {
       log.logError({ message: "Failed to retrieve user", error });
       return null;
     }
   }
 
-  function skip() {
-    try {
-      Preferences.set({ key: "skippedLogin", value: "true" });
-      nav("/devices");
-      mutateSkip(true);
-      log.logSuccess({ message: "Skipped login successfully" });
-    } catch (error) {
-      log.logError({ message: "Failed to skip login", error });
-    }
-  }
-
-  async function requestDeletion(): Result<string> {
-    try {
-      const user = await getUser();
-      if (!user) {
-        log.logWarning({ message: "Deletion requested without a valid user" });
-        throw new Error("User not authenticated");
-      }
-      const value = await CacophonyPlugin.requestDeletion({
-        token: user.token,
-      });
-      log.logSuccess({ message: "Account deletion requested successfully" });
-      return value;
-    } catch (error) {
-      log.logError({ message: "Failed to request account deletion", error });
-      throw error;
-    }
-  }
-
-  function toggleServer() {
-    if (changeServer.loading) {
-      log.logWarning({ message: "Server switch already in progress" });
-      return;
-    }
-    const newServer = isProd() ? (customServer() ? "custom" : "test") : "prod";
-    setServer(newServer);
-    log.logSuccess({ message: `Server toggled to ${newServer}` });
-  }
-  function getServerUrl() {
-    if (customServer.loading) return undefined;
-    const currCustomServer = customServer();
-    console.info("Custom Server", { currCustomServer });
-    if (currCustomServer) {
-      return currCustomServer;
-    }
-    return isProd()
-      ? "https://api.cacophony.org.nz"
-      : "https://api-test.cacophony.org.nz";
-  }
-
+  // Group schema definition
   const GroupSchema = z.array(
     z.object({
       id: z.number(),
@@ -699,6 +350,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }),
   ]);
 
+  // Groups cache management
   const getCachedGroups = async (): Promise<(typeof GroupSchema)["_type"]> => {
     try {
       const cached = await Preferences.get({ key: "groups" });
@@ -711,6 +363,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   };
 
+  // Groups resource
   const [groups, { refetch: refetchGroups, mutate: mutateGroups }] =
     createResource(
       () => [data(), getServerUrl()] as const,
@@ -760,6 +413,64 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       }
     );
 
+  // Skip login
+  function skip() {
+    try {
+      Preferences.set({ key: "skippedLogin", value: "true" });
+      nav("/devices");
+      mutateSkip(true);
+      log.logSuccess({ message: "Skipped login successfully" });
+    } catch (error) {
+      log.logError({ message: "Failed to skip login", error });
+    }
+  }
+
+  // Create group
+  async function createGroup(groupName: string) {
+    try {
+      const user = await getUser();
+      if (!user) {
+        log.logWarning({
+          message: "Attempted to create group without a valid user",
+        });
+        throw new Error("User not authenticated");
+      }
+
+      const res = await CapacitorHttp.request({
+        method: "POST",
+        url: `${getServerUrl()}/api/v1/groups`,
+        headers: {
+          Authorization: user.token,
+          "Content-Type": "application/json",
+        },
+        data: { groupName },
+      });
+
+      const CreateGroupResSchema = z.object({
+        success: z.boolean(),
+        messages: z.array(z.string()),
+      });
+
+      const parsed = CreateGroupResSchema.safeParse(res.data);
+      if (!parsed.success || !parsed.data.success) {
+        log.logWarning({
+          message: "Group creation failed",
+          details: parsed.success
+            ? parsed.data.messages.join(", ")
+            : "Invalid response format",
+        });
+        throw new Error("Failed to create group");
+      }
+
+      log.logSuccess({ message: "Group created successfully" });
+      return parsed.data;
+    } catch (error) {
+      log.logError({ message: "Error creating group", error });
+      throw error;
+    }
+  }
+
+  // Check group access
   async function hasAccessToGroup(name: string): Promise<boolean> {
     try {
       const user = await getUser();
@@ -779,6 +490,37 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   }
 
+  // Request account deletion
+  async function requestDeletion(): Result<string> {
+    try {
+      const user = await getUser();
+      if (!user) {
+        log.logWarning({ message: "Deletion requested without a valid user" });
+        throw new Error("User not authenticated");
+      }
+      const value = await CacophonyPlugin.requestDeletion({
+        token: user.token,
+      });
+      log.logSuccess({ message: "Account deletion requested successfully" });
+      return value;
+    } catch (error) {
+      log.logError({ message: "Failed to request account deletion", error });
+      throw error;
+    }
+  }
+
+  // Toggle server
+  function toggleServer() {
+    if (changeServer.loading) {
+      log.logWarning({ message: "Server switch already in progress" });
+      return;
+    }
+    const newServer = isProd() ? (customServer() ? "custom" : "test") : "prod";
+    setServer(newServer);
+    log.logSuccess({ message: `Server toggled to ${newServer}` });
+  }
+
+  // Dev mode management
   const [dev, setDev] = createSignal(false);
   onMount(async () => {
     try {
@@ -794,6 +536,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   });
 
+  // Set custom server
   const setToCustomServer = async (customUrl: string) => {
     try {
       const valid = ValidUrl.safeParse(customUrl);
@@ -804,9 +547,12 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
         });
         await refetchCustomServer();
       }
-    } catch (error) {}
+    } catch (error) {
+      log.logError({ message: "Failed to set custom server", error });
+    }
   };
 
+  // Toggle dev mode
   const toggleDev = async () => {
     try {
       const newDevState = !dev();
@@ -823,10 +569,12 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   };
 
+  // Check if user is logged in
   const isLoggedIn = () => {
     return !!data();
   };
 
+  // Update user agreement
   async function updateUserAgreement(authToken: string) {
     try {
       // Get the latest EUA version
@@ -878,6 +626,8 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
       return Either.left("Error updating user agreement");
     }
   }
+
+  // Clear custom server
   const clearCustomServer = async () => {
     try {
       await Preferences.remove({ key: "customServer" });
@@ -892,6 +642,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   };
 
+  // Sync server type with user data
   createEffect(() => {
     const user = data();
     if (customServer()) {
@@ -903,6 +654,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   });
 
+  // Return context value
   return {
     data,
     groups,
@@ -927,7 +679,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
   };
 });
 
-// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+// Helper to access user context with non-null assertion
 const defineUserContext = () => useUserContext()!;
 
 export { UserProvider, defineUserContext as useUserContext };

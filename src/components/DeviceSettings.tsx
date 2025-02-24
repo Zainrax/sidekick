@@ -750,13 +750,6 @@ export function CameraSettingsTab(props: SettingProps) {
   return (
     <section>
       <Switch>
-        <Match
-          when={audioStatus()?.status !== "ready" && audioMode() !== "Disabled"}
-        >
-          <p class="w-full p-8 text-center text-2xl text-neutral-600">
-            Camera not available due to audio recording.
-          </p>
-        </Match>
         <Match when={audioMode() === "AudioOnly"}>
           <p class="w-full p-8 text-center text-2xl text-neutral-600">
             Preview not available in audio only mode.
@@ -826,6 +819,17 @@ export function CameraSettingsTab(props: SettingProps) {
               </Match>
             </Switch>
           </button>
+        </Match>
+        <Match
+          when={
+            audioStatus() &&
+            audioStatus()?.status !== "ready" &&
+            audioMode() !== "Disabled"
+          }
+        >
+          <p class="w-full p-8 text-center text-2xl text-neutral-600">
+            Camera not available due to audio recording.
+          </p>
         </Match>
       </Switch>
       <div class="px-6 py-2">
@@ -1640,7 +1644,6 @@ export function WifiSettingsTab(props: SettingProps) {
     } else {
       setErrorConnecting("Could not forget wifi. Please try again.");
     }
-    context.searchDevice();
   };
 
   let inputRef: HTMLInputElement | undefined;
@@ -2426,7 +2429,7 @@ export function GroupSelect(props: SettingProps) {
       }
       log.logEvent("group_create", { name: v });
     }
-    const token = user.data()?.token;
+    const token = (await user.getUser())?.token;
     if (token) {
       log.logEvent("group_change", { name: v });
       const [currId, success] = await context.changeGroup(id(), v, token);

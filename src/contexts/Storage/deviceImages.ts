@@ -16,6 +16,7 @@ import { createEffect, createResource, on, onMount } from "solid-js";
 import { z } from "zod";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { useDevice } from "../Device";
+import { Network } from "@capacitor/network";
 
 export function useDeviceImagesStorage() {
   const log = useLogsContext();
@@ -374,6 +375,8 @@ export function useDeviceImagesStorage() {
 
   const syncWithServer = async (deviceId: string, isProd: boolean) => {
     try {
+      const networkStatus = await Network.getStatus();
+      if (!networkStatus.connected) return;
       // Process any pending operations first
       await processPendingOperations();
 
