@@ -85,28 +85,124 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
     
+    // Discovery state enum to match Android implementation
+    enum DiscoveryState: String {
+        case inactive = "INACTIVE"
+        case starting = "STARTING"
+        case active = "ACTIVE"
+        case stopping = "STOPPING"
+        case restarting = "RESTARTING"
+        case failed = "FAILED"
+    }
+    
+    // Connection state enum to match Android implementation
+    enum ConnectionState: String {
+        case disconnected = "DISCONNECTED"
+        case connecting = "CONNECTING"
+        case connectionVerifying = "CONNECTION_VERIFYING"
+        case connected = "CONNECTED"
+        case disconnecting = "DISCONNECTING"
+        case connectionFailed = "CONNECTION_FAILED"
+        case connectionLost = "CONNECTION_LOST"
+    }
+    
+    private var discoveryState: DiscoveryState = .inactive
+    private var connectionState: ConnectionState = .disconnected
+    private var discoveryRetryCount = 0
+    private var discoveryRetryTimer: Timer?
+    private var connectionMonitorTimer: Timer?
+    private var connectionTimeoutTimer: Timer?
+    private var verificationTimer: Timer?
+    
+    private func updateDiscoveryState(_ newState: DiscoveryState) {
+        if discoveryState != newState {
+            let oldState = discoveryState
+            discoveryState = newState
+            notifyListeners("onDiscoveryStateChanged", data: ["state": newState.rawValue])
+        }
+    }
+    
+    private func updateConnectionState(_ newState: ConnectionState) {
+        if connectionState != newState {
+            let oldState = connectionState
+            connectionState = newState
+            notifyListeners("onAPConnectionStateChanged", data: ["state": newState.rawValue])
+            
+            // Additional notifications based on state transitions
+            switch newState {
+            case .connected:
+                notifyListeners("onAPConnected", data: ["status": "connected"])
+            case .disconnected:
+                notifyListeners("onAPDisconnected", data: ["status": "disconnected"])
+            case .connectionFailed:
+                notifyListeners("onAPConnectionFailed", data: [
+                    "status": "error",
+                    "error": "Connection failed",
+                    "canRetry": true
+                ])
+            case .connectionLost:
+                notifyListeners("onAPConnectionLost", data: ["status": "lost"])
+            default:
+                break
+            }
+        }
+    }
+    
     @objc func discoverDevices(_ call: CAPPluginCall) {
-        if isDiscovering {
-            call.reject("Currently discovering")
+        // Only allow starting from INACTIVE or FAILED states
+        guard discoveryState == .inactive || discoveryState == .failed else {
+            call.reject("Cannot start discovery in state: \(discoveryState.rawValue)")
             return
         }
+        
+        // Update state and notify listeners
+        updateDiscoveryState(.starting)
+        
+        // Clean up any existing discovery
+        cleanupDiscovery()
         
         let parameters = NWParameters()
         parameters.requiredInterfaceType = .wifi
         
         serviceBrowser = NWBrowser(for: .bonjour(type: "_cacophonator-management._tcp", domain: "local."), using: parameters)
-        serviceBrowser?.stateUpdateHandler = { newState in
+        serviceBrowser?.stateUpdateHandler = { [weak self] newState in
+            guard let self = self else { return }
+            
             switch newState {
-            case .failed(let error):
-                call.reject("Error discovering devices: \(error.localizedDescription)")
             case .ready:
-                break
+                self.updateDiscoveryState(.active)
+                // Reset retry count on successful start
+                self.discoveryRetryCount = 0
+                
+            case .failed(let error):
+                self.updateDiscoveryState(.failed)
+                // Notify listeners of error
+                self.notifyListeners("onDiscoveryError", data: [
+                    "error": error.localizedDescription,
+                    "fatal": self.discoveryRetryCount >= 3
+                ])
+                
+                // Schedule retry if needed
+                self.scheduleDiscoveryRetry()
+                
+            case .cancelled:
+                if self.discoveryState == .restarting {
+                    // Immediately restart discovery
+                    DispatchQueue.main.async {
+                        self.startDiscovery()
+                    }
+                } else {
+                    self.updateDiscoveryState(.inactive)
+                }
+                
             default:
                 break
             }
         }
         
         serviceBrowser?.browseResultsChangedHandler = { [weak self] results, changes in
+            guard let self = self else { return }
+            
             for change in changes {
                 switch change {
                 case .added(let result):
@@ -116,9 +212,18 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     default:
                         result.endpoint.debugDescription
                     }
-                    self?.notifyListeners("onServiceResolved", data: ["endpoint": endpoint, "status": "connected"])
-                case .identical:
-                    break
+                    
+                    // Verify the service is reachable
+                    self.verifyServiceReachability(endpoint: endpoint) { isReachable in
+                        if isReachable {
+                            self.notifyListeners("onServiceResolved", data: [
+                                "endpoint": endpoint,
+                                "host": endpoint,
+                                "port": 80 // Default port, would need to be resolved properly
+                            ])
+                        }
+                    }
+                    
                 case .removed(let result):
                     let endpoint = switch result.endpoint {
                     case .service(let name, _, _, _):
@@ -126,8 +231,8 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     default:
                         result.endpoint.debugDescription
                     }
-                    let data = ["endpoint": endpoint, "status": "disconnected"]
-                    self?.notifyListeners("onServiceLost", data: data)
+                    self.notifyListeners("onServiceLost", data: ["endpoint": endpoint])
+                    
                 case .changed(old: _, new: let new, flags: _):
                     let endpoint = switch new.endpoint {
                     case .service(let name, _, _, _):
@@ -135,23 +240,177 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     default:
                         new.endpoint.debugDescription
                     }
-                    self?.notifyListeners("onServiceResolved", data: ["endpoint": endpoint, "status": "connected"])
-                    break
+                    
+                    // Verify the service is reachable
+                    self.verifyServiceReachability(endpoint: endpoint) { isReachable in
+                        if isReachable {
+                            self.notifyListeners("onServiceResolved", data: [
+                                "endpoint": endpoint,
+                                "host": endpoint,
+                                "port": 80 // Default port, would need to be resolved properly
+                            ])
+                        }
+                    }
+                    
                 @unknown default:
                     break
                 }
-                
             }
         }
         
         serviceBrowser?.start(queue: .main)
         call.resolve()
     }
+    
+    private func startDiscovery() {
+        let parameters = NWParameters()
+        parameters.requiredInterfaceType = .wifi
+        
+        serviceBrowser = NWBrowser(for: .bonjour(type: "_cacophonator-management._tcp", domain: "local."), using: parameters)
+        serviceBrowser?.stateUpdateHandler = { [weak self] newState in
+            guard let self = self else { return }
+            
+            switch newState {
+            case .ready:
+                self.updateDiscoveryState(.active)
+                self.discoveryRetryCount = 0
+                
+            case .failed(let error):
+                self.updateDiscoveryState(.failed)
+                self.notifyListeners("onDiscoveryError", data: [
+                    "error": error.localizedDescription,
+                    "fatal": self.discoveryRetryCount >= 3
+                ])
+                self.scheduleDiscoveryRetry()
+                
+            case .cancelled:
+                if self.discoveryState == .restarting {
+                    DispatchQueue.main.async {
+                        self.startDiscovery()
+                    }
+                } else {
+                    self.updateDiscoveryState(.inactive)
+                }
+                
+            default:
+                break
+            }
+        }
+        
+        serviceBrowser?.browseResultsChangedHandler = { [weak self] results, changes in
+            guard let self = self else { return }
+            
+            for change in changes {
+                switch change {
+                case .added(let result):
+                    let endpoint = switch result.endpoint {
+                    case .service(let name, _, _, _):
+                        "\(name).local"
+                    default:
+                        result.endpoint.debugDescription
+                    }
+                    
+                    self.verifyServiceReachability(endpoint: endpoint) { isReachable in
+                        if isReachable {
+                            self.notifyListeners("onServiceResolved", data: [
+                                "endpoint": endpoint,
+                                "host": endpoint,
+                                "port": 80
+                            ])
+                        }
+                    }
+                    
+                case .removed(let result):
+                    let endpoint = switch result.endpoint {
+                    case .service(let name, _, _, _):
+                        "\(name).local"
+                    default:
+                        result.endpoint.debugDescription
+                    }
+                    self.notifyListeners("onServiceLost", data: ["endpoint": endpoint])
+                    
+                case .changed, .identical:
+                    break
+                    
+                @unknown default:
+                    break
+                }
+            }
+        }
+        
+        serviceBrowser?.start(queue: .main)
+    }
+    
+    private func verifyServiceReachability(endpoint: String, completion: @escaping (Bool) -> Void) {
+        // Simple socket connection to verify reachability
+        DispatchQueue.global(qos: .background).async {
+            let socket = Socket()
+            let isReachable = socket.connect(toHost: endpoint, onPort: 80, withTimeout: 3)
+            DispatchQueue.main.async {
+                completion(isReachable)
+            }
+        }
+    }
+    
+    private func scheduleDiscoveryRetry() {
+        // Cancel any existing retry timer
+        discoveryRetryTimer?.invalidate()
+        
+        // Increment retry count
+        discoveryRetryCount += 1
+        
+        // Check if we've exceeded max retries
+        if discoveryRetryCount > 3 {
+            return
+        }
+        
+        // Calculate backoff delay - simple exponential backoff
+        let delaySeconds = 5.0 * pow(2.0, Double(discoveryRetryCount - 1))
+        
+        updateDiscoveryState(.restarting)
+        
+        // Schedule retry
+        discoveryRetryTimer = Timer.scheduledTimer(withTimeInterval: delaySeconds, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            
+            if self.discoveryState == .restarting || self.discoveryState == .failed {
+                self.startDiscovery()
+            }
+        }
+    }
+    
+    private func cleanupDiscovery() {
+        // Cancel any existing retry timer
+        discoveryRetryTimer?.invalidate()
+        discoveryRetryTimer = nil
+        
+        // Stop browser if active
+        if let browser = serviceBrowser {
+            browser.cancel()
+        }
+        serviceBrowser = nil
+    }
 
     
     @objc func stopDiscoverDevices(_ call: CAPPluginCall) {
-        isDiscovering = false
-        call.resolve()
+        // Only attempt to stop if we're in an active state
+        guard discoveryState == .active || 
+              discoveryState == .starting || 
+              discoveryState == .restarting else {
+            call.resolve(["success": true, "message": "Discovery not active"])
+            return
+        }
+        
+        updateDiscoveryState(.stopping)
+        
+        // Clean up discovery resources
+        cleanupDiscovery()
+        
+        // Reset state variables
+        discoveryRetryCount = 0
+        updateDiscoveryState(.inactive)
+        
+        call.resolve(["success": true])
     }
     @objc func checkDeviceConnection(_ call: CAPPluginCall) {
         DispatchQueue.global().async { [weak self] in
@@ -160,116 +419,329 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     }
     
     @objc func connectToDeviceAP(_ call: CAPPluginCall) {
-        guard let bridge = self.bridge else { return }
-        DispatchQueue.global().async { [self] in
+        guard let bridge = self.bridge else { 
+            call.reject("Could not access bridge")
+            return
+        }
+        
+        // Ensure we're in a valid state to start connection
+        guard connectionState == .disconnected || 
+              connectionState == .connectionFailed || 
+              connectionState == .connectionLost else {
+            call.resolve(["status": "error", "error": "Cannot connect in state: \(connectionState.rawValue)"])
+            return
+        }
+        
+        DispatchQueue.global().async { [weak self] in
+            guard let self = self else { return }
             
             // First, check if already connected to bushnet
-            checkCurrentConnection { isConnected in
+            self.checkCurrentConnection { isConnected in
                 if isConnected {
+                    self.updateConnectionState(.connected)
                     call.resolve(["status": "connected"])
+                    
+                    // Start connection monitoring
+                    self.startConnectionMonitoring()
                     return
                 }
+                
+                // Update state to connecting
+                self.updateConnectionState(.connecting)
+                
+                // Cancel any existing timers
+                self.connectionTimeoutTimer?.invalidate()
+                self.verificationTimer?.invalidate()
+                
+                // Set connection timeout
+                self.connectionTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 45.0, repeats: false) { [weak self] _ in
+                    guard let self = self else { return }
+                    
+                    if self.connectionState == .connecting || self.connectionState == .connectionVerifying {
+                        self.updateConnectionState(.connectionFailed)
+                        call.resolve(["status": "error", "error": "Connection timed out"])
+                    }
+                }
+                
                 self.configuration.joinOnce = false
                 
                 // If not connected, proceed with connection attempt
                 NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
                 
-                NEHotspotConfigurationManager.shared.apply(self.configuration) { error in
+                NEHotspotConfigurationManager.shared.apply(self.configuration) { [weak self] error in
+                    guard let self = self else { return }
+                    
                     if let error = error {
+                        self.connectionTimeoutTimer?.invalidate()
+                        self.updateConnectionState(.connectionFailed)
                         call.resolve(["status": "error", "error": error.localizedDescription])
                         return
                     }
-                    call.resolve(["status": "connected"])
+                    
+                    // Connection initiated, now verify it
+                    self.updateConnectionState(.connectionVerifying)
+                    
+                    // Verify the connection after a short delay
+                    self.verificationTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] timer in
+                        guard let self = self else {
+                            timer.invalidate()
+                            return
+                        }
+                        
+                        self.checkCurrentConnection { isConnected in
+                            if isConnected {
+                                timer.invalidate()
+                                self.connectionTimeoutTimer?.invalidate()
+                                self.updateConnectionState(.connected)
+                                call.resolve(["status": "connected"])
+                                
+                                // Start connection monitoring
+                                self.startConnectionMonitoring()
+                            }
+                        }
+                    }
                 }
             }
-        }}
+        }
+    }
+    
+    private func startConnectionMonitoring() {
+        // Cancel any existing monitoring
+        connectionMonitorTimer?.invalidate()
+        
+        // Start periodic connection checks
+        connectionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            
+            if self.connectionState == .connected {
+                self.checkConnectionHealth()
+            }
+        }
+    }
+    
+    private func checkConnectionHealth() {
+        checkCurrentConnection { [weak self] isConnected in
+            guard let self = self else { return }
+            
+            if !isConnected && self.connectionState == .connected {
+                // Connection lost
+                self.connectionMonitorTimer?.invalidate()
+                self.updateConnectionState(.connectionLost)
+            }
+        }
+    }
     
     
     @objc func disconnectFromDeviceAP(_ call: CAPPluginCall) {
-        guard let bridge = self.bridge else { return call.reject("Could not access bridge") }
-        call.keepAlive = true
-            // Attempt to remove the Wi-Fi configuration for the SSID "bushnet"
-            NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
-            if #available(iOS 14.0, *) {
-                NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
-                    if let currentSSID = currentConfiguration?.ssid, currentSSID == "bushnet" {
-                        // The device is still connected to the "bushnet" network, disconnection failed
-                        call.resolve(["success": false, "error": "Failed to disconnect from the desired network"])
-                    } else {
-                        // Successfully disconnected or was not connected to "bushnet"
-                        call.resolve(["success": true, "data": "disconnected"])
-                    }
-                    // Clean up any reference to the call if necessary
-                    bridge.releaseCall(withID: call.callbackId)
-                }
-            } else {
-                // Fallback for earlier versions of iOS
-                guard let interfaceNames = CNCopySupportedInterfaces() else {
-                    call.resolve(["success": false, "error": "No interfaces found"])
-                    bridge.releaseCall(withID: call.callbackId)
-                    return
-                }
-                guard let swiftInterfaces = (interfaceNames as NSArray) as? [String] else {
-                    call.resolve(["success": false, "error": "No interfaces found"])
-                    bridge.releaseCall(withID: call.callbackId)
-                    
-                    return
-                }
-                for name in swiftInterfaces {
-                    guard let info = CNCopyCurrentNetworkInfo(name as CFString) as? [String: AnyObject] else {
-                        call.resolve(["success": false, "error": "Did not connect to the desired network"])
-                        bridge.releaseCall(withID: call.callbackId)
-                        return
-                    }
-                    
-                    guard let ssid = info[kCNNetworkInfoKeySSID as String] as? String else {
-                        call.resolve(["success": false, "error": "Did not connect to the desired network"])
-                        bridge.releaseCall(withID: call.callbackId)
-                        return
-                    }
-                    if ssid.contains("bushnet") {
-                        // The device is still connected to "bushnet", meaning disconnection failed
-                        call.resolve(["success": false, "error": "Failed to disconnect from the desired network"])
-                    } else {
-                        // Successfully disconnected or was not connected to "bushnet"
-                        call.resolve(["success": true, "data": "disconnected"])
-                    }
-                }
+        guard let bridge = self.bridge else { 
+            return call.reject("Could not access bridge") 
+        }
+        
+        // Ensure we're in a connected state
+        guard connectionState == .connected || connectionState == .connectionLost else {
+            call.resolve(["success": true, "message": "Already disconnected"])
+            return
+        }
+        
+        // Update state to disconnecting
+        updateConnectionState(.disconnecting)
+        
+        // Set a timeout for disconnection
+        let disconnectTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            
+            if self.connectionState == .disconnecting {
+                // Force disconnect state even if operation didn't complete properly
+                self.updateConnectionState(.disconnected)
+                call.resolve(["success": true, "message": "Disconnect timed out but state updated"])
                 bridge.releaseCall(withID: call.callbackId)
             }
+        }
+        
+        call.keepAlive = true
+        
+        // Stop connection monitoring
+        connectionMonitorTimer?.invalidate()
+        
+        // Attempt to remove the Wi-Fi configuration for the SSID "bushnet"
+        NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: "bushnet")
+        
+        if #available(iOS 14.0, *) {
+            NEHotspotNetwork.fetchCurrent { [weak self] (currentConfiguration) in
+                guard let self = self else { return }
+                
+                disconnectTimeoutTimer.invalidate()
+                
+                if let currentSSID = currentConfiguration?.ssid, currentSSID == "bushnet" {
+                    // The device is still connected to the "bushnet" network, disconnection failed
+                    self.updateConnectionState(.connected) // Revert to connected state
+                    call.resolve(["success": false, "error": "Failed to disconnect from the desired network"])
+                } else {
+                    // Successfully disconnected or was not connected to "bushnet"
+                    self.updateConnectionState(.disconnected)
+                    call.resolve(["success": true, "message": "Disconnected successfully"])
+                }
+                
+                // Clean up any reference to the call if necessary
+                bridge.releaseCall(withID: call.callbackId)
+            }
+        } else {
+            // Fallback for earlier versions of iOS
+            guard let interfaceNames = CNCopySupportedInterfaces() else {
+                disconnectTimeoutTimer.invalidate()
+                updateConnectionState(.disconnected) // Assume disconnected on error
+                call.resolve(["success": false, "error": "No interfaces found"])
+                bridge.releaseCall(withID: call.callbackId)
+                return
+            }
+            
+            guard let swiftInterfaces = (interfaceNames as NSArray) as? [String] else {
+                disconnectTimeoutTimer.invalidate()
+                updateConnectionState(.disconnected) // Assume disconnected on error
+                call.resolve(["success": false, "error": "No interfaces found"])
+                bridge.releaseCall(withID: call.callbackId)
+                return
+            }
+            
+            var foundBushnet = false
+            
+            for name in swiftInterfaces {
+                guard let info = CNCopyCurrentNetworkInfo(name as CFString) as? [String: AnyObject] else {
+                    continue
+                }
+                
+                guard let ssid = info[kCNNetworkInfoKeySSID as String] as? String else {
+                    continue
+                }
+                
+                if ssid.contains("bushnet") {
+                    foundBushnet = true
+                    // The device is still connected to "bushnet", meaning disconnection failed
+                    updateConnectionState(.connected) // Revert to connected state
+                    call.resolve(["success": false, "error": "Failed to disconnect from the desired network"])
+                    break
+                }
+            }
+            
+            if !foundBushnet {
+                // Successfully disconnected or was not connected to "bushnet"
+                disconnectTimeoutTimer.invalidate()
+                updateConnectionState(.disconnected)
+                call.resolve(["success": true, "message": "Disconnected successfully"])
+            }
+            
+            bridge.releaseCall(withID: call.callbackId)
+        }
     }
 
     @objc private func checkCurrentConnection(completion: @escaping (Bool) -> Void) {
-            if #available(iOS 14.0, *) {
-                NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
-                    let isConnected = currentConfiguration?.ssid == "bushnet"
-                    completion(isConnected)
+        if #available(iOS 14.0, *) {
+            NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
+                let isConnected = currentConfiguration?.ssid == "bushnet"
+                completion(isConnected)
+            }
+        } else {
+            // Fallback for iOS 13 and earlier
+            guard let interfaceNames = CNCopySupportedInterfaces() as? [String] else {
+                completion(false)
+                return
+            }
+            
+            for name in interfaceNames {
+                guard let info = CNCopyCurrentNetworkInfo(name as CFString) as? [String: Any],
+                      let ssid = info[kCNNetworkInfoKeySSID as String] as? String else {
+                    continue
                 }
-            } else {
-                // Fallback for iOS 13 and earlier
-                guard let interfaceNames = CNCopySupportedInterfaces() as? [String] else {
-                    completion(false)
+                
+                if ssid == "bushnet" {
+                    completion(true)
                     return
                 }
+            }
+            
+            completion(false)
+        }
+    }
+    
+    // Simple Socket class for reachability checks
+    private class Socket {
+        func connect(toHost host: String, onPort port: Int32, withTimeout timeout: TimeInterval) -> Bool {
+            var success = false
+            let semaphore = DispatchSemaphore(value: 0)
+            
+            let hostName = CFHostCreateWithName(nil, host as CFString).takeRetainedValue()
+            CFHostStartInfoResolution(hostName, .addresses, nil)
+            
+            var resolved: DarwinBoolean = false
+            guard let addresses = CFHostGetAddressing(hostName, &resolved)?.takeUnretainedValue() as NSArray? else {
+                return false
+            }
+            
+            for case let theAddress as NSData in addresses {
+                var socketAddress = sockaddr_in()
+                theAddress.getBytes(&socketAddress, length: MemoryLayout<sockaddr_in>.size)
                 
-                for name in interfaceNames {
-                    guard let info = CNCopyCurrentNetworkInfo(name as CFString) as? [String: Any],
-                          let ssid = info[kCNNetworkInfoKeySSID as String] as? String else {
-                        continue
-                    }
+                let sock = socket(AF_INET, SOCK_STREAM, 0)
+                if sock == -1 { continue }
+                
+                var value: Int32 = 1
+                setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &value, socklen_t(MemoryLayout<Int32>.size))
+                
+                // Set non-blocking
+                var flags = fcntl(sock, F_GETFL, 0)
+                fcntl(sock, F_SETFL, flags | O_NONBLOCK)
+                
+                let connectResult = connect(sock, theAddress.bytes.bindMemory(to: sockaddr.self, capacity: 1), socklen_t(theAddress.length))
+                
+                if connectResult == -1 && errno == EINPROGRESS {
+                    var fds = pollfd(fd: sock, events: Int16(POLLOUT), revents: 0)
+                    let pollResult = poll(&fds, 1, Int32(timeout * 1000))
                     
-                    if ssid == "bushnet" {
-                        completion(true)
-                        return
+                    if pollResult > 0 && (fds.revents & Int16(POLLOUT)) != 0 {
+                        var error: Int32 = 0
+                        var errorLen = socklen_t(MemoryLayout<Int32>.size)
+                        getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &errorLen)
+                        
+                        if error == 0 {
+                            success = true
+                        }
                     }
+                } else if connectResult == 0 {
+                    success = true
                 }
                 
-                completion(false)
+                // Reset to blocking mode
+                flags = fcntl(sock, F_GETFL, 0)
+                fcntl(sock, F_SETFL, flags & ~O_NONBLOCK)
+                
+                close(sock)
+                
+                if success {
+                    break
+                }
             }
+            
+            return success
         }
+    }
     
     @objc func checkIsAPConnected(_ call: CAPPluginCall) {
-        checkCurrentConnection { isConnected in
+        checkCurrentConnection { [weak self] isConnected in
+            guard let self = self else {
+                call.resolve(["connected": false])
+                return
+            }
+            
+            // Update internal state if needed
+            if isConnected && self.connectionState != .connected {
+                self.updateConnectionState(.connected)
+                // Start monitoring if we're connected but weren't tracking it
+                self.startConnectionMonitoring()
+            } else if !isConnected && self.connectionState == .connected {
+                self.updateConnectionState(.disconnected)
+                self.connectionMonitorTimer?.invalidate()
+            }
+            
             call.resolve(["connected": isConnected])
         }
     }
@@ -379,19 +851,32 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     }
     
     @objc func hasConnection(_ call: CAPPluginCall) {
-        if #available(iOS 14.0, *) {
-            NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
-                if let currentSSID = currentConfiguration?.ssid, currentSSID == "bushnet" {
-                    // Successfully connected to the desired network
-                    call.resolve(["success": true, "data": "connected"])
-                } else {
-                    // The device might have connected to a different network
-                    call.resolve(["success": false, "error": "Did not connect to the desired network"])
-                }
+        let networkMonitor = NWPathMonitor()
+        let queue = DispatchQueue(label: "NetworkMonitor")
+        
+        networkMonitor.pathUpdateHandler = { path in
+            networkMonitor.cancel()
+            
+            let isConnected = path.status == .satisfied
+            
+            DispatchQueue.main.async {
+                call.resolve([
+                    "success": true,
+                    "connected": isConnected
+                ])
             }
-        } else {
-            // Fallback on earlier versions
-            call.resolve(["success": true, "data": "default"])
+        }
+        
+        networkMonitor.start(queue: queue)
+        
+        // Set a timeout in case the network monitor doesn't respond
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            networkMonitor.cancel()
+            call.resolve([
+                "success": false,
+                "connected": false,
+                "message": "Network check timed out"
+            ])
         }
     }
     enum PermissionState: String {
