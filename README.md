@@ -1,37 +1,88 @@
 # Sidekick
-The application allows users to connect and manage their Cacophony Cameras.
 
-The stack uses a unique setup of [Kotlin Multiplatform  Mobile](https://lp.jetbrains.com/kmm-for-crossplatform-developers/), and [Capacitor.js](https://capacitorjs.com/) to create a cross-platform mobile app. The app is built using [Solid.js](https://www.solidjs.com/), a declarative JavaScript library for creating user interfaces.
+Sidekick is a cross-platform mobile application for connecting to and managing Cacophony Project thermal cameras used in wildlife conservation.
 
+## What is Sidekick?
+
+Sidekick allows conservationists and researchers to:
+
+- Connect to Cacophony thermal cameras in the field
+- Configure camera settings and recording schedules
+- View live camera feeds and test recordings
+- Download and manage recorded footage
+- Upload wildlife recordings to the Cacophony Project platform
+- Track camera locations and status
+
+The Cacophony Project uses thermal cameras with AI-powered detection to monitor wildlife for conservation research, particularly focusing on predator control and native species protection in New Zealand.
+
+## Technology Stack
+
+Sidekick is built using:
+- [Kotlin Multiplatform Mobile](https://kotlinlang.org/docs/multiplatform-mobile-getting-started.html) for shared native code
+- [Capacitor.js](https://capacitorjs.com/) for cross-platform native runtime
+- [Solid.js](https://www.solidjs.com/) for the user interface
+- [SQLite](https://www.sqlite.org/) for local data storage
+
+This architecture provides native performance with cross-platform compatibility for both Android and iOS.
 
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/en/) version 18 or higher
 - Java 17
-- [Android Studio](https://developer.android.com/studio) (For android development)
-- Xcode (For iOS development, this will require a Mac)
+- [Android Studio](https://developer.android.com/studio) (for Android development)
+- Xcode (for iOS development, requires macOS)
+- A physical mobile device for testing (most features require hardware access)
 
-## Developing
-It's recommended to use pnpm to install dependencies. To install pnpm, run:
-```bash
-npm install -g pnpm
-```
-You will first need to open the project in Android Studio to [./sidekick](./sidekick/) so gradle can download the dependencies, then run in root file:
-```bash
-pnpm install
-# If you want to create a release build which you can run through Android Studio
-pnpm build
-pnpm sync
-# or if you want to run the app in development mode
-pnpm dev
-```
-**Note:** Most features require a physical device, so ensure you have enabled USB debugging on your device and connected it to your machine.
+## Development Setup
 
-## Release
+1. Install pnpm (recommended package manager):
+   ```bash
+   npm install -g pnpm
+   ```
 
-Android builds are handled automatically through github releases.
-iOS builds are handled manually through Xcode Archive.
+2. Open the project in Android Studio:
+   - Open the `/sidekick` directory in Android Studio
+   - Let Gradle download all dependencies
 
-Note that the versions must be incremented in the following files:
-- [./sidekick/app/build.gradle.kts](./sidekick/app/build.gradle.kts)
-- [./sidekick/App/App.xcodeproj/project.pbxproj](./sidekick/App/App.xcodeproj/project.pbxproj)
+3. Install JavaScript dependencies:
+   ```bash
+   pnpm install
+   ```
+
+4. Build and run:
+   ```bash
+   # Development mode with hot reloading
+   pnpm dev
+
+   # OR
+
+   # Build a release version
+   pnpm build
+   pnpm sync
+   ```
+
+5. Connect a physical device:
+   - Enable USB debugging on your Android device
+   - Connect it to your computer
+   - Or use Xcode to deploy to an iOS device
+
+**Note:** Most camera features require physical hardware and cannot be fully tested in emulators.
+
+## Release Process
+
+### Android
+Builds are automated through GitHub releases.
+
+### iOS
+Builds are created manually using Xcode Archive.
+
+### Version Updates
+When creating a new release, update version numbers in:
+- `./sidekick/app/build.gradle.kts`
+- `./sidekick/App/App.xcodeproj/project.pbxproj`
+
+## Documentation
+
+For more information about the Cacophony Project:
+- [Cacophony Project Website](https://cacophony.org.nz/)
+- [GitHub Organization](https://github.com/TheCacophonyProject)
