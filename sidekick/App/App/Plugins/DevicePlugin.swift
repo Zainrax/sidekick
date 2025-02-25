@@ -155,6 +155,8 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         
+        print("Starting device discovery for service type: \(type)")
+        
         // Update state and notify listeners
         updateDiscoveryState(.starting)
         
@@ -164,7 +166,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         let parameters = NWParameters()
         parameters.requiredInterfaceType = .wifi
         
-        serviceBrowser = NWBrowser(for: .bonjour(type: "_cacophonator-management._tcp", domain: "local."), using: parameters)
+        serviceBrowser = NWBrowser(for: .bonjour(type: type, domain: domain), using: parameters)
         serviceBrowser?.stateUpdateHandler = { [weak self] newState in
             guard let self = self else { return }
             
@@ -203,15 +205,14 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         serviceBrowser?.browseResultsChangedHandler = { [weak self] results, changes in
             guard let self = self else { return }
             
+            print("Browse results changed: \(results.count) results, \(changes.count) changes")
+            
             for change in changes {
                 switch change {
                 case .added(let result):
-                    let endpoint = switch result.endpoint {
-                    case .service(let name, _, _, _):
-                        "\(name).local"
-                    default:
-                        result.endpoint.debugDescription
-                    }
+                    // Extract service details
+                    let (name, port) = extractServiceDetails(from: result.endpoint)
+                    let endpoint = "\(name).local"
                     
                     // Verify the service is reachable
                     self.verifyServiceReachability(endpoint: endpoint) { isReachable in
@@ -219,7 +220,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                             self.notifyListeners("onServiceResolved", data: [
                                 "endpoint": endpoint,
                                 "host": endpoint,
-                                "port": 80 // Default port, would need to be resolved properly
+                                "port": port
                             ])
                         }
                     }
@@ -234,12 +235,9 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     self.notifyListeners("onServiceLost", data: ["endpoint": endpoint])
                     
                 case .changed(old: _, new: let new, flags: _):
-                    let endpoint = switch new.endpoint {
-                    case .service(let name, _, _, _):
-                        "\(name).local"
-                    default:
-                        new.endpoint.debugDescription
-                    }
+                    // Extract service details
+                    let (name, port) = extractServiceDetails(from: new.endpoint)
+                    let endpoint = "\(name).local"
                     
                     // Verify the service is reachable
                     self.verifyServiceReachability(endpoint: endpoint) { isReachable in
@@ -247,7 +245,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                             self.notifyListeners("onServiceResolved", data: [
                                 "endpoint": endpoint,
                                 "host": endpoint,
-                                "port": 80 // Default port, would need to be resolved properly
+                                "port": port
                             ])
                         }
                     }
@@ -266,7 +264,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         let parameters = NWParameters()
         parameters.requiredInterfaceType = .wifi
         
-        serviceBrowser = NWBrowser(for: .bonjour(type: "_cacophonator-management._tcp", domain: "local."), using: parameters)
+        serviceBrowser = NWBrowser(for: .bonjour(type: type, domain: domain), using: parameters)
         serviceBrowser?.stateUpdateHandler = { [weak self] newState in
             guard let self = self else { return }
             
@@ -303,19 +301,16 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             for change in changes {
                 switch change {
                 case .added(let result):
-                    let endpoint = switch result.endpoint {
-                    case .service(let name, _, _, _):
-                        "\(name).local"
-                    default:
-                        result.endpoint.debugDescription
-                    }
+                    // Extract service details
+                    let (name, port) = extractServiceDetails(from: result.endpoint)
+                    let endpoint = "\(name).local"
                     
                     self.verifyServiceReachability(endpoint: endpoint) { isReachable in
                         if isReachable {
                             self.notifyListeners("onServiceResolved", data: [
                                 "endpoint": endpoint,
                                 "host": endpoint,
-                                "port": 80
+                                "port": port
                             ])
                         }
                     }
@@ -342,13 +337,45 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     }
     
     private func verifyServiceReachability(endpoint: String, completion: @escaping (Bool) -> Void) {
-        // Simple socket connection to verify reachability
-        DispatchQueue.global(qos: .background).async {
-            let socket = Socket()
-            let isReachable = socket.connect(toHost: endpoint, onPort: 80, withTimeout: 3)
-            DispatchQueue.main.async {
-                completion(isReachable)
+        // Use NWConnection for more reliable reachability check
+        let host = NWEndpoint.Host(endpoint)
+        let port = NWEndpoint.Port(integerLiteral: 80)
+        
+        let connection = NWConnection(host: host, port: port, using: .tcp)
+        
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                // Connection succeeded
+                connection.cancel()
+                DispatchQueue.main.async {
+                    completion(true)
+                }
+                
+            case .failed(let error):
+                // Connection failed
+                connection.cancel()
+                DispatchQueue.main.async {
+                    print("Connection failed: \(error)")
+                    completion(false)
+                }
+                
+            case .cancelled:
+                // Connection was cancelled
+                break
+                
+            default:
+                // Other states (preparing, waiting, etc.)
+                break
             }
+        }
+        
+        // Start the connection attempt with a timeout
+        connection.start(queue: .global())
+        
+        // Set timeout
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3.0) {
+            connection.cancel()
         }
     }
     
@@ -663,65 +690,40 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
     
-    // Simple Socket class for reachability checks
-    private class Socket {
-        func connect(toHost host: String, onPort port: Int32, withTimeout timeout: TimeInterval) -> Bool {
-            var success = false
-            let semaphore = DispatchSemaphore(value: 0)
+    // Helper function to extract service details from NWEndpoint
+    private func extractServiceDetails(from endpoint: NWEndpoint) -> (name: String, port: Int) {
+        switch endpoint {
+        case .service(let name, let type, let domain, let interface):
+            // Try to resolve the port from TXT records or use default port
+            // For Cacophony devices, port is typically 80
+            return (name, 80)
             
-            let hostName = CFHostCreateWithName(nil, host as CFString).takeRetainedValue()
-            CFHostStartInfoResolution(hostName, .addresses, nil)
-            
-            var resolved: DarwinBoolean = false
-            guard let addresses = CFHostGetAddressing(hostName, &resolved)?.takeUnretainedValue() as NSArray? else {
-                return false
+        case .hostPort(let host, let port):
+            // If we have a host/port endpoint
+            let name = switch host {
+            case .name(let hostname, _):
+                hostname
+            default:
+                host.debugDescription
             }
             
-            for case let theAddress as NSData in addresses {
-                var socketAddress = sockaddr_in()
-                theAddress.getBytes(&socketAddress, length: MemoryLayout<sockaddr_in>.size)
-                
-                let sock = socket(AF_INET, SOCK_STREAM, 0)
-                if sock == -1 { continue }
-                
-                var value: Int32 = 1
-                setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &value, socklen_t(MemoryLayout<Int32>.size))
-                
-                // Set non-blocking
-                var flags = fcntl(sock, F_GETFL, 0)
-                fcntl(sock, F_SETFL, flags | O_NONBLOCK)
-                
-                let connectResult = connect(sock, theAddress.bytes.bindMemory(to: sockaddr.self, capacity: 1), socklen_t(theAddress.length))
-                
-                if connectResult == -1 && errno == EINPROGRESS {
-                    var fds = pollfd(fd: sock, events: Int16(POLLOUT), revents: 0)
-                    let pollResult = poll(&fds, 1, Int32(timeout * 1000))
-                    
-                    if pollResult > 0 && (fds.revents & Int16(POLLOUT)) != 0 {
-                        var error: Int32 = 0
-                        var errorLen = socklen_t(MemoryLayout<Int32>.size)
-                        getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &errorLen)
-                        
-                        if error == 0 {
-                            success = true
-                        }
-                    }
-                } else if connectResult == 0 {
-                    success = true
-                }
-                
-                // Reset to blocking mode
-                flags = fcntl(sock, F_GETFL, 0)
-                fcntl(sock, F_SETFL, flags & ~O_NONBLOCK)
-                
-                close(sock)
-                
-                if success {
-                    break
-                }
-            }
+            return (name, Int(port.rawValue))
             
-            return success
+        default:
+            // Default fallback
+            return (endpoint.debugDescription, 80)
+        }
+    }
+    
+    // Debug helper to print endpoint details
+    private func logEndpointDetails(_ endpoint: NWEndpoint) {
+        switch endpoint {
+        case .service(let name, let type, let domain, let interface):
+            print("Service: name=\(name), type=\(type), domain=\(domain), interface=\(interface?.debugDescription ?? "nil")")
+        case .hostPort(let host, let port):
+            print("HostPort: host=\(host), port=\(port)")
+        default:
+            print("Unknown endpoint type: \(endpoint)")
         }
     }
     
