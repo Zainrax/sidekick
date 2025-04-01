@@ -57,9 +57,29 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         case failed
     }
     
+    enum DiscoveryState: String {
+        case inactive = "INACTIVE"
+        case starting = "STARTING"
+        case active = "ACTIVE"
+        case stopping = "STOPPING"
+        case restarting = "RESTARTING"
+        case error = "ERROR"
+    }
+    
+    enum ConnectionState: String {
+        case disconnected = "DISCONNECTED"
+        case connecting = "CONNECTING"
+        case connected = "CONNECTED"
+        case disconnecting = "DISCONNECTING"
+        case connectionLost = "CONNECTION_LOST"
+        case error = "ERROR"
+    }
+    
     @objc let device = DeviceInterface(filePath: documentPath)
     let configuration = NEHotspotConfiguration(ssid: "bushnet", passphrase: "feathers", isWEP: false)
-    var isConnected = false;
+    var isConnected = false
+    var discoveryState: DiscoveryState = .inactive
+    var connectionState: ConnectionState = .disconnected
     
     private var callQueue: [String: CallType] = [:]
     func createBrowser() -> NWBrowser {
@@ -257,6 +277,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         }
         
         serviceBrowser?.start(queue: .main)
+        isDiscovering = true
         call.resolve()
     }
     
@@ -439,6 +460,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         
         call.resolve(["success": true])
     }
+    
     @objc func checkDeviceConnection(_ call: CAPPluginCall) {
         DispatchQueue.global().async { [weak self] in
             self?.device.checkDeviceConnection(call: pluginCall(call: call))
@@ -747,8 +769,24 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve(["connected": isConnected])
         }
     }
-
-
+    
+    @objc func hasConnection(_ call: CAPPluginCall) {
+        if #available(iOS 14.0, *) {
+            NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
+                if let currentSSID = currentConfiguration?.ssid, currentSSID == "bushnet" {
+                    // Successfully connected to the desired network
+                    call.resolve(["success": true, "data": "connected"])
+                } else {
+                    // The device might have connected to a different network
+                    call.resolve(["success": false, "error": "Did not connect to the desired network"])
+                }
+            }
+        } else {
+            // Fallback on earlier versions
+            call.resolve(["success": true, "data": "default"])
+        }
+    }
+    
     @objc func turnOnModem(_ call: CAPPluginCall) {
         DispatchQueue.global().async { [weak self] in
             self?.device.turnOnModem(call: pluginCall(call: call))
@@ -760,7 +798,6 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             self?.device.reregister(call: pluginCall(call: call))
         }
     }
-    
     
     @objc func getDeviceInfo(_ call: CAPPluginCall) {
         DispatchQueue.global().async { [weak self] in
@@ -791,7 +828,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             self?.device.setDeviceLocation(call: pluginCall(call: call))
         }
     }
-
+    
     @objc func getRecordings(_ call: CAPPluginCall) {
         DispatchQueue.global().async { [weak self] in
             self?.device.getRecordings(call: pluginCall(call: call))
@@ -803,11 +840,13 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             self?.device.getEvents(call: pluginCall(call: call))
         }
     }
+    
     @objc func deleteEvents(_ call: CAPPluginCall) {
         DispatchQueue.global().async { [weak self] in
             self?.device.deleteEvents(call: pluginCall(call: call))
         }
     }
+    
     @objc func getEventKeys(_ call: CAPPluginCall) {
         DispatchQueue.global().async { [weak self] in
             self?.device.getEventKeys(call: pluginCall(call: call))
@@ -831,7 +870,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             self?.device.deleteRecordings(call: pluginCall(call: call))
         }
     }
-
+    
     @objc func updateRecordingWindow(_ call: CAPPluginCall) {
         DispatchQueue.global().async { [weak self] in
             self?.device.updateRecordingWindow(call: pluginCall(call: call))
@@ -845,10 +884,14 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     }
     
     @objc func unbindConnection(_ call: CAPPluginCall) {
+        // Notify about the unbind event
+        notifyListeners("onConnectionUnbound", data: [:])
         call.resolve()
     }
     
     @objc func rebindConnection(_ call: CAPPluginCall) {
+        // Notify about the rebind event
+        notifyListeners("onConnectionRebound", data: [:])
         call.resolve()
     }
     
@@ -1014,6 +1057,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 }
+
 class LocalNetworkPrivacy : NSObject {
     let service: NetService
 
