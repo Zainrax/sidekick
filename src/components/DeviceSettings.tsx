@@ -199,7 +199,7 @@ export function AudioSettingsTab(props: SettingProps) {
     if (end) {
       endWidth = calcWidth(end);
     }
-    let startWidth = calcWidth(start);
+    const startWidth = calcWidth(start);
     const value = 100 - startWidth - endWidth;
     return value;
   };
@@ -233,7 +233,7 @@ export function AudioSettingsTab(props: SettingProps) {
       </FieldWrapper>
       <div>
         <div class="flex items-center space-x-2 px-2">
-          <div class="w-20"></div>
+          <div class="w-20" />
           <div class="flex w-full justify-between text-xs text-gray-500">
             <div>00:00</div>
             <div>12:00</div>
@@ -791,7 +791,7 @@ export function CameraSettingsTab(props: SettingProps) {
           </Show>
           <button
             ref={triggerTrap}
-            style="position: relative;display: none"
+            style={{ position: "relative", display: "none" }}
             type="button"
           >
             Trigger trap
@@ -2674,7 +2674,7 @@ export function GeneralSettingsTab(props: SettingProps) {
                     context.getDeviceUpdating(id())?.UpdateProgressPercentage
                   }%`,
                 }}
-              ></div>
+              />
               <span class="absolute left-1/2 top-1 -translate-x-1/2 transform text-xs text-white">
                 {context.getDeviceUpdating(id())?.UpdateProgressPercentage}%
               </span>

@@ -57,29 +57,9 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         case failed
     }
     
-    enum DiscoveryState: String {
-        case inactive = "INACTIVE"
-        case starting = "STARTING"
-        case active = "ACTIVE"
-        case stopping = "STOPPING"
-        case restarting = "RESTARTING"
-        case error = "ERROR"
-    }
-    
-    enum ConnectionState: String {
-        case disconnected = "DISCONNECTED"
-        case connecting = "CONNECTING"
-        case connected = "CONNECTED"
-        case disconnecting = "DISCONNECTING"
-        case connectionLost = "CONNECTION_LOST"
-        case error = "ERROR"
-    }
-    
     @objc let device = DeviceInterface(filePath: documentPath)
     let configuration = NEHotspotConfiguration(ssid: "bushnet", passphrase: "feathers", isWEP: false)
     var isConnected = false
-    var discoveryState: DiscoveryState = .inactive
-    var connectionState: ConnectionState = .disconnected
     
     private var callQueue: [String: CallType] = [:]
     func createBrowser() -> NWBrowser {
@@ -133,10 +113,71 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     private var connectionMonitorTimer: Timer?
     private var connectionTimeoutTimer: Timer?
     private var verificationTimer: Timer?
+    private var lastKnownConnectionState = false
+    private var isMonitoringActive = false
+    private var isMonitoringInitialized = false
+    
+    public override func load() {
+        super.load()
+        
+        startWiFiMonitoring()
+    }
+    
+    deinit {
+        stopWiFiMonitoring()
+    }
+    
+    // Add continuous monitoring for WiFi connection
+    private func startWiFiMonitoring() {
+        guard !isMonitoringActive else {
+            return
+        }
+        
+        isMonitoringActive = true
+        
+        // Do initial connection check
+        checkCurrentConnection { [weak self] isConnected in
+            guard let self = self else { return }
+            
+            // On initial check, don't move to disconnected state 
+            // to avoid disabling the connection button
+            if (isConnected) {
+                self.updateConnectionState(.connected)
+            } else if (!self.isMonitoringInitialized) {
+                // For first check, keep state as default if disconnected
+                // This preserves the button's enabled state
+                self.connectionState = .disconnected
+                self.notifyListeners("onAPConnectionStateChanged", data: ["state": "default"])
+            } else {
+                self.updateConnectionState(.disconnected)
+            }
+            
+            self.lastKnownConnectionState = isConnected
+            self.isMonitoringInitialized = true
+        }
+        
+        // Set up periodic monitoring
+        connectionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            
+            self.checkCurrentConnection { isConnected in
+                // Only update if state has changed and we're already initialized
+                if isConnected != self.lastKnownConnectionState {
+                    self.updateConnectionState(isConnected ? .connected : .disconnected)
+                    self.lastKnownConnectionState = isConnected
+                }
+            }
+        }
+    }
+    
+    private func stopWiFiMonitoring() {
+        connectionMonitorTimer?.invalidate()
+        connectionMonitorTimer = nil
+        isMonitoringActive = false
+    }
     
     private func updateDiscoveryState(_ newState: DiscoveryState) {
         if discoveryState != newState {
-            let oldState = discoveryState
             discoveryState = newState
             notifyListeners("onDiscoveryStateChanged", data: ["state": newState.rawValue])
         }
@@ -144,7 +185,6 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     
     private func updateConnectionState(_ newState: ConnectionState) {
         if connectionState != newState {
-            let oldState = connectionState
             connectionState = newState
             notifyListeners("onAPConnectionStateChanged", data: ["state": newState.rawValue])
             
@@ -269,7 +309,8 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                             ])
                         }
                     }
-                    
+                case .identical:
+                    break
                 @unknown default:
                     break
                 }
@@ -468,7 +509,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     }
     
     @objc func connectToDeviceAP(_ call: CAPPluginCall) {
-        guard let bridge = self.bridge else { 
+        guard self.bridge != nil else { 
             call.reject("Could not access bridge")
             return
         }
@@ -713,7 +754,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     }
     
     // Helper function to extract service details from NWEndpoint
-    private func extractServiceDetails(from endpoint: NWEndpoint) -> (name: String, port: Int) {
+    private func extractServiceDetails(from endpoint: Network.NWEndpoint) -> (name: String, port: Int) {
         switch endpoint {
         case .service(let name, let type, let domain, let interface):
             // Try to resolve the port from TXT records or use default port
@@ -738,7 +779,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     }
     
     // Debug helper to print endpoint details
-    private func logEndpointDetails(_ endpoint: NWEndpoint) {
+    private func logEndpointDetails(_ endpoint: Network.NWEndpoint) {
         switch endpoint {
         case .service(let name, let type, let domain, let interface):
             print("Service: name=\(name), type=\(type), domain=\(domain), interface=\(interface?.debugDescription ?? "nil")")
@@ -757,33 +798,12 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             }
             
             // Update internal state if needed
-            if isConnected && self.connectionState != .connected {
-                self.updateConnectionState(.connected)
-                // Start monitoring if we're connected but weren't tracking it
-                self.startConnectionMonitoring()
-            } else if !isConnected && self.connectionState == .connected {
-                self.updateConnectionState(.disconnected)
-                self.connectionMonitorTimer?.invalidate()
+            if isConnected != self.lastKnownConnectionState {
+                self.updateConnectionState(isConnected ? .connected : .disconnected)
+                self.lastKnownConnectionState = isConnected
             }
             
             call.resolve(["connected": isConnected])
-        }
-    }
-    
-    @objc func hasConnection(_ call: CAPPluginCall) {
-        if #available(iOS 14.0, *) {
-            NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
-                if let currentSSID = currentConfiguration?.ssid, currentSSID == "bushnet" {
-                    // Successfully connected to the desired network
-                    call.resolve(["success": true, "data": "connected"])
-                } else {
-                    // The device might have connected to a different network
-                    call.resolve(["success": false, "error": "Did not connect to the desired network"])
-                }
-            }
-        } else {
-            // Fallback on earlier versions
-            call.resolve(["success": true, "data": "default"])
         }
     }
     
@@ -932,7 +952,6 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     
     @objc override public func checkPermissions(_ call: CAPPluginCall) {
         let serviceType = "_preflight_check._tcp"
-        let domain = "local."
         let queue = DispatchQueue(label: "LocalNetworkPermissionCheckQueue")
         
         var listener: NWListener?

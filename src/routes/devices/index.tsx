@@ -364,9 +364,7 @@ function Devices() {
       () => (
         <Show
           when={
-            !["loadingConnect", "loadingDisconnect"].includes(
-              context.apState()
-            ) && context.apState()
+            !["loadingConnect", "loadingDisconnect"].includes(context.apState())
           }
           fallback={
             <span class="text-blue-500">
@@ -374,47 +372,68 @@ function Devices() {
             </span>
           }
         >
-          {(state) => (
-            <button
-              onClick={async () => {
-                try {
-                  if (state() === "connected") {
-                    if (tryDisconnect()) return;
-                    setTryDisconnect(true);
-                    const dialog = await Prompt.confirm({
-                      title: "Disconnect from Device",
-                      message:
-                        "You are currently connected to the device's WiFi network. Disconnect from the device to connect to another network?",
-                    });
-                    if (dialog.value) {
-                      await context.disconnectFromDeviceAP();
-                    }
-                  } else {
-                    context.connectToDeviceAP();
-                  }
-                } catch (error) {
-                  console.error("Error in disconnecting from device", error);
-                  log.logError({
-                    message: "Error connecting/disconnecting",
-                    error,
+          <button
+            onClick={async () => {
+              console.log(
+                "AP button clicked, current state:",
+                context.apState()
+              );
+              try {
+                if (context.apState() === "connected") {
+                  if (tryDisconnect()) return;
+                  setTryDisconnect(true);
+                  const dialog = await Prompt.confirm({
+                    title: "Disconnect from Device",
+                    message:
+                      "You are currently connected to the device's WiFi network. Disconnect from the device to connect to another network?",
                   });
-                } finally {
-                  setTryDisconnect(false);
+                  if (dialog.value) {
+                    await context.disconnectFromDeviceAP();
+                  }
+                } else {
+                  context.connectToDeviceAP();
                 }
-              }}
-              classList={{
-                "text-blue-500":
-                  state() === "default" || state() === "disconnected",
-                "text-highlight": state() === "connected",
-              }}
-            >
-              <RiDeviceRouterFill size={28} />
-            </button>
-          )}
+              } catch (error) {
+                console.error(
+                  "Error in connecting/disconnecting from device",
+                  error
+                );
+                log.logError({
+                  message: "Error connecting/disconnecting",
+                  error,
+                });
+              } finally {
+                setTryDisconnect(false);
+              }
+            }}
+            classList={{
+              "text-blue-500":
+                context.apState() === "default" ||
+                context.apState() === "disconnected",
+              "text-highlight": context.apState() === "connected",
+            }}
+            title={getButtonTitle(context.apState())}
+          >
+            <RiDeviceRouterFill size={28} />
+          </button>
         </Show>
       ),
     ]);
   });
+
+  // Add this helper function to get an appropriate tooltip for the button
+  function getButtonTitle(state: string | undefined): string {
+    switch (state) {
+      case "connected":
+        return "Disconnect from device WiFi";
+      case "disconnected":
+        return "Connect to device WiFi";
+      case "default":
+        return "Connect to device WiFi";
+      default:
+        return "Device WiFi connection";
+    }
+  }
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [isDialogOpen, setIsDialogOpen] = createSignal(false);

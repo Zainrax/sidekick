@@ -635,7 +635,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
 
     console.log("Connecting to device", newDevice);
-    debugger;
 
     const device = await connectToDevice(newDevice);
 
@@ -733,37 +732,19 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   };
 
   const [checkingAP, setCheckingAP] = createSignal(false);
-  const checkAP = async () => {
-    if (checkingAP()) return;
-    setCheckingAP(true);
 
-    try {
-      let isConnected = false;
-      for (let i = 0; i < AP_CHECK_RETRIES; i++) {
-        const res = await DevicePlugin.checkIsAPConnected();
-        if (res.connected) {
-          isConnected = true;
-          break;
-        }
-      }
-
-      if (isConnected && apState() !== "loadingDisconnect") {
-        setApState("connected");
-      } else if (!isConnected && apState() !== "loadingConnect") {
-        setApState("disconnected");
-      }
-    } catch (error) {
-      log.logError({
-        message: "Error checking AP connection",
-        error,
-      });
-    } finally {
-      setCheckingAP(false);
-    }
-  };
+  // Remove the polling mechanism and rely on native event listeners
   const monitorAPConnection = async () => {
-    await checkAP();
-    return setInterval(checkAP, 10000);
+    // Initial check to set the correct state at startup
+    try {
+      const res = await DevicePlugin.checkIsAPConnected();
+      // Always initialize to "default" if not connected to enable the Connect button
+      setApState(res.connected ? "connected" : "default");
+    } catch (error) {
+      // Always initialize to "default" on error to enable the Connect button
+      setApState("default");
+    }
+    // No need to set up interval - native plugin now handles monitoring
   };
 
   const handleDiscoveryStateChanged = (res: { state: string }) => {
@@ -1116,12 +1097,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   onMount(async () => {
     await setupListeners();
-    const monitorInterval = monitorAPConnection();
+    await monitorAPConnection(); // Just does the initial check now
     await searchDevice();
     const searchInterval = setInterval(searchDevice, DISCOVERY_INTERVAL);
 
     onCleanup(() => {
-      clearInterval(monitorInterval);
       clearInterval(searchInterval);
       cleanupListeners();
     });
@@ -2181,6 +2161,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         return;
       }
 
+      // Always start from a clean state when initiating a connection
       setApState("loadingConnect");
 
       const connectTimeout = setTimeout(() => {

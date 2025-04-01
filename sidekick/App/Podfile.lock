@@ -1,5 +1,5 @@
 PODS:
-  - Capacitor (6.2.0):
+  - Capacitor (6.2.1):
     - CapacitorCordova
   - CapacitorApp (6.0.2):
     - Capacitor
@@ -15,7 +15,7 @@ PODS:
     - Capacitor
     - SQLCipher
     - ZIPFoundation
-  - CapacitorCordova (6.2.0)
+  - CapacitorCordova (6.2.1)
   - CapacitorDialog (6.0.2):
     - Capacitor
   - CapacitorFilesystem (6.0.3):
@@ -29,7 +29,7 @@ PODS:
   - CapacitorPreferences (6.0.3):
     - Capacitor
   - Sentry/HybridSDK (8.36.0)
-  - SentryCapacitor (1.2.0):
+  - SentryCapacitor (1.2.1):
     - Capacitor
     - Sentry/HybridSDK (= 8.36.0)
   - shared (1.0)
@@ -41,21 +41,21 @@ PODS:
   - ZIPFoundation (0.9.19)
 
 DEPENDENCIES:
-  - "Capacitor (from `../../node_modules/.pnpm/@capacitor+ios@6.2.0_@capacitor+core@6.2.0/node_modules/@capacitor/ios`)"
-  - "CapacitorApp (from `../../node_modules/.pnpm/@capacitor+app@6.0.2_@capacitor+core@6.2.0/node_modules/@capacitor/app`)"
-  - "CapacitorBrowser (from `../../node_modules/.pnpm/@capacitor+browser@6.0.5_@capacitor+core@6.2.0/node_modules/@capacitor/browser`)"
-  - "CapacitorCamera (from `../../node_modules/.pnpm/@capacitor+camera@6.1.2_@capacitor+core@6.2.0/node_modules/@capacitor/camera`)"
-  - "CapacitorClipboard (from `../../node_modules/.pnpm/@capacitor+clipboard@6.0.2_@capacitor+core@6.2.0/node_modules/@capacitor/clipboard`)"
-  - "CapacitorCommunityKeepAwake (from `../../node_modules/.pnpm/@capacitor-community+keep-awake@5.0.1_@capacitor+core@6.2.0/node_modules/@capacitor-community/keep-awake`)"
-  - "CapacitorCommunitySqlite (from `../../node_modules/.pnpm/@capacitor-community+sqlite@6.0.1_@capacitor+core@6.2.0/node_modules/@capacitor-community/sqlite`)"
-  - "CapacitorCordova (from `../../node_modules/.pnpm/@capacitor+ios@6.2.0_@capacitor+core@6.2.0/node_modules/@capacitor/ios`)"
-  - "CapacitorDialog (from `../../node_modules/.pnpm/@capacitor+dialog@6.0.2_@capacitor+core@6.2.0/node_modules/@capacitor/dialog`)"
-  - "CapacitorFilesystem (from `../../node_modules/.pnpm/@capacitor+filesystem@6.0.3_@capacitor+core@6.2.0/node_modules/@capacitor/filesystem`)"
-  - "CapacitorGeolocation (from `../../node_modules/.pnpm/@capacitor+geolocation@6.1.0_@capacitor+core@6.2.0/node_modules/@capacitor/geolocation`)"
-  - "CapacitorNativeSettings (from `../../node_modules/.pnpm/capacitor-native-settings@6.0.5_@capacitor+core@6.2.0/node_modules/capacitor-native-settings`)"
-  - "CapacitorNetwork (from `../../node_modules/.pnpm/@capacitor+network@6.0.3_@capacitor+core@6.2.0/node_modules/@capacitor/network`)"
-  - "CapacitorPreferences (from `../../node_modules/.pnpm/@capacitor+preferences@6.0.3_@capacitor+core@6.2.0/node_modules/@capacitor/preferences`)"
-  - "SentryCapacitor (from `../../node_modules/.pnpm/@sentry+capacitor@1.2.0_@capacitor+core@6.2.0/node_modules/@sentry/capacitor`)"
+  - "Capacitor (from `../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios`)"
+  - "CapacitorApp (from `../../node_modules/.pnpm/@capacitor+app@6.0.2_@capacitor+core@6.2.1/node_modules/@capacitor/app`)"
+  - "CapacitorBrowser (from `../../node_modules/.pnpm/@capacitor+browser@6.0.5_@capacitor+core@6.2.1/node_modules/@capacitor/browser`)"
+  - "CapacitorCamera (from `../../node_modules/.pnpm/@capacitor+camera@6.1.2_@capacitor+core@6.2.1/node_modules/@capacitor/camera`)"
+  - "CapacitorClipboard (from `../../node_modules/.pnpm/@capacitor+clipboard@6.0.2_@capacitor+core@6.2.1/node_modules/@capacitor/clipboard`)"
+  - "CapacitorCommunityKeepAwake (from `../../node_modules/.pnpm/@capacitor-community+keep-awake@5.0.1_@capacitor+core@6.2.1/node_modules/@capacitor-community/keep-awake`)"
+  - "CapacitorCommunitySqlite (from `../../node_modules/.pnpm/@capacitor-community+sqlite@6.0.1_@capacitor+core@6.2.1/node_modules/@capacitor-community/sqlite`)"
+  - "CapacitorCordova (from `../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios`)"
+  - "CapacitorDialog (from `../../node_modules/.pnpm/@capacitor+dialog@6.0.2_@capacitor+core@6.2.1/node_modules/@capacitor/dialog`)"
+  - "CapacitorFilesystem (from `../../node_modules/.pnpm/@capacitor+filesystem@6.0.3_@capacitor+core@6.2.1/node_modules/@capacitor/filesystem`)"
+  - "CapacitorGeolocation (from `../../node_modules/.pnpm/@capacitor+geolocation@6.1.0_@capacitor+core@6.2.1/node_modules/@capacitor/geolocation`)"
+  - "CapacitorNativeSettings (from `../../node_modules/.pnpm/capacitor-native-settings@6.0.5_@capacitor+core@6.2.1/node_modules/capacitor-native-settings`)"
+  - "CapacitorNetwork (from `../../node_modules/.pnpm/@capacitor+network@6.0.3_@capacitor+core@6.2.1/node_modules/@capacitor/network`)"
+  - "CapacitorPreferences (from `../../node_modules/.pnpm/@capacitor+preferences@6.0.3_@capacitor+core@6.2.1/node_modules/@capacitor/preferences`)"
+  - "SentryCapacitor (from `../../node_modules/.pnpm/@sentry+capacitor@1.2.1_@capacitor+core@6.2.1/node_modules/@sentry/capacitor`)"
   - shared (from `../shared`)
 
 SPEC REPOS:
@@ -66,47 +66,47 @@ SPEC REPOS:
 
 EXTERNAL SOURCES:
   Capacitor:
-    :path: "../../node_modules/.pnpm/@capacitor+ios@6.2.0_@capacitor+core@6.2.0/node_modules/@capacitor/ios"
+    :path: "../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios"
   CapacitorApp:
-    :path: "../../node_modules/.pnpm/@capacitor+app@6.0.2_@capacitor+core@6.2.0/node_modules/@capacitor/app"
+    :path: "../../node_modules/.pnpm/@capacitor+app@6.0.2_@capacitor+core@6.2.1/node_modules/@capacitor/app"
   CapacitorBrowser:
-    :path: "../../node_modules/.pnpm/@capacitor+browser@6.0.5_@capacitor+core@6.2.0/node_modules/@capacitor/browser"
+    :path: "../../node_modules/.pnpm/@capacitor+browser@6.0.5_@capacitor+core@6.2.1/node_modules/@capacitor/browser"
   CapacitorCamera:
-    :path: "../../node_modules/.pnpm/@capacitor+camera@6.1.2_@capacitor+core@6.2.0/node_modules/@capacitor/camera"
+    :path: "../../node_modules/.pnpm/@capacitor+camera@6.1.2_@capacitor+core@6.2.1/node_modules/@capacitor/camera"
   CapacitorClipboard:
-    :path: "../../node_modules/.pnpm/@capacitor+clipboard@6.0.2_@capacitor+core@6.2.0/node_modules/@capacitor/clipboard"
+    :path: "../../node_modules/.pnpm/@capacitor+clipboard@6.0.2_@capacitor+core@6.2.1/node_modules/@capacitor/clipboard"
   CapacitorCommunityKeepAwake:
-    :path: "../../node_modules/.pnpm/@capacitor-community+keep-awake@5.0.1_@capacitor+core@6.2.0/node_modules/@capacitor-community/keep-awake"
+    :path: "../../node_modules/.pnpm/@capacitor-community+keep-awake@5.0.1_@capacitor+core@6.2.1/node_modules/@capacitor-community/keep-awake"
   CapacitorCommunitySqlite:
-    :path: "../../node_modules/.pnpm/@capacitor-community+sqlite@6.0.1_@capacitor+core@6.2.0/node_modules/@capacitor-community/sqlite"
+    :path: "../../node_modules/.pnpm/@capacitor-community+sqlite@6.0.1_@capacitor+core@6.2.1/node_modules/@capacitor-community/sqlite"
   CapacitorCordova:
-    :path: "../../node_modules/.pnpm/@capacitor+ios@6.2.0_@capacitor+core@6.2.0/node_modules/@capacitor/ios"
+    :path: "../../node_modules/.pnpm/@capacitor+ios@6.2.1_@capacitor+core@6.2.1/node_modules/@capacitor/ios"
   CapacitorDialog:
-    :path: "../../node_modules/.pnpm/@capacitor+dialog@6.0.2_@capacitor+core@6.2.0/node_modules/@capacitor/dialog"
+    :path: "../../node_modules/.pnpm/@capacitor+dialog@6.0.2_@capacitor+core@6.2.1/node_modules/@capacitor/dialog"
   CapacitorFilesystem:
-    :path: "../../node_modules/.pnpm/@capacitor+filesystem@6.0.3_@capacitor+core@6.2.0/node_modules/@capacitor/filesystem"
+    :path: "../../node_modules/.pnpm/@capacitor+filesystem@6.0.3_@capacitor+core@6.2.1/node_modules/@capacitor/filesystem"
   CapacitorGeolocation:
-    :path: "../../node_modules/.pnpm/@capacitor+geolocation@6.1.0_@capacitor+core@6.2.0/node_modules/@capacitor/geolocation"
+    :path: "../../node_modules/.pnpm/@capacitor+geolocation@6.1.0_@capacitor+core@6.2.1/node_modules/@capacitor/geolocation"
   CapacitorNativeSettings:
-    :path: "../../node_modules/.pnpm/capacitor-native-settings@6.0.5_@capacitor+core@6.2.0/node_modules/capacitor-native-settings"
+    :path: "../../node_modules/.pnpm/capacitor-native-settings@6.0.5_@capacitor+core@6.2.1/node_modules/capacitor-native-settings"
   CapacitorNetwork:
-    :path: "../../node_modules/.pnpm/@capacitor+network@6.0.3_@capacitor+core@6.2.0/node_modules/@capacitor/network"
+    :path: "../../node_modules/.pnpm/@capacitor+network@6.0.3_@capacitor+core@6.2.1/node_modules/@capacitor/network"
   CapacitorPreferences:
-    :path: "../../node_modules/.pnpm/@capacitor+preferences@6.0.3_@capacitor+core@6.2.0/node_modules/@capacitor/preferences"
+    :path: "../../node_modules/.pnpm/@capacitor+preferences@6.0.3_@capacitor+core@6.2.1/node_modules/@capacitor/preferences"
   SentryCapacitor:
-    :path: "../../node_modules/.pnpm/@sentry+capacitor@1.2.0_@capacitor+core@6.2.0/node_modules/@sentry/capacitor"
+    :path: "../../node_modules/.pnpm/@sentry+capacitor@1.2.1_@capacitor+core@6.2.1/node_modules/@sentry/capacitor"
   shared:
     :path: "../shared"
 
 SPEC CHECKSUMS:
-  Capacitor: 1f3c7b9802d958cd8c4eb63895fff85dff2e1eea
+  Capacitor: 1e0d0e7330dea9f983b50da737d8918abcf273f8
   CapacitorApp: 2a8c3a0b0814322e5e6e15fe595f02c3808f0f8b
   CapacitorBrowser: cba79e25007fbe9bdac8c0568060b21abbb8f453
   CapacitorCamera: 9052bd3f464f135ba983feccd8ac1266272f0549
   CapacitorClipboard: 55e0a514f1e97b1409d533266c119dcbff3e78c3
   CapacitorCommunityKeepAwake: e2ddd50812e3407f8dc3a2c28e97d66e9b59b2f5
   CapacitorCommunitySqlite: d0b543e12a06ee6fd0dc287c389e6b435ec4acdf
-  CapacitorCordova: b33e7f4aa4ed105dd43283acdd940964374a87d9
+  CapacitorCordova: 8d93e14982f440181be7304aa9559ca631d77fff
   CapacitorDialog: e966e2261e1c74a8a502e610dd66b4f97ec6fcca
   CapacitorFilesystem: fa3099b3c3aa43a1b51362d0c999301ab1a9a752
   CapacitorGeolocation: d994ee64ee41909e2089e575c9d3a976007c2812
@@ -114,11 +114,11 @@ SPEC CHECKSUMS:
   CapacitorNetwork: da96b5fff8d05b67f4658503aabb22f65bda2c0f
   CapacitorPreferences: 9f9935bce493977183511362131a93f7b260191a
   Sentry: f8374b5415bc38dfb5645941b3ae31230fbeae57
-  SentryCapacitor: 32418b3ac2f71618446bae7a46de38a3759f747e
+  SentryCapacitor: f8be33ccf5d2961852ca2e29bf276618581c321e
   shared: 655a369eaa8d440bae00b6d7208194db21051145
   SQLCipher: 77fbe633cd84db04b07876dd50766b4924b57d61
   ZIPFoundation: b8c29ea7ae353b309bc810586181fd073cb3312c
 
-PODFILE CHECKSUM: d46139364a1a46e8c1e553a71cbd2ebf69a76082
+PODFILE CHECKSUM: 66670f0523ee4e526e28a5ffbff823440702fcd9
 
 COCOAPODS: 1.16.2

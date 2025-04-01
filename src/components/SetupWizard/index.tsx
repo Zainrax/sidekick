@@ -16,7 +16,7 @@ import {
 } from "solid-js";
 import { Motion } from "solid-motionone";
 import HelpSection from "./HelpSection";
-import { Device, DeviceName, useDevice } from "~/contexts/Device";
+import { Device, useDevice } from "~/contexts/Device";
 import {
   RiArrowsArrowLeftSLine,
   RiArrowsArrowRightSLine,
@@ -40,8 +40,6 @@ export type DeviceType = "DOC AI Cam / Bird Monitor" | "Classic";
 type StoreType = {
   deviceType: DeviceType | null;
 };
-
-type ConnectionStatus = "idle" | "connecting" | "connected";
 
 type CloseButtonProps = {
   onClick: () => void;
@@ -231,6 +229,9 @@ function SetupWizard(): JSX.Element {
     deviceType: null,
   });
   const connectionStatus = () => deviceContext.apState();
+  createEffect(() => {
+    console.log("AP CONNECTION", connectionStatus());
+  });
   type Steps =
     | "directConnect"
     | "chooseDevice"
@@ -317,6 +318,10 @@ function SetupWizard(): JSX.Element {
       <button
         class="mb-4 w-full rounded bg-blue-500 py-2 text-white"
         onClick={() => {
+          console.log(
+            "Connecting to device, current state:",
+            connectionStatus()
+          );
           deviceContext.connectToDeviceAP();
           deviceContext.searchDevice();
         }}
@@ -326,7 +331,12 @@ function SetupWizard(): JSX.Element {
           <Match when={connectionStatus() === "default"}>
             Connect To Camera
           </Match>
-          <Match when={connectionStatus() === "loadingConnect"}>
+          <Match
+            when={
+              connectionStatus() === "loadingConnect" ||
+              connectionStatus() === "loadingDisconnect"
+            }
+          >
             Connecting to device...
           </Match>
           <Match when={connectionStatus() === "connected"}>
@@ -649,7 +659,7 @@ function SetupWizard(): JSX.Element {
                 disabled={!canProcceed()}
               >
                 Next Step
-                <div class="absolute right-[-1em]"></div>
+                <div class="absolute right-[-1em]" />
               </button>
               <Show when={props.canProcceed === false && props.requirementText}>
                 {(requirementText) => (

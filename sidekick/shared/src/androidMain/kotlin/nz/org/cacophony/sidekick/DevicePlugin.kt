@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
@@ -26,6 +27,7 @@ class DevicePlugin : Plugin() {
 
     companion object {
         private const val TAG = "DevicePlugin"
+        private const val TARGET_AP_SSID = "bushnet"
     }
 
     // Main device interface
@@ -48,6 +50,18 @@ class DevicePlugin : Plugin() {
 
     // Main handler for UI updates
     private val mainHandler = Handler(Looper.getMainLooper())
+    
+    // Network callback for monitoring WiFi connections
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    
+    // Flag to track if monitoring is active
+    private var isMonitoringActive = false
+    
+    // Last known AP connection state 
+    private var lastKnownAPState = false
+
+    // Add a flag to track if monitoring has been initialized
+    private var isMonitoringInitialized = false
 
     /**
      * Plugin initialization
@@ -170,6 +184,9 @@ class DevicePlugin : Plugin() {
                 notifyListeners("onAPConnectionLost", result)
             }
         })
+        
+        // Start monitoring the AP connection automatically
+        startAPConnectionMonitoring()
     }
 
     /**
@@ -181,6 +198,7 @@ class DevicePlugin : Plugin() {
 
         // Clean up all resources
         stopDiscovery()
+        stopAPConnectionMonitoring()
 
         if (multicastLock.isHeld) {
             multicastLock.release()
@@ -189,6 +207,131 @@ class DevicePlugin : Plugin() {
         nsdHelper.cleanup()
         apConnector.cleanup()
         coroutineScope.cancel()
+    }
+
+    /**
+     * Start continuous monitoring of the AP connection state
+     */
+    private fun startAPConnectionMonitoring() {
+        if (isMonitoringActive) {
+            return
+        }
+        
+        try {
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            
+            // Create network callback to monitor connectivity changes
+            val networkCallback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    checkAndNotifyAPConnectionState(connectivityManager, network, true)
+                }
+                
+                override fun onLost(network: Network) {
+                    // This might be any network, so we need to check if we're still connected to our AP
+                    checkAndNotifyAPConnectionState(connectivityManager, null, false)
+                }
+                
+                override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                    checkAndNotifyAPConnectionState(connectivityManager, network, true)
+                }
+            }
+            
+            // Register callback with a request that matches WiFi networks
+            val request = NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .build()
+            
+            connectivityManager.registerNetworkCallback(request, networkCallback)
+            this.networkCallback = networkCallback
+            isMonitoringActive = true
+            
+            // Do an initial check of the connection state
+            checkAndNotifyAPConnectionState(connectivityManager, null, false)
+            
+            Log.d(TAG, "Started AP connection monitoring")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start AP connection monitoring: ${e.message}")
+        }
+    }
+    
+    /**
+     * Stop continuous monitoring of the AP connection state
+     */
+    private fun stopAPConnectionMonitoring() {
+        if (!isMonitoringActive || networkCallback == null) {
+            return
+        }
+        
+        try {
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            connectivityManager.unregisterNetworkCallback(networkCallback!!)
+            networkCallback = null
+            isMonitoringActive = false
+            Log.d(TAG, "Stopped AP connection monitoring")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping AP connection monitoring: ${e.message}")
+        }
+    }
+    
+    /**
+     * Check if device is connected to the target AP and notify listeners of any change
+     */
+    private fun checkAndNotifyAPConnectionState(connectivityManager: ConnectivityManager, network: Network?, forcedCheck: Boolean) {
+        coroutineScope.launch(Dispatchers.Main) {
+            val isConnected = isConnectedToTargetAP(connectivityManager, network)
+            
+            // Only notify if the state has changed
+            if (isConnected != lastKnownAPState || forcedCheck) {
+                lastKnownAPState = isConnected
+                
+                // Don't automatically send DISCONNECTED on startup as it would disable the button
+                // Only send state changes after an explicit connection attempt or when forcedCheck is true
+                val stateObj = JSObject().apply {
+                    // During initial check, if disconnected, send "default" instead of "DISCONNECTED"
+                    put("state", if (isConnected) "CONNECTED" else 
+                        if (!forcedCheck && !isMonitoringInitialized) "default" else "DISCONNECTED")
+                }
+                notifyListeners("onAPConnectionStateChanged", stateObj)
+                
+                if (isConnected) {
+                    val result = JSObject().apply {
+                        put("status", "connected")
+                    }
+                    notifyListeners("onAPConnected", result)
+                } else if (forcedCheck || isMonitoringInitialized) {
+                    // Only notify disconnected after initial check
+                    val result = JSObject().apply {
+                        put("status", "disconnected") 
+                    }
+                    notifyListeners("onAPDisconnected", result)
+                }
+                
+                isMonitoringInitialized = true
+            }
+        }
+    }
+    
+    /**
+     * Check if connected to our target AP network
+     */
+    private fun isConnectedToTargetAP(connectivityManager: ConnectivityManager, specificNetwork: Network?): Boolean {
+        try {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val wifiInfo = wifiManager.connectionInfo
+            
+            if (wifiInfo == null || wifiInfo.ssid.isEmpty()) {
+                return false
+            }
+            
+            // SSID in WifiInfo is usually wrapped in quotes
+            val ssid = wifiInfo.ssid.replace("\"", "")
+            
+            // Check if connected to our target AP
+            return ssid == TARGET_AP_SSID
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking AP connection: ${e.message}")
+            return false
+        }
     }
 
     // -----------------------------
@@ -360,6 +503,8 @@ class DevicePlugin : Plugin() {
 
     /**
      * Check if AP connection is active
+     * Note: This method is still kept for backward compatibility but
+     * should no longer be needed with the continuous monitoring in place
      */
     @PluginMethod
     fun checkIsAPConnected(call: PluginCall) {
@@ -367,7 +512,27 @@ class DevicePlugin : Plugin() {
 
         val result = JSObject()
         try {
-            val connected = apConnector.isConnected()
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val wifiInfo = wifiManager.connectionInfo
+            
+            val connected = if (wifiInfo != null && wifiInfo.ssid.isNotEmpty()) {
+                val ssid = wifiInfo.ssid.replace("\"", "")
+                ssid == TARGET_AP_SSID
+            } else {
+                false
+            }
+            
+            // Update our last known state while we're at it
+            if (connected != lastKnownAPState) {
+                lastKnownAPState = connected
+                
+                // Trigger a state change notification
+                val stateObj = JSObject().apply {
+                    put("state", if (connected) "CONNECTED" else "DISCONNECTED") 
+                }
+                notifyListeners("onAPConnectionStateChanged", stateObj)
+            }
+            
             result.put("connected", connected)
             result.put("success", true)
         } catch (e: Exception) {
