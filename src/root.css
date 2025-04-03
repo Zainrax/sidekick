@@ -36,7 +36,7 @@
     padding-bottom: calc(5rem + env(safe-area-inset-bottom));
   }
   .mt-bar {
-    margin-top: calc(6rem + env(safe-area-inset-top));
+    margin-top: calc(4.5rem + env(safe-area-inset-top));
   }
   .mb-bar {
     margin-bottom: calc(4rem + env(safe-area-inset-bottom));
@@ -64,4 +64,9 @@
 }
 :root {
   --ion-background-color: transparent !important;
+}
+
+#root {
+  height: 100%;
+  min-height: 100vh;
 }

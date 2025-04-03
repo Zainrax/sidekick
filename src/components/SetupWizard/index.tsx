@@ -14,7 +14,7 @@ import {
   createMemo,
   onCleanup,
 } from "solid-js";
-import { Motion } from "solid-motionone";
+import { Motion, Presence } from "solid-motionone";
 import HelpSection from "./HelpSection";
 import { Device, useDevice } from "~/contexts/Device";
 import {
@@ -53,13 +53,61 @@ type DeviceTypeButtonProps = {
 
 // Common Components
 const CloseButton = (props: CloseButtonProps): JSX.Element => (
-  <button onClick={props.onClick} class="text-2xl">
+  <button onClick={props.onClick} class="text-xl sm:text-2xl">
     &times;
   </button>
 );
+
+// Device Type Toggle component replacement for DeviceTypeButton
+export const DeviceTypeToggle = (props: {
+  selected: DeviceType | null;
+  onChange: (type: DeviceType) => void;
+}): JSX.Element => {
+  const isClassicSelected = () => props.selected === "Classic";
+  const isDocSelected = () => props.selected === "DOC AI Cam / Bird Monitor";
+
+  return (
+    <div class="mx-auto mb-6 w-full max-w-xs">
+      <div class="relative flex h-12 items-center overflow-hidden rounded-full bg-gray-200 p-1">
+        {/* Background slider */}
+        <Motion.div
+          class="absolute h-10 rounded-full bg-white shadow-md"
+          animate={{
+            left: isClassicSelected() ? "50%" : "4px",
+            width: isClassicSelected() ? "calc(50% - 4px)" : "calc(50% - 4px)",
+          }}
+          transition={{ duration: 0.3, easing: "ease-in-out" }}
+        />
+
+        {/* Buttons */}
+        <button
+          onClick={() => props.onChange("DOC AI Cam / Bird Monitor")}
+          class="relative z-10 flex h-10 flex-1 items-center justify-center rounded-full text-sm font-medium"
+          classList={{
+            "text-green-600": isDocSelected(),
+            "text-gray-500": !isDocSelected(),
+          }}
+        >
+          DOC AI Cam
+        </button>
+        <button
+          onClick={() => props.onChange("Classic")}
+          class="relative z-10 flex h-10 flex-1 items-center justify-center rounded-full text-sm font-medium"
+          classList={{
+            "text-green-600": isClassicSelected(),
+            "text-gray-500": !isClassicSelected(),
+          }}
+        >
+          Classic
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export const DeviceTypeButton = (props: DeviceTypeButtonProps): JSX.Element => (
   <button
-    class={`rounded px-4 py-2 ${
+    class={`rounded px-4 py-2 text-sm sm:text-base ${
       props.isSelected
         ? "bg-white outline outline-2 outline-green-500"
         : "bg-gray-200"
@@ -157,7 +205,7 @@ export const Light = (props: { step: StepType }) => (
 
 export const StartupProcess = (props: StartupProcessProps): JSX.Element => (
   <div class="mb-4">
-    <h3 class="mb-2 font-bold">Startup Process</h3>
+    <h3 class="mb-2 text-sm font-bold sm:text-base">Startup Process</h3>
     <div class="flex items-center">
       <For each={props.steps}>
         {(step, index) => (
@@ -258,7 +306,7 @@ function SetupWizard(): JSX.Element {
   const toggleHelp = () => setShowHelp(!showHelp());
   const HelpButton = (): JSX.Element => (
     <button
-      class="rounded bg-gray-200 px-4 py-2 text-gray-800"
+      class="rounded bg-gray-200 px-2 py-1 text-sm text-gray-800 sm:px-4 sm:py-2 sm:text-base"
       onClick={toggleHelp}
     >
       Help
@@ -275,16 +323,16 @@ function SetupWizard(): JSX.Element {
     }
   });
   const Title = (props: { title: string; back?: Steps }) => (
-    <div class="mb-2 flex items-center justify-between px-4">
+    <div class="mb-2 flex items-center justify-between px-2 sm:px-4">
       <div class="flex items-center gap-x-2">
         <Show when={props.back}>
           {(back) => (
             <button class="text-blue-400" onClick={() => setStep(back())}>
-              <RiArrowsArrowLeftSLine size={32} />
+              <RiArrowsArrowLeftSLine size={24} class="sm:h-8 sm:w-8" />
             </button>
           )}
         </Show>
-        <h2 class="text-xl font-bold">{props.title}</h2>
+        <h2 class="text-lg font-bold sm:text-xl">{props.title}</h2>
       </div>
       <CloseButton onClick={close} />
     </div>
@@ -297,26 +345,16 @@ function SetupWizard(): JSX.Element {
   const DirectConnectStep = (): JSX.Element => (
     <>
       <Title title="Connect To Device" />
-      <div class="mb-4 flex space-x-2">
-        <DeviceTypeButton
-          isSelected={store.deviceType === "DOC AI Cam / Bird Monitor"}
-          onClick={() => setStore("deviceType", "DOC AI Cam / Bird Monitor")}
-        >
-          DOC AI Cam / Bird Monitor
-        </DeviceTypeButton>
-        <DeviceTypeButton
-          isSelected={store.deviceType === "Classic"}
-          onClick={() => setStore("deviceType", "Classic")}
-        >
-          Classic
-        </DeviceTypeButton>
-      </div>
+      <DeviceTypeToggle
+        selected={store.deviceType}
+        onChange={(type) => setStore("deviceType", type)}
+      />
       {store.deviceType && getSteps(store.deviceType)}
       {store.deviceType && (
         <StartupProcess steps={getStartupSteps(store.deviceType)} />
       )}
       <button
-        class="mb-4 w-full rounded bg-blue-500 py-2 text-white"
+        class="mb-4 w-full rounded bg-blue-500 py-2 text-sm text-white sm:text-base"
         onClick={() => {
           console.log(
             "Connecting to device, current state:",
@@ -325,7 +363,10 @@ function SetupWizard(): JSX.Element {
           deviceContext.connectToDeviceAP();
           deviceContext.searchDevice();
         }}
-        disabled={connectionStatus() !== "default"}
+        disabled={
+          connectionStatus() !== "default" &&
+          connectionStatus() !== "disconnected"
+        }
       >
         <Switch fallback={<>Connect To Camera</>}>
           <Match when={connectionStatus() === "default"}>
@@ -523,42 +564,48 @@ function SetupWizard(): JSX.Element {
   const ChooseDeviceStep = () => (
     <>
       <div class="mb-2 flex items-center justify-between">
-        <h2 class="pl-4 text-xl font-bold">Choose your Device</h2>
+        <h2 class="pl-2 text-lg font-bold sm:pl-4 sm:text-xl">
+          Choose your Device
+        </h2>
         <CloseButton onClick={() => navigate("/devices")} />
       </div>
       <Show when={devices().length}>
         <div class="mb-2">
-          <h1 class="text-md font-medium text-slate-700">Existing Devices</h1>
+          <h1 class="sm:text-md text-sm font-medium text-slate-700">
+            Existing Devices
+          </h1>
           <FoundDevices />
         </div>
       </Show>
       <div>
-        <h2 class="text-md pl-1  font-medium text-slate-700">
+        <h2 class="sm:text-md pl-1 text-sm font-medium text-slate-700">
           Connect To Device
         </h2>
-        <p class="mb-4 text-center">
+        <p class="mb-4 text-center text-xs sm:text-sm">
           Turn on your device and choose the device that matches
         </p>
-        <div class="flex justify-center space-x-4">
+        <div class="flex flex-row justify-center space-x-2">
           <button
-            class="flex flex-col items-center rounded-lg bg-green-200 p-4"
+            class="flex flex-col items-center rounded-lg bg-green-200 p-2 sm:p-4"
             onClick={() => {
               setStore("deviceType", "DOC AI Cam / Bird Monitor");
               setStep("directConnect");
             }}
           >
             <AIDocSVG />
-            <span>DOC AI Cam/ Bird Monitor</span>
+            <span class="mt-2 text-xs sm:text-sm">
+              DOC AI Cam/ Bird Monitor
+            </span>
           </button>
           <button
-            class="flex flex-col items-center rounded-lg bg-gray-200 p-4"
+            class="flex flex-col items-center rounded-lg bg-gray-200 p-2 sm:p-4"
             onClick={() => {
               setStore("deviceType", "Classic");
               setStep("directConnect");
             }}
           >
             <ClassicSVG />
-            <span>Classic Thermal Camera</span>
+            <span class="mt-2 text-xs sm:text-sm">Classic Thermal Camera</span>
           </button>
         </div>
       </div>
@@ -582,23 +629,28 @@ function SetupWizard(): JSX.Element {
   };
   const FoundDevices = () => (
     <div class="space-y-1 rounded-lg bg-gray-200 p-1">
-      <Show when={!!devices()} fallback={<div>No devices found...</div>}>
+      <Show
+        when={!!devices()}
+        fallback={<div class="text-sm">No devices found...</div>}
+      >
         <For each={devices().filter((device) => device.isConnected)}>
           {(device) => (
             <button
               onClick={() => openDevice(device)}
-              class="flex w-full items-center justify-between rounded-md border-2 border-blue-400 bg-white p-2 text-blue-400"
+              class="flex w-full items-center justify-between rounded-md border-2 border-blue-400 bg-white p-2 text-xs text-blue-400 sm:text-sm"
             >
               <div class="flex items-center gap-x-2">
                 <BsCameraVideoFill /> <span>{device.name}</span>
               </div>
               <Show
                 when={device.group === "new"}
-                fallback={<RiArrowsArrowRightSLine size={24} />}
+                fallback={
+                  <RiArrowsArrowRightSLine size={20} class="sm:h-6 sm:w-6" />
+                }
               >
-                <div class="flex">
+                <div class="flex items-center">
                   <span>Setup</span>
-                  <RiArrowsArrowRightSLine size={24} />
+                  <RiArrowsArrowRightSLine size={20} class="sm:h-6 sm:w-6" />
                 </div>
               </Show>
             </button>
@@ -610,7 +662,7 @@ function SetupWizard(): JSX.Element {
   const SearchingDeviceStep = () => (
     <>
       <Title title="Searching For Device" />
-      <p class="text-center text-sm text-gray-800">
+      <p class="text-center text-xs text-gray-800 sm:text-sm">
         If your device does not show ensure your phone/tablet is connected to
         the “bushnet” network in your WiFi settings, if not join the network
         with password “feathers”
@@ -635,9 +687,9 @@ function SetupWizard(): JSX.Element {
           <For each={new Array(totalSteps)}>
             {(_, index) => (
               <div class="flex items-center justify-center">
-                <div class="relative flex h-4 w-4 rounded-full bg-gray-300" />
+                <div class="relative flex h-3 w-3 rounded-full bg-gray-300 sm:h-4 sm:w-4" />
                 <Show when={props.place === index()}>
-                  <div class="absolute h-3 w-3 rounded-full bg-white" />
+                  <div class="absolute h-2 w-2 rounded-full bg-white sm:h-3 sm:w-3" />
                 </Show>
               </div>
             )}
@@ -655,7 +707,7 @@ function SetupWizard(): JSX.Element {
                   "text-blue-500": canProcceed(),
                   "text-gray-400": props.canProcceed === false,
                 }}
-                class="text-md relative flex items-center justify-center p-2"
+                class="relative flex items-center justify-center p-2 text-sm sm:text-base"
                 disabled={!canProcceed()}
               >
                 Next Step
@@ -663,7 +715,9 @@ function SetupWizard(): JSX.Element {
               </button>
               <Show when={props.canProcceed === false && props.requirementText}>
                 {(requirementText) => (
-                  <p class="text-sm text-gray-800">{requirementText()}</p>
+                  <p class="text-xs text-gray-800 sm:text-sm">
+                    {requirementText()}
+                  </p>
                 )}
               </Show>
             </div>
@@ -672,7 +726,7 @@ function SetupWizard(): JSX.Element {
           <div class="flex flex-col items-center justify-center">
             <button
               onClick={() => finishSetup()}
-              class="relative flex items-center justify-center p-2 text-lg text-blue-500"
+              class="relative flex items-center justify-center p-2 text-base text-blue-500 sm:text-lg"
             >
               Finish Setup
             </button>
@@ -699,7 +753,7 @@ function SetupWizard(): JSX.Element {
     return (
       <>
         <Title title="Wifi Setings" back="searchingDevice" />
-        <div class="flex flex-col gap-y-2 text-xs">
+        <div class="flex flex-col gap-y-2 text-xs sm:text-sm">
           <p class="text-center">
             The camera/bird monitor may temporarily disconnect, ensure that your
             phone is connected to the same WiFi.
@@ -727,11 +781,11 @@ function SetupWizard(): JSX.Element {
     return (
       <>
         <Title title="Set Device Group" back="wifiSetup" />
-        <div class="flex flex-col gap-y-2 px-8 text-center text-sm">
+        <div class="flex flex-col gap-y-2 px-4 text-center text-xs sm:px-8 sm:text-sm">
           Assign your device to a group so that you can view it in
           browse.cacophony.org.nz
         </div>
-        <div class="space-y-4 px-4">
+        <div class="space-y-4 px-2 sm:px-4">
           <GroupSelect deviceId={searchParams.setupDevice} />
           <StepProgressIndicator
             nextStep="location"
@@ -840,7 +894,7 @@ function SetupWizard(): JSX.Element {
                     lowPowerMode() === false,
                   "bg-gray-100": lowPowerMode() !== false,
                 }}
-                class="flex w-full appearance-none items-center justify-center rounded-lg p-1"
+                class="flex w-full appearance-none items-center justify-center rounded-lg p-1 text-xs sm:text-sm"
               >
                 High
               </button>
@@ -851,14 +905,14 @@ function SetupWizard(): JSX.Element {
                   "bg-gray-100": lowPowerMode() !== true,
                 }}
                 onClick={() => turnOnLowPowerMode(true)}
-                class="flex w-full appearance-none items-center justify-center rounded-lg p-1"
+                class="flex w-full appearance-none items-center justify-center rounded-lg p-1 text-xs sm:text-sm"
               >
                 Low
               </button>
             </div>
           </FieldWrapper>
-          <div class="flex items-center space-x-2 px-2 text-sm text-gray-500">
-            <AiOutlineInfoCircle size={18} />
+          <div class="flex items-center space-x-2 px-2 text-xs text-gray-500 sm:text-sm">
+            <AiOutlineInfoCircle size={16} class="sm:h-[18px] sm:w-[18px]" />
             <Switch>
               <Match when={lowPowerMode() === true}>
                 <p>Low power mode only uploads once per day.</p>
@@ -899,7 +953,7 @@ function SetupWizard(): JSX.Element {
 
   return (
     <Show when={show()}>
-      <div class="fixed left-1/2 top-[70px] z-40 h-auto w-11/12 -translate-x-1/2 transform rounded-xl border bg-white px-2 py-4 shadow-lg">
+      <div class="fixed left-1/2 top-[70px] z-40 h-auto w-11/12 max-w-md -translate-x-1/2 transform rounded-xl border bg-white px-2 py-4 shadow-lg">
         <Switch>
           <Match when={showHelp()}>
             <HelpSection onClose={toggleHelp} />
@@ -931,10 +985,10 @@ function SetupWizard(): JSX.Element {
                   }
                 />
                 <div class="flex w-full flex-col items-center">
-                  <div class="px-8 text-neutral-700">
-                    <TbPlugConnectedX size={82} />
+                  <div class="px-4 text-neutral-700 sm:px-8">
+                    <TbPlugConnectedX size={64} class="sm:h-20 sm:w-20" />
                   </div>
-                  <p class="text-center text-lg font-bold text-gray-600">
+                  <p class="text-center text-base font-bold text-gray-600 sm:text-lg">
                     Device "{device().name}" Disconnected
                   </p>
                 </div>

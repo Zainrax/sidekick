@@ -2669,18 +2669,20 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       if (!device || !device.isConnected) return null;
       const { url } = device;
       const res = await CapacitorHttp.get({
-        url: `${url}/api/salt-update`,
+        url: `${url}/api/update-available`,
         headers,
         webFetchExtra: {
           credentials: "include",
         },
       });
+      console.log("Check Update", res);
       const data =
         res.status === 200
-          ? SaltStatusSchema.parse(JSON.parse(res.data))
+          ? z.object({"updateAvailable": z.boolean()}).parse(JSON.parse(res.data))
           : null;
 
-      if (data?.RunningUpdate && !updatingDevice.has(deviceId)) {
+      // Only run update check when there's an actual update available
+      if (data && data.updateAvailable && !updatingDevice.has(deviceId)) {
         runUpdateCheck(deviceId);
       }
       return data;

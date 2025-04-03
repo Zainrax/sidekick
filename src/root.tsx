@@ -12,11 +12,11 @@ import { StorageProvider } from "./contexts/Storage";
 import NotificationPopup from "./components/NotificationPopup";
 import { BiSolidCopyAlt } from "solid-icons/bi";
 import { LogsProvider, useLogsContext } from "./contexts/LogsContext";
-import * as Sentry from "@sentry/solid";
 import { withSentryRouterRouting } from "@sentry/solid/solidrouter";
 import ConsentPopup from "./components/ConsentPopup";
 import BackgroundLogo from "./components/BackgroundLogo";
 import { ImSpinner } from "solid-icons/im";
+import { withSentryErrorBoundary } from "@sentry/solid";
 
 const routes = [
   {
@@ -61,7 +61,9 @@ function LoadingScreen() {
       <BackgroundLogo />
       <div class="mt-8 flex flex-col items-center space-y-4">
         <ImSpinner size={32} class="animate-spin text-blue-500" />
-        <span class="text-lg font-medium text-gray-700">Loading Sidekick...</span>
+        <span class="text-lg font-medium text-gray-700">
+          Loading Sidekick...
+        </span>
       </div>
     </div>
   );
@@ -92,9 +94,9 @@ const AppRoutes = () => {
   // Improved loading state check
   const isLoading = () => {
     return (
-      context.data.loading || 
-      context.skippedLogin.loading || 
-      typeof context.data() === 'undefined'
+      context.data.loading ||
+      context.skippedLogin.loading ||
+      typeof context.data() === "undefined"
     );
   };
 
@@ -120,9 +122,9 @@ const writeToClipboard = async (err: unknown) => {
 
 export default function Root() {
   const SentryRouter = withSentryRouterRouting(Router);
-  const SentryErrorBoundary = Sentry.withSentryErrorBoundary(ErrorBoundary);
+  const SentryErrorBoundary = withSentryErrorBoundary(ErrorBoundary);
   return (
-    <main class="h-screen bg-gray-200">
+    <main class="h-full min-h-screen bg-gray-200">
       <SentryRouter>
         <SentryErrorBoundary
           fallback={(err) => {

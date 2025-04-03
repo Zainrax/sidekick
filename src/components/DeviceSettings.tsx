@@ -875,7 +875,7 @@ export function CameraSettingsTab(props: SettingProps) {
               <AiOutlineInfoCircle size={22} />
             </span>
             <span class="text-ellipsis px-2">
-              30 minutes before sunrise and 30 minutes after sunset based on the
+              30 minutes before sunset and 30 minutes after sunrise based on the
               device's location and seasonal timing.
             </span>
           </p>
@@ -2501,114 +2501,153 @@ export function GroupSelect(props: SettingProps) {
 
 export function GeneralSettingsTab(props: SettingProps) {
   const user = useUserContext();
-  const log = useLogsContext();
   const context = useDevice();
   const device = () => context.devices.get(props.deviceId);
   const id = () => props.deviceId;
   const saltId = () => device()?.saltId ?? "";
   const name = () => device()?.name ?? "";
 
-  const [updateStatus, { refetch }] = createResource(async () => {
-    const res = await context.checkDeviceUpdate(id());
-    console.log("Salt Connection", res);
-    return res;
+  // Use stable primitive values to prevent rendering loops
+  const [deviceIdState] = createSignal(props.deviceId);
+
+  // Avoid accessing reactive props directly in resource dependencies
+  const [updateStatus, { refetch }] = createResource(
+    deviceIdState,
+    async (deviceId) => {
+      if (!deviceId) return null;
+      try {
+        // Add delay to prevent rapid successive calls
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const res = await context.checkDeviceUpdate(deviceId);
+        return res;
+      } catch (error) {
+        console.error("Error checking device update:", error);
+        return null;
+      }
+    },
+    {
+      initialValue: null,
+    }
+  );
+
+  // Implement safer interval checking with proper cleanup
+  let updateCheckTimer: number | undefined;
+
+  const [hasInternetConnection] = createResource<boolean>(async () => {
+    try {
+      const wifiRes = await context
+        .checkDeviceWifiInternetConnection(deviceIdState())
+        .catch(() => false);
+      const modemRes = await context
+        .checkDeviceModemInternetConnection(deviceIdState())
+        .catch(() => false);
+      return wifiRes || modemRes;
+    } catch (error) {
+      console.error("Error checking internet connection:", error);
+      return false;
+    }
+  });
+  const scheduleUpdateCheck = () => {
+    // Clear any existing timer
+    if (updateCheckTimer) {
+      clearTimeout(updateCheckTimer);
+      updateCheckTimer = undefined;
+    }
+
+    // Only schedule if we're not already updating
+    if (!context.isDeviceUpdating(deviceIdState())) {
+      updateCheckTimer = window.setTimeout(() => {
+        const internetAvailable = hasInternetConnection();
+        if (internetAvailable !== false) {
+          refetch();
+        }
+        scheduleUpdateCheck(); // Reschedule for next check
+      }, 30000);
+    }
+  };
+
+  onMount(() => {
+    // Initial check
+    scheduleUpdateCheck();
+
+    // Cleanup
+    onCleanup(() => {
+      if (updateCheckTimer) {
+        clearTimeout(updateCheckTimer);
+        updateCheckTimer = undefined;
+      }
+    });
+  });
+
+  // Precompute values to avoid recalculation in render function
+  const updateError = createMemo(() => context.getUpdateError(deviceIdState()));
+
+  const canUpdate = createMemo(() => {
+    const internet = hasInternetConnection();
+    const status = updateStatus();
+    if (!internet || !status || !status.updateAvailable) return false;
+    return true;
+  }, false);
+
+  const softwareUpdateMessage = createMemo(() => {
+    if (context.isDeviceUpdating(deviceIdState())) return "Updating...";
+    if (context.didDeviceUpdate(deviceIdState()) === false) {
+      return "Failed to Update";
+    }
+    if (context.didDeviceUpdate(deviceIdState()) === true) {
+      return "Update Complete";
+    }
+    if (canUpdate()) return "Software Update";
+    return "No Update Available";
   });
 
   const [lowPowerMode, setLowPowerMode] = createSignal<boolean | null>(null);
 
   onMount(async () => {
-    const res = await context.getDeviceConfig(id());
-    if (!res) {
-      setLowPowerMode(null);
-      return;
+    try {
+      const res = await context.getDeviceConfig(deviceIdState());
+      if (res) {
+        setLowPowerMode(
+          res.values.thermalRecorder?.UseLowPowerMode ??
+            res.defaults["thermal-recorder"]?.UseLowPowerMode ??
+            null
+        );
+      }
+    } catch (error) {
+      console.error("Error loading device config:", error);
     }
-    setLowPowerMode(
-      res.values.thermalRecorder?.UseLowPowerMode ??
-        res.defaults["thermal-recorder"]?.UseLowPowerMode ??
-        null
-    );
   });
 
   onMount(async () => {
     user.refetchGroups();
   });
 
-  const [hasInternetConnection] = createResource(async () => {
-    const wifiRes = await context
-      .checkDeviceWifiInternetConnection(id())
-      .catch(() => false);
-    const modemRes = await context
-      .checkDeviceModemInternetConnection(id())
-      .catch(() => false);
-    console.log("WIFI", wifiRes, "MODEM", modemRes);
-    return wifiRes || modemRes;
+  const showProgress = createMemo(() => {
+    const internet = hasInternetConnection();
+    const isUpdating = context.isDeviceUpdating(deviceIdState());
+    const hasPercentage =
+      context.getDeviceUpdating(deviceIdState())?.UpdateProgressPercentage !==
+      undefined;
+    return internet && isUpdating && hasPercentage;
   });
-  const canUpdate = createMemo(() => {
-    if (!hasInternetConnection()) return false;
-    const status = updateStatus();
-    console.log("Status", status);
-    if (!status || status.UpdateProgressStr?.includes("No update"))
-      return false;
-    return true;
-  });
-
-  createEffect(() => {
-    if (!updateStatus.loading) {
-      if (!canUpdate()) {
-        setTimeout(() => {
-          refetch();
-        }, 30000);
-      }
-    }
-  });
-
-  const updateError = () => {
-    const error = context.getUpdateError(id());
-    return error;
-  };
-
-  const softwareUpdateMessage = () => {
-    if (hasInternetConnection.loading) return "Checking Available Update...";
-    if (!hasInternetConnection()) return "No Internet Connection";
-    if (context.isDeviceUpdating(id())) return "Updating...";
-    if (context.didDeviceUpdate(id()) === false) {
-      return "Failed to Update";
-    }
-    if (context.didDeviceUpdate(id()) === true) {
-      return "Update Complete";
-    }
-    if (canUpdate() || canUpdate() === undefined) return "Software Update";
-    return "No Update Available";
-  };
-
-  const displayId = () => {
-    const currId = saltId();
-    if (!currId) return id();
-    return currId;
-  };
 
   const turnOnLowPowerMode = async (v: boolean) => {
     try {
       setLowPowerMode(v);
-      const res = await context.setLowPowerMode(id(), v);
-      if (res !== null) {
-        setLowPowerMode(v);
-      } else {
+      const res = await context.setLowPowerMode(deviceIdState(), v);
+      if (res === null) {
         console.error("Failed to set low power mode");
       }
     } catch (error) {
-      console.log(error);
+      console.error("Error setting power mode:", error);
     }
   };
-  const showProgress = () =>
-    hasInternetConnection() &&
-    context.isDeviceUpdating(id()) &&
-    context.getDeviceUpdating(id())?.UpdateProgressPercentage !== undefined;
+
   return (
     <div class="flex w-full flex-col space-y-2 px-2 py-4">
       <FieldWrapper type="text" value={name()} title="Name" />
       <GroupSelect deviceId={id()} />
-      <FieldWrapper type="text" value={displayId()} title="ID" />
+      <FieldWrapper type="text" value={saltId()} title="ID" />
 
       <Show when={lowPowerMode() !== null}>
         <FieldWrapper type="custom" title={"Power Mode"}>
@@ -2721,6 +2760,22 @@ export function DeviceSettingsModal() {
     }
   };
 
+  // Other code remains the same...
+
+  // Prevent rapid tab switching by debouncing the tab change
+  const [isTabSwitching, setIsTabSwitching] = createSignal(false);
+
+  const setCurrNav = (nav: ReturnType<typeof navItems>[number]) => {
+    if (isTabSwitching()) return;
+
+    setIsTabSwitching(true);
+    console.log("Setting Nav Params", nav);
+    setParams({ tab: nav, deviceSettings: params.deviceSettings });
+
+    // Reset the switching state after a small delay
+    setTimeout(() => setIsTabSwitching(false), 300);
+  };
+
   const textSizeClass = createMemo(() => {
     const numItems = navItems().length;
     if (numItems <= 4) {
@@ -2748,10 +2803,6 @@ export function DeviceSettingsModal() {
     setParams({ deviceSettings: null, tab: null });
   };
 
-  const setCurrNav = (nav: ReturnType<typeof navItems>[number]) => {
-    console.log("Setting Nav Params", nav);
-    setParams({ tab: nav, deviceSettings: params.deviceSettings });
-  };
   createEffect(() => {
     // path
     console.log(

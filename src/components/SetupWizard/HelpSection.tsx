@@ -21,7 +21,9 @@ const HelpSection = (props: HelpSectionProps): JSX.Element => {
             &times;
           </button>
         </div>
-        <Manual />
+        <div class="pb-bar">
+          <Manual />
+        </div>
       </div>
     </>
   );
