@@ -592,7 +592,38 @@ export function CameraSettingsTab(props: SettingProps) {
 
   const camera = createMemo(() => context.getDeviceCamera(id()));
   const [isRecieving, setIsRecieving] = createSignal(false);
+
+  // Detect user activity to keep the feed active
+  const [userActive, setUserActive] = createSignal(true);
+  let userActivityTimeout: number | null = null;
+
+  // Function to refresh user activity status
+  const refreshUserActivity = () => {
+    setUserActive(true);
+    if (userActivityTimeout) {
+      clearTimeout(userActivityTimeout);
+    }
+
+    // Reset timeout after 60 seconds of inactivity
+    userActivityTimeout = setTimeout(() => {
+      setUserActive(false);
+    }, 60000) as unknown as number;
+  };
+
+  // Setup activity listeners
   onMount(() => {
+    // Track user activity
+    const activityEvents = ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll'];
+    const handleActivity = () => refreshUserActivity();
+
+    // Add all event listeners
+    activityEvents.forEach(event => {
+      document.addEventListener(event, handleActivity);
+    });
+
+    // Start with active status
+    refreshUserActivity();
+
     const cam = camera();
     if (cam) {
       cam.toggle();
@@ -602,8 +633,34 @@ export function CameraSettingsTab(props: SettingProps) {
         requestAnimationFrame(() => processFrame(frame));
       });
     }
+
+    // Monitor connection status
+    const connectionInterval = setInterval(() => {
+      const cam = camera();
+      // If user is active but connection isn't active, reconnect
+      if (userActive() && cam && !cam.isConnected()) {
+        console.log("Camera feed disconnected but user is active, reconnecting...");
+        cam.run();
+      }
+    }, 5000);
+
+    onCleanup(() => {
+      // Remove all event listeners
+      activityEvents.forEach(event => {
+        document.removeEventListener(event, handleActivity);
+      });
+
+      // Clear all timeouts and intervals
+      if (userActivityTimeout) {
+        clearTimeout(userActivityTimeout);
+      }
+
+      clearInterval(connectionInterval);
+
+      // Turn off camera
+      camera()?.toggle();
+    });
   });
-  onCleanup(() => camera()?.toggle());
 
   const isDefault = () => {
     const windows = config()?.values.windows;

@@ -149,6 +149,10 @@ const filterBlobFromMessage = (
 export default function DeviceCamera(host: string) {
   const [on, setOn] = createSignal(false);
   const [onFrame, setOnFrame] = createSignal<OnFrame | null>(null);
+  const [connectionActive, setConnectionActive] = createSignal(false);
+  const [reconnecting, setReconnecting] = createSignal(false);
+  let reconnectTimeout: number | null = null;
+
   const processFrame = (frame: Blob) => {
     const stream = Effect.promise(() => frame.arrayBuffer());
     return Effect.gen(function* (_) {
@@ -168,20 +172,35 @@ export default function DeviceCamera(host: string) {
       const frame = new Uint16Array(
         arrayBuffer.slice(frameInfoOffset, frameInfoOffset + frameSizeInBytes)
       );
+
+      // Reset any reconnection attempts since we're receiving frames
+      if (reconnecting()) {
+        setReconnecting(false);
+      }
+
       const onF = onFrame();
       if (onF) {
         onF({ frameInfo, frame });
       }
-      return on();
+      // If we're receiving frames, we want to keep the connection alive
+      return true;
     });
   };
+
   // random 13 digit number
   const id = Math.floor(Math.random() * 10000000000000);
+
   const applyHeartbeat = (connectedWS: ConnectedWebSocket) => {
+    // Send heartbeats every 5 seconds as long as on() is true or we're actively receiving frames
     const heartbeatSchedule = Schedule.spaced("5 seconds");
-    const isOn = Schedule.recurWhile(on);
+    // Keep sending heartbeats as long as the connection should be maintained
+    const isOn = Schedule.recurWhile(() => on() || connectionActive());
     return Effect.repeat(
-      connectedWS.send({ type: "Heartbeat", uuid: id }),
+      Effect.gen(function* (_) {
+        yield* _(connectedWS.send({ type: "Heartbeat", uuid: id }));
+        // Update connection active state
+        setConnectionActive(true);
+      }),
       Schedule.compose(heartbeatSchedule, isOn)
     );
   };
@@ -202,6 +221,35 @@ export default function DeviceCamera(host: string) {
       })
     );
     console.log("connected");
+    setConnectionActive(true);
+
+    // Add event handlers for the underlying WebSocket
+    const getWebSocketInstance = Effect.sync(() => {
+      // Add closures to handle disconnection
+      // We can't access the WS directly, so we need to add handlers
+      // to the global connection state
+      window.addEventListener("offline", () => {
+        console.log("Network offline, marking connection as inactive");
+        setConnectionActive(false);
+        attemptReconnect();
+      });
+      
+      // Set up a periodic check for connection status
+      const checkInterval = setInterval(() => {
+        if (!connectionActive() && on()) {
+          console.log("Connection appears inactive, attempting reconnect");
+          attemptReconnect();
+        }
+      }, 10000);
+      
+      // Cleanup on finalization
+      return Effect.sync(() => {
+        window.removeEventListener("offline", attemptReconnect);
+        clearInterval(checkInterval);
+      });
+    });
+    
+    yield* _(Effect.acquireRelease(getWebSocketInstance, (cleanup) => cleanup));
     yield* _(Effect.fork(applyHeartbeat(connectedWS)));
     yield* _(
       connectedWS.listen.pipe(
@@ -211,12 +259,56 @@ export default function DeviceCamera(host: string) {
     );
   });
 
+  const attemptReconnect = () => {
+    if (reconnecting() || !on()) return;
+
+    setReconnecting(true);
+    console.log("Attempting to reconnect to camera feed...");
+
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+    }
+
+    reconnectTimeout = setTimeout(() => {
+      if (on()) {
+        run();
+      }
+      reconnectTimeout = null;
+    }, 2000) as unknown as number;
+  };
+
   const run = () =>
     Effect.runPromise(
       Effect.provide(intializeCameraSocket, openWSConnection()).pipe(
         Effect.scoped
       )
-    );
+    ).catch((error) => {
+      console.error("Error in camera connection:", error);
+      setConnectionActive(false);
+      attemptReconnect();
+    });
 
-  return { run, on: () => setOn(true), toggle: () => setOn(!on()), setOnFrame };
+  const toggle = () => {
+    const newValue = !on();
+    setOn(newValue);
+    if (!newValue) {
+      setConnectionActive(false);
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
+    }
+    return newValue;
+  };
+
+  return {
+    run,
+    on: () => {
+      setOn(true);
+      return true;
+    },
+    toggle,
+    setOnFrame,
+    isConnected: () => connectionActive(),
+  };
 }
