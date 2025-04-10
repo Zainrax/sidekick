@@ -338,7 +338,7 @@ function SetupWizard(): JSX.Element {
     </div>
   );
   const Additional = () => (
-    <div class="flex-end mt-4 flex items-center border-t-2 border-gray-200 px-2 pt-2">
+    <div class="flex-end mt-2 flex items-center border-t-2 border-gray-200 px-2 pt-2">
       <HelpButton />
     </div>
   );
@@ -349,43 +349,48 @@ function SetupWizard(): JSX.Element {
         selected={store.deviceType}
         onChange={(type) => setStore("deviceType", type)}
       />
-      {store.deviceType && getSteps(store.deviceType)}
-      {store.deviceType && (
-        <StartupProcess steps={getStartupSteps(store.deviceType)} />
-      )}
-      <button
-        class="mb-4 w-full rounded bg-blue-500 py-2 text-sm text-white sm:text-base"
-        onClick={() => {
-          console.log(
-            "Connecting to device, current state:",
-            connectionStatus()
-          );
-          deviceContext.connectToDeviceAP();
-          deviceContext.searchDevice();
-        }}
-        disabled={
-          connectionStatus() !== "default" &&
-          connectionStatus() !== "disconnected"
-        }
-      >
-        <Switch fallback={<>Connect To Camera</>}>
-          <Match when={connectionStatus() === "default"}>
-            Connect To Camera
-          </Match>
-          <Match
-            when={
-              connectionStatus() === "loadingConnect" ||
-              connectionStatus() === "loadingDisconnect"
-            }
-          >
-            Connecting to device...
-          </Match>
-          <Match when={connectionStatus() === "connected"}>
-            Connected To Camera
-          </Match>
-        </Switch>
-      </button>
-      <Additional />
+      <div class="max-h-[calc(65vh-140px)] overflow-y-auto">
+        {" "}
+        {store.deviceType && getSteps(store.deviceType)}
+        {store.deviceType && (
+          <StartupProcess steps={getStartupSteps(store.deviceType)} />
+        )}
+      </div>
+      <div class="drop-shadow-md">
+        <button
+          class="mb-1 w-full rounded bg-blue-500 py-2 text-sm text-white sm:text-base"
+          onClick={() => {
+            console.log(
+              "Connecting to device, current state:",
+              connectionStatus()
+            );
+            deviceContext.connectToDeviceAP();
+            deviceContext.searchDevice();
+          }}
+          disabled={
+            connectionStatus() !== "default" &&
+            connectionStatus() !== "disconnected"
+          }
+        >
+          <Switch fallback={<>Connect To Camera</>}>
+            <Match when={connectionStatus() === "default"}>
+              Connect To Camera
+            </Match>
+            <Match
+              when={
+                connectionStatus() === "loadingConnect" ||
+                connectionStatus() === "loadingDisconnect"
+              }
+            >
+              Connecting to device...
+            </Match>
+            <Match when={connectionStatus() === "connected"}>
+              Connected To Camera
+            </Match>
+          </Switch>
+        </button>
+        <Additional />
+      </div>
     </>
   );
 

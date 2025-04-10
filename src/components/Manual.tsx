@@ -3,7 +3,6 @@ import {
   RiArrowsArrowRightSLine,
 } from "solid-icons/ri";
 import { createSignal, For, JSX, Match, Show, Switch } from "solid-js";
-import { useDevice } from "~/contexts/Device";
 import {
   ColorType,
   DeviceType,
@@ -20,11 +19,52 @@ import {
 
 export const getSteps = (deviceType: DeviceType): JSX.Element => {
   return (
-    <Show
-      when={deviceType === "DOC AI Cam / Bird Monitor"}
-      fallback={
+    <div class="md:text-md text-sm">
+      <Show
+        when={deviceType === "DOC AI Cam / Bird Monitor"}
+        fallback={
+          <>
+            <ol class="mb-2 list-none space-y-3 overflow-y-auto rounded-lg bg-gray-50 p-4">
+              <li class="flex items-start">
+                <span class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                  1
+                </span>
+                <p>Plug in and ensure the device is on.</p>
+              </li>
+              <li class="flex items-start">
+                <span class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                  2
+                </span>
+                <p>Wait until the light indicates a slow pulsing.</p>
+              </li>
+              <li class="flex items-start">
+                <span class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                  3
+                </span>
+                <p>
+                  Press the{" "}
+                  <span class="font-medium text-blue-500">
+                    "Connect to Camera"
+                  </span>{" "}
+                  button below.
+                </p>
+              </li>
+              <li class="flex items-start">
+                <span class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                  4
+                </span>
+                <span>If prompted, confirm the connection to "bushnet"</span>
+              </li>
+            </ol>
+            <p class="md:text-md mb-2 rounded-lg bg-yellow-50 p-3 text-center text-xs text-xs text-yellow-700">
+              If your light does not match the process indicated below try reset
+              the device pressing the power button.
+            </p>
+          </>
+        }
+      >
         <>
-          <ol class="mb-4 list-none space-y-3 rounded-lg bg-gray-50 p-4">
+          <ol class="mb-2 list-none space-y-3 rounded-lg bg-gray-50 p-4">
             <li class="flex items-start">
               <span class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
                 1
@@ -35,79 +75,34 @@ export const getSteps = (deviceType: DeviceType): JSX.Element => {
               <span class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
                 2
               </span>
-              <span>Wait until the light indicates a slow pulsing.</span>
+              <span>
+                When the device light turns{" "}
+                <span class="font-medium text-yellow-600">yellow</span>, press
+                the{" "}
+                <span class="font-medium text-blue-500">
+                  "Connect to Camera"
+                </span>{" "}
+                button.{" "}
+              </span>
             </li>
             <li class="flex items-start">
               <span class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
                 3
               </span>
-              <span>
-                Press the{" "}
-                <span class="font-medium text-blue-500">
-                  "Connect to Camera"
-                </span>{" "}
-                button below.
-              </span>
-            </li>
-            <li class="flex items-start">
-              <span class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-                4
-              </span>
-              <span>If prompted, confirm the connection to "bushnet"</span>
+              <span>If prompted, confirm the connection to "bushnet".</span>
             </li>
           </ol>
-          <p class="mb-4 rounded-lg bg-yellow-50 p-3 text-center text-sm text-yellow-700">
-            If your light does not match the process indicated below try reset
-            the device pressing the power button.
+          <p class="mb-2 rounded-lg bg-yellow-50 p-3 text-center text-xs text-yellow-700 md:text-sm">
+            For a <span class="font-medium text-red-500">red</span> or solid
+            blue (<span class="font-medium text-blue-500">standby</span>) light:
+            Hold the power button until it's off, then hold it again to restart
+            the process. <br /> Solid{" "}
+            <span class="font-medium text-green-500">green</span> indicates WiFi
+            connection.
           </p>
         </>
-      }
-    >
-      <>
-        <ol class="mb-4 list-none space-y-3 rounded-lg bg-gray-50 p-4">
-          <li class="flex items-start">
-            <span class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-              1
-            </span>
-            <span>Plug in and ensure the device is on.</span>
-          </li>
-          <li class="flex items-start">
-            <span class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-              2
-            </span>
-            <span>
-              Wait for the light on your device to turn{" "}
-              <span class="font-medium text-yellow-600">yellow</span>. Solid{" "}
-              <span class="font-medium text-green-500">green</span> indicates
-              the device is connected to WiFi.
-            </span>
-          </li>
-          <li class="flex items-start">
-            <span class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-              3
-            </span>
-            <span>
-              Press the{" "}
-              <span class="font-medium text-blue-500">"Connect to Camera"</span>{" "}
-              button.
-            </span>
-          </li>
-          <li class="flex items-start">
-            <span class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-              4
-            </span>
-            <span>If prompted, confirm the connection to "bushnet".</span>
-          </li>
-        </ol>
-        <p class="mb-4 rounded-lg bg-yellow-50 p-3 text-center text-sm text-yellow-700">
-          If your light is <span class="font-medium text-red-500">red</span> or
-          in <span class="font-medium text-blue-500">standby</span> (not
-          blinking), long press (3 seconds) wait until the light is off, and
-          long press again the power button on your camera to restart the
-          process.
-        </p>
-      </>
-    </Show>
+      </Show>
+    </div>
   );
 };
 

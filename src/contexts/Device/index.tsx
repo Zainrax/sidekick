@@ -2663,29 +2663,37 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       return "Contact support to accept your device.";
   };
 
+  const parseSaltStatusHasUpdate = (
+    data: z.infer<typeof SaltStatusSchema>
+  ): boolean => {
+    if (
+      data.UpdateProgressStr?.includes("No update available") ||
+      data.UpdateProgressStr?.includes("Finished")
+    )
+      return false;
+    return true;
+  };
+
   const checkDeviceUpdate = async (deviceId: DeviceId) => {
     try {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return null;
       const { url } = device;
       const res = await CapacitorHttp.get({
-        url: `${url}/api/update-available`,
+        url: `${url}/api/salt-update`,
         headers,
         webFetchExtra: {
           credentials: "include",
         },
       });
-      console.log("Check Update", res);
       const data =
         res.status === 200
-          ? z.object({"updateAvailable": z.boolean()}).parse(JSON.parse(res.data))
+          ? SaltStatusSchema.safeParse(JSON.parse(res.data)).data
           : null;
 
-      // Only run update check when there's an actual update available
-      if (data && data.updateAvailable && !updatingDevice.has(deviceId)) {
-        runUpdateCheck(deviceId);
-      }
-      return data;
+      console.log("Check Update", data);
+      if (!data) return null;
+      return parseSaltStatusHasUpdate(data);
     } catch (error) {
       console.error(error);
       return null;

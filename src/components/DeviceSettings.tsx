@@ -613,11 +613,17 @@ export function CameraSettingsTab(props: SettingProps) {
   // Setup activity listeners
   onMount(() => {
     // Track user activity
-    const activityEvents = ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll'];
+    const activityEvents = [
+      "mousemove",
+      "mousedown",
+      "keypress",
+      "touchstart",
+      "scroll",
+    ];
     const handleActivity = () => refreshUserActivity();
 
     // Add all event listeners
-    activityEvents.forEach(event => {
+    activityEvents.forEach((event) => {
       document.addEventListener(event, handleActivity);
     });
 
@@ -639,14 +645,16 @@ export function CameraSettingsTab(props: SettingProps) {
       const cam = camera();
       // If user is active but connection isn't active, reconnect
       if (userActive() && cam && !cam.isConnected()) {
-        console.log("Camera feed disconnected but user is active, reconnecting...");
+        console.log(
+          "Camera feed disconnected but user is active, reconnecting..."
+        );
         cam.run();
       }
     }, 5000);
 
     onCleanup(() => {
       // Remove all event listeners
-      activityEvents.forEach(event => {
+      activityEvents.forEach((event) => {
         document.removeEventListener(event, handleActivity);
       });
 
@@ -656,9 +664,6 @@ export function CameraSettingsTab(props: SettingProps) {
       }
 
       clearInterval(connectionInterval);
-
-      // Turn off camera
-      camera()?.toggle();
     });
   });
 
@@ -2573,8 +2578,6 @@ export function GeneralSettingsTab(props: SettingProps) {
     async (deviceId) => {
       if (!deviceId) return null;
       try {
-        // Add delay to prevent rapid successive calls
-        await new Promise((resolve) => setTimeout(resolve, 100));
         const res = await context.checkDeviceUpdate(deviceId);
         return res;
       } catch (error) {
@@ -2642,7 +2645,8 @@ export function GeneralSettingsTab(props: SettingProps) {
   const canUpdate = createMemo(() => {
     const internet = hasInternetConnection();
     const status = updateStatus();
-    if (!internet || !status || !status.updateAvailable) return false;
+    console.log("UPDATE STATUS", status, internet);
+    if ((internet !== undefined && internet === false) || !status) return false;
     return true;
   }, false);
 
@@ -2679,6 +2683,17 @@ export function GeneralSettingsTab(props: SettingProps) {
     user.refetchGroups();
   });
 
+  // refetch the device update status when device finishes updating
+  createEffect(
+    on(
+      () => context.isDeviceUpdating(deviceIdState()),
+      (curr, prev) => {
+        if (prev && !curr) {
+          refetch();
+        }
+      }
+    )
+  );
   const showProgress = createMemo(() => {
     const internet = hasInternetConnection();
     const isUpdating = context.isDeviceUpdating(deviceIdState());
@@ -2859,6 +2874,13 @@ export function DeviceSettingsModal() {
     console.log("Clearing Params");
     setParams({ deviceSettings: null, tab: null });
   };
+
+  createEffect(() => {
+    if (!context.devices.has(params.deviceSettings)) {
+      console.log("Device not found, clearing params");
+      clearParams();
+    }
+  });
 
   createEffect(() => {
     // path

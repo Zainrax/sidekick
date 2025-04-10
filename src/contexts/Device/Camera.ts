@@ -3,6 +3,7 @@ import {
   Console,
   Context,
   Effect,
+  Fiber,
   Layer,
   Option,
   Schedule,
@@ -151,50 +152,60 @@ export default function DeviceCamera(host: string) {
   const [onFrame, setOnFrame] = createSignal<OnFrame | null>(null);
   const [connectionActive, setConnectionActive] = createSignal(false);
   const [reconnecting, setReconnecting] = createSignal(false);
+  const [preloaded, setPreloaded] = createSignal(false);
+  const [lastActivity, setLastActivity] = createSignal(Date.now());
   let reconnectTimeout: number | null = null;
 
-  const processFrame = (frame: Blob) => {
+  function processFrame(frame: Blob) {
     const stream = Effect.promise(() => frame.arrayBuffer());
+
     return Effect.gen(function* (_) {
-      const arrayBuffer = yield* _(stream);
-      const frameInfoLength = new Uint16Array(arrayBuffer.slice(0, 2))[0];
-      const offset = 2;
-      const frameInfoOffset = offset + frameInfoLength;
+      try {
+        const arrayBuffer = yield* _(stream);
+        const frameInfoLength = new Uint16Array(arrayBuffer.slice(0, 2))[0];
+        const offset = 2;
+        const frameInfoOffset = offset + frameInfoLength;
 
-      const frameInfoView = arrayBuffer.slice(2, frameInfoOffset);
+        const frameInfoView = arrayBuffer.slice(2, frameInfoOffset);
 
-      const decoder = new TextDecoder();
-      const text = decoder.decode(frameInfoView);
-      const frameInfo = FrameInfoSchema.parse(JSON.parse(text));
+        const decoder = new TextDecoder();
+        const text = decoder.decode(frameInfoView);
+        const frameInfo = FrameInfoSchema.parse(JSON.parse(text));
 
-      const frameSizeInBytes =
-        frameInfo.Camera.ResX * frameInfo.Camera.ResY * 2;
-      const frame = new Uint16Array(
-        arrayBuffer.slice(frameInfoOffset, frameInfoOffset + frameSizeInBytes)
-      );
+        const frameSizeInBytes =
+          frameInfo.Camera.ResX * frameInfo.Camera.ResY * 2;
+        const frame = new Uint16Array(
+          arrayBuffer.slice(frameInfoOffset, frameInfoOffset + frameSizeInBytes)
+        );
 
-      // Reset any reconnection attempts since we're receiving frames
-      if (reconnecting()) {
-        setReconnecting(false);
+        if (reconnecting()) {
+          setReconnecting(false);
+        }
+
+        setLastActivity(Date.now());
+
+        setConnectionActive(true);
+
+        const onF = onFrame();
+        if (onF) {
+          onF({ frameInfo, frame });
+        }
+
+        return true;
+      } catch (error) {
+        console.error("Error processing frame:", error);
+
+        return true;
       }
-
-      const onF = onFrame();
-      if (onF) {
-        onF({ frameInfo, frame });
-      }
-      // If we're receiving frames, we want to keep the connection alive
-      return true;
     });
-  };
+  }
 
   // random 13 digit number
   const id = Math.floor(Math.random() * 10000000000000);
 
   const applyHeartbeat = (connectedWS: ConnectedWebSocket) => {
-    // Send heartbeats every 5 seconds as long as on() is true or we're actively receiving frames
-    const heartbeatSchedule = Schedule.spaced("5 seconds");
-    // Keep sending heartbeats as long as the connection should be maintained
-    const isOn = Schedule.recurWhile(() => on() || connectionActive());
+    const heartbeatSchedule = Schedule.spaced("2 seconds");
+    const isOn = Schedule.recurWhile(() => on());
     return Effect.repeat(
       Effect.gen(function* (_) {
         yield* _(connectedWS.send({ type: "Heartbeat", uuid: id }));
@@ -213,6 +224,7 @@ export default function DeviceCamera(host: string) {
 
   const intializeCameraSocket = Effect.gen(function* (_) {
     const connectedWS = yield* _(ConnectedWS);
+
     yield* _(
       connectedWS.send({
         type: "Register",
@@ -220,37 +232,53 @@ export default function DeviceCamera(host: string) {
         data: navigator.userAgent,
       })
     );
-    console.log("connected");
-    setConnectionActive(true);
 
-    // Add event handlers for the underlying WebSocket
+    console.log("connected to camera websocket");
+    setConnectionActive(true);
+    setPreloaded(true);
+
     const getWebSocketInstance = Effect.sync(() => {
-      // Add closures to handle disconnection
-      // We can't access the WS directly, so we need to add handlers
-      // to the global connection state
       window.addEventListener("offline", () => {
         console.log("Network offline, marking connection as inactive");
         setConnectionActive(false);
         attemptReconnect();
       });
-      
-      // Set up a periodic check for connection status
+
       const checkInterval = setInterval(() => {
         if (!connectionActive() && on()) {
           console.log("Connection appears inactive, attempting reconnect");
           attemptReconnect();
         }
+
+        const inactivityPeriod = 10 * 60 * 1000; // 10 minutes instead of 5
+        if (
+          connectionActive() &&
+          !onFrame() &&
+          Date.now() - lastActivity() > inactivityPeriod
+        ) {
+          console.log("Camera inactive, conserving resources");
+          setConnectionActive(false);
+        }
       }, 10000);
-      
-      // Cleanup on finalization
+
       return Effect.sync(() => {
         window.removeEventListener("offline", attemptReconnect);
         clearInterval(checkInterval);
       });
     });
-    
+
     yield* _(Effect.acquireRelease(getWebSocketInstance, (cleanup) => cleanup));
-    yield* _(Effect.fork(applyHeartbeat(connectedWS)));
+
+    const heartbeatFiber = yield* _(Effect.fork(applyHeartbeat(connectedWS)));
+
+    yield* _(
+      Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          Effect.runSync(Fiber.interrupt(heartbeatFiber));
+        })
+      )
+    );
+
     yield* _(
       connectedWS.listen.pipe(
         Stream.filterMap(filterBlobFromMessage),
@@ -277,16 +305,22 @@ export default function DeviceCamera(host: string) {
     }, 2000) as unknown as number;
   };
 
-  const run = () =>
-    Effect.runPromise(
+  const run = () => {
+    console.log("Starting/reconnecting camera feed");
+
+    return Effect.runPromise(
       Effect.provide(intializeCameraSocket, openWSConnection()).pipe(
         Effect.scoped
       )
     ).catch((error) => {
       console.error("Error in camera connection:", error);
       setConnectionActive(false);
-      attemptReconnect();
+
+      if (on()) {
+        attemptReconnect();
+      }
     });
+  };
 
   const toggle = () => {
     const newValue = !on();
@@ -297,8 +331,22 @@ export default function DeviceCamera(host: string) {
         clearTimeout(reconnectTimeout);
         reconnectTimeout = null;
       }
+    } else if (newValue && !connectionActive()) {
+      run();
     }
     return newValue;
+  };
+
+  const preload = () => {
+    if (!on() && !preloaded()) {
+      console.log("Preloading camera connection");
+      setOn(true);
+      run();
+    }
+  };
+
+  const isReady = () => {
+    return preloaded() && connectionActive();
   };
 
   return {
@@ -310,5 +358,30 @@ export default function DeviceCamera(host: string) {
     toggle,
     setOnFrame,
     isConnected: () => connectionActive(),
+    preload,
+    isReady,
   };
+}
+
+export const preloadedCameras = new Map<
+  string,
+  ReturnType<typeof DeviceCamera>
+>();
+
+export function preloadCamera(host: string) {
+  if (!preloadedCameras.has(host)) {
+    const camera = DeviceCamera(host);
+    camera.preload();
+    preloadedCameras.set(host, camera);
+  }
+  return preloadedCameras.get(host)!;
+}
+
+export function getDeviceCamera(host: string) {
+  if (preloadedCameras.has(host)) {
+    return preloadedCameras.get(host)!;
+  }
+  const camera = DeviceCamera(host);
+  preloadedCameras.set(host, camera);
+  return camera;
 }

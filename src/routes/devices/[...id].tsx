@@ -65,7 +65,7 @@ function DeviceSettings() {
   });
   return (
     <>
-      <section class="pb-bar pt-bar relative h-full">
+      <section class="pb-bar pt-bar relative h-screen">
         <Show when={device()}>
           {(dev) => {
             return <iframe class="h-full w-full max-w-[100vw]" src={url()} />;
