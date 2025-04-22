@@ -59,6 +59,12 @@ const EUAResponseSchema = z.object({
   euaVersion: z.number().optional(),
 });
 
+// Add ResetPassword response schema
+const ResetPasswordResponseSchema = z.object({
+  success: z.boolean(),
+  messages: z.array(z.string()),
+});
+
 export type LoginResult =
   | { _tag: "Success"; user: User }
   | { _tag: "NeedsAgreement"; authToken: string }
@@ -627,6 +633,30 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     }
   }
 
+  async function resetPassword(email: string) {
+    try {
+      const response = await CapacitorHttp.request({
+        method: "POST",
+        url: `${getServerUrl()}/api/v1/users/reset-password`,
+        headers: { "Content-Type": "application/json" },
+        data: { email },
+      });
+      const parse = ResetPasswordResponseSchema.safeParse(response.data);
+      if (parse.success) {
+        return parse.data;
+      } else {
+        log.logWarning({
+          message: "Invalid reset password response format",
+          details: JSON.stringify(parse.error),
+        });
+        return { success: false, messages: ["Invalid response from server"] };
+      }
+    } catch (error) {
+      log.logError({ message: "Reset password failed", error });
+      return { success: false, messages: ["Reset password request failed"] };
+    }
+  }
+
   // Clear custom server
   const clearCustomServer = async () => {
     try {
@@ -675,6 +705,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
     setToCustomServer,
     isLoggedIn,
     updateUserAgreement,
+    resetPassword,
     clearCustomServer,
   };
 });

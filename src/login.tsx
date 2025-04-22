@@ -7,6 +7,8 @@ import { ImCog } from "solid-icons/im";
 import { FaRegularEye, FaRegularEyeSlash } from "solid-icons/fa";
 import { useDevice } from "./contexts/Device";
 import { untrack } from "solid-js/web";
+import Dialog from "./components/Dialog"; // Import the Dialog component
+
 type LoginInput = {
   type: string;
   placeholder?: string;
@@ -172,8 +174,34 @@ function Login() {
     }
     setError("");
   };
+  // Forgot password state and handler
+  const [forgotMode, setForgotMode] = createSignal(false);
+  const [resetEmail, setResetEmail] = createSignal("");
+  const [resetError, setResetError] = createSignal("");
+  const [resetSuccess, setResetSuccess] = createSignal<string | null>(null);
+  const [resettingPassword, setResettingPassword] = createSignal(false);
+  const handleReset = async () => {
+    setResettingPassword(true);
+    setResetError(""); setResetSuccess(null);
+    const parsed = emailSchema.safeParse(resetEmail());
+    if (!parsed.success) { 
+      setResetError(parsed.error.message); 
+      setResettingPassword(false);
+      return; 
+    }
+    try {
+      const result = await user?.resetPassword(parsed.data);
+      if (result) {
+        if (result.success) setResetSuccess(result.messages[0] || "Password reset email sent.");
+        else setResetError(result.messages[0] || "Reset failed.");
+      } else {
+        setResetError("Reset request failed.");
+      }
+    } finally {
+      setResettingPassword(false);
+    }
+  };
   // Create a way to check if user is holding logo down for 5 taps
-  // If so, toggle server
   const [pressed, setPressed] = createSignal(0);
   const logoDown = () => {
     setPressed(pressed() + 1);
@@ -193,6 +221,39 @@ function Login() {
       class="mx-auto flex h-screen w-screen max-w-screen-sm flex-col justify-center gap-y-4 bg-white px-8 text-lg"
       onSubmit={onSubmit}
     >
+      <Dialog show={forgotMode()} onShowChange={setForgotMode}>
+        <div class="flex flex-col gap-4">
+          <h2 class="text-xl font-bold text-gray-800">Forgot Password?</h2>
+          <p class="text-sm text-gray-600">
+            Enter your email address and we'll send you instructions to reset your password.
+          </p>
+          <LoginInput
+            autoComplete="email"
+            type="email"
+            name="resetEmail"
+            label="Email"
+            placeholder="example@gmail.com"
+            invalid={Boolean(resetError())}
+            onInput={(e) => { setResetEmail((e.target as HTMLInputElement).value); setResetError(""); setResetSuccess(null); }}
+          />
+          <Show when={resetError()} fallback={<Show when={resetSuccess()}><p class="text-xs text-green-600">{resetSuccess()}</p></Show>}>
+            <p class="text-xs text-red-500">{resetError()}</p>
+          </Show>
+          <button
+            type="button"
+            class="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            onClick={handleReset}
+            disabled={resettingPassword()}
+          >{resettingPassword() ? "Sending..." : "Send Reset Email"}</button>
+          <button
+            type="button"
+            class="w-full rounded-md border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-700 transition-all hover:border-gray-400 hover:bg-gray-50 hover:text-gray-800"
+            onClick={() => { setForgotMode(false); setResetError(""); setResetSuccess(null); }}
+          >Cancel</button>
+        </div>
+      </Dialog>
+
+      {/* Original Login UI */}
       <Show when={!user?.isProd()}>
         <div class="pt-safe absolute top-0 mt-8 flex items-center pr-8 font-bold text-neutral-700">
           <ImCog size={32} />
@@ -287,14 +348,17 @@ function Login() {
           invalid={Boolean(emailError())}
           onInput={onInput}
         />
-        <LoginInput
-          autoComplete="current-password"
-          type="password"
-          name="password"
-          label="Password"
-          invalid={Boolean(passwordError())}
-          onInput={onInput}
-        />
+        <div>
+          <LoginInput
+            autoComplete="current-password"
+            type="password"
+            name="password"
+            label="Password"
+            invalid={Boolean(passwordError())}
+            onInput={onInput}
+          />
+          <button type="button" class="text-sm text-blue-500 hover:underline" onClick={() => setForgotMode(true)}>Forgot Password?</button>
+        </div>
         <Show when={error} fallback={<div class="h-8" />}>
           <p class="h-8 text-red-500">{error()}</p>
         </Show>
@@ -311,15 +375,7 @@ function Login() {
           </button>
         </p>
       </Show>
-      <button
-        class="text-blue-500"
-        onClick={(e) => {
-          e.preventDefault();
-          user?.skip();
-        }}
-      >
-        Skip Login
-      </button>
+      <button class="text-blue-500" onClick={(e) => { e.preventDefault(); user?.skip(); }}>Skip Login</button>
     </form>
   );
 }
