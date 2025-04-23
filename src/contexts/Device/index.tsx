@@ -122,6 +122,12 @@ const AudioStatusResSchema = z.object({
   ]),
   status: AudioStatusSchema,
 });
+const AudioRecordingResSchema = z.object({
+  "audio-mode": AudioModeSchema,
+  "audio-seed": z.union([z.string(), z.number()]).transform((val) =>
+    val.toString()
+  ),
+});
 export type AudioMode = z.infer<typeof AudioModeSchema>;
 export type DeviceId = string;
 export type DeviceName = string;
@@ -2341,6 +2347,52 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
   };
 
+  const getAudioRecordingSettings = async (deviceId: DeviceId) => {
+    const device = devices.get(deviceId);
+    if (!device || !device.isConnected) return null;
+    const res = await CapacitorHttp.get({
+      url: `${device.url}/api/audiorecording`,
+      headers,
+      webFetchExtra: { credentials: "include" },
+    });
+    if (res.status !== 200) return null;
+    const data = AudioRecordingResSchema.parse(JSON.parse(res.data));
+    return { mode: data["audio-mode"], seed: data["audio-seed"] };
+  };
+
+  const setAudioRecordingSettings = async (
+    deviceId: DeviceId,
+    mode: AudioMode,
+    seed: string
+  ) => {
+    const device = devices.get(deviceId);
+    if (!device || !device.isConnected) return false;
+    const form = new URLSearchParams();
+    form.set("audio-mode", mode);
+    form.set("audio-seed", seed);
+    const res = await CapacitorHttp.post({
+      url: `${device.url}/api/audiorecording`,
+      headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
+      webFetchExtra: { credentials: "include" },
+      data: form.toString(),
+    });
+    return res.status === 200;
+  };
+
+  const takeLongAudioRecording = async (
+    deviceId: DeviceId,
+    seconds: number
+  ) => {
+    const device = devices.get(deviceId);
+    if (!device || !device.isConnected) return false;
+    const res = await CapacitorHttp.put({
+      url: `${device.url}/api/audio/long-recording?seconds=${seconds}`,
+      headers: { ...headers, "Content-Type": "application/json" },
+      webFetchExtra: { credentials: "include" },
+    });
+    return res.status === 200;
+  };
+
   const getDeviceCamera = (deviceId: DeviceId) => {
     const device = devices.get(deviceId);
     if (!device || !device.isConnected) return null;
@@ -2840,9 +2892,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     getAudioMode,
     getAudioStatus,
     setAudioMode,
-    takeAudioRecording,
     getAudioFiles,
     hasAudioCapabilities,
+    getAudioRecordingSettings,
+    setAudioRecordingSettings,
+    takeLongAudioRecording,
     // Update
     checkDeviceUpdate,
     updateDevice,

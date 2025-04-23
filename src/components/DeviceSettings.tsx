@@ -203,6 +203,32 @@ export function AudioSettingsTab(props: SettingProps) {
     const value = 100 - startWidth - endWidth;
     return value;
   };
+
+  // new audio settings state
+  const [audioSettings, { refetch: refetchAudioSettings }] = createResource(
+    id,
+    async (id) => context.getAudioRecordingSettings(id)
+  );
+  const [seedValue, setSeedValue] = createSignal<string>(audioSettings()?.seed ?? "");
+  const [seedSaving, setSeedSaving] = createSignal(false);
+  const saveSeed = async () => {
+    setSeedSaving(true);
+    await context.setAudioRecordingSettings(id(), audioMode() || "Disabled", seedValue());
+    await refetchAudioSettings();
+    setSeedSaving(false);
+  };
+  // long recording controls
+  const [longSeconds, setLongSeconds] = createSignal(60);
+  const [longLoading, setLongLoading] = createSignal(false);
+  const [longResult, setLongResult] = createSignal<"failed" | "success" | null>(null);
+  const startLongRecording = async () => {
+    setLongLoading(true);
+    const ok = await context.takeLongAudioRecording(id(), longSeconds());
+    setLongResult(ok ? "success" : "failed");
+    setLongLoading(false);
+    setTimeout(() => setLongResult(null), 3000);
+  };
+
   return (
     <section class="space-y-2  px-2 py-4">
       <div class="flex items-center  text-gray-800">
@@ -332,6 +358,45 @@ export function AudioSettingsTab(props: SettingProps) {
           </Switch>
         </div>
       </Show>
+      <FieldWrapper type="custom" title="Audio Seed">
+        <div class="flex w-full items-center space-x-2">
+          <input
+            type="text"
+            class="flex-1 rounded border px-2 py-1"
+            value={seedValue()}
+            onInput={e => setSeedValue((e.currentTarget as HTMLInputElement).value)}
+          />
+          <button
+            class="px-4 py-1 bg-blue-500 text-white rounded"
+            onClick={saveSeed}
+            disabled={seedSaving() || seedValue() === audioSettings()?.seed}
+          >
+            {seedSaving() ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </FieldWrapper>
+      <FieldWrapper type="custom" title="Long Recording (sec)">
+        <div class="flex w-full items-center space-x-2">
+          <input
+            type="number"
+            class="w-20 rounded border px-2 py-1"
+            value={longSeconds()}
+            onInput={e => setLongSeconds(parseInt((e.currentTarget as HTMLInputElement).value) || 0)}
+          />
+          <button
+            class="px-4 py-1 bg-green-500 text-white rounded"
+            onClick={startLongRecording}
+            disabled={longLoading()}
+          >
+            {longLoading() ? "Recording..." : "Start"}
+          </button>
+          <Show when={longResult()}>
+            <span class={ longResult() === "success" ? "text-green-600" : "text-red-600" }>
+              {longResult() === "success" ? "Done" : "Failed"}
+            </span>
+          </Show>
+        </div>
+      </FieldWrapper>
       <button
         classList={{
           "bg-blue-500": audioMode() !== "Disabled",
