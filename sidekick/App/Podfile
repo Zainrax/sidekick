@@ -1,6 +1,6 @@
-require_relative '../../node_modules/.deno/@capacitor+ios@6.2.1/node_modules/@capacitor/ios/scripts/pods_helpers'
+require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
 
-platform :ios, '14.1'
+platform :ios, '14.0'
 use_frameworks!
 # workaround to avoid Xcode caching of Pods that requires
 # Product -> Clean Build Folder after new Cordova plugins installed
@@ -8,19 +8,20 @@ use_frameworks!
 install! 'cocoapods', :disable_input_output_paths => true
 
 def capacitor_pods
-  pod 'Capacitor', :path => '../../node_modules/.deno/@capacitor+ios@6.2.1/node_modules/@capacitor/ios'
-  pod 'CapacitorCordova', :path => '../../node_modules/.deno/@capacitor+ios@6.2.1/node_modules/@capacitor/ios'
+  pod 'Capacitor', :path => '../../node_modules/.deno/@capacitor+ios@7.2.0/node_modules/@capacitor/ios'
+  pod 'CapacitorCordova', :path => '../../node_modules/.deno/@capacitor+ios@7.2.0/node_modules/@capacitor/ios'
   pod 'CapacitorCommunityKeepAwake', :path => '../../node_modules/.deno/@capacitor-community+keep-awake@5.0.1/node_modules/@capacitor-community/keep-awake'
   pod 'CapacitorCommunitySqlite', :path => '../../node_modules/.deno/@capacitor-community+sqlite@6.0.1/node_modules/@capacitor-community/sqlite'
-  pod 'CapacitorApp', :path => '../../node_modules/.deno/@capacitor+app@6.0.2/node_modules/@capacitor/app'
-  pod 'CapacitorBrowser', :path => '../../node_modules/.deno/@capacitor+browser@6.0.5/node_modules/@capacitor/browser'
-  pod 'CapacitorCamera', :path => '../../node_modules/.deno/@capacitor+camera@6.1.2/node_modules/@capacitor/camera'
-  pod 'CapacitorClipboard', :path => '../../node_modules/.deno/@capacitor+clipboard@6.0.2/node_modules/@capacitor/clipboard'
-  pod 'CapacitorDialog', :path => '../../node_modules/.deno/@capacitor+dialog@6.0.2/node_modules/@capacitor/dialog'
-  pod 'CapacitorFilesystem', :path => '../../node_modules/.deno/@capacitor+filesystem@6.0.3/node_modules/@capacitor/filesystem'
-  pod 'CapacitorGeolocation', :path => '../../node_modules/.deno/@capacitor+geolocation@6.1.0/node_modules/@capacitor/geolocation'
-  pod 'CapacitorNetwork', :path => '../../node_modules/.deno/@capacitor+network@6.0.3/node_modules/@capacitor/network'
-  pod 'CapacitorPreferences', :path => '../../node_modules/.deno/@capacitor+preferences@6.0.3/node_modules/@capacitor/preferences'
+  pod 'CapacitorApp', :path => '../../node_modules/.deno/@capacitor+app@7.0.1/node_modules/@capacitor/app'
+  pod 'CapacitorBrowser', :path => '../../node_modules/.deno/@capacitor+browser@7.0.1/node_modules/@capacitor/browser'
+  pod 'CapacitorCamera', :path => '../../node_modules/.deno/@capacitor+camera@7.0.1/node_modules/@capacitor/camera'
+  pod 'CapacitorClipboard', :path => '../../node_modules/.deno/@capacitor+clipboard@7.0.1/node_modules/@capacitor/clipboard'
+  pod 'CapacitorDialog', :path => '../../node_modules/.deno/@capacitor+dialog@7.0.1/node_modules/@capacitor/dialog'
+  pod 'CapacitorFilesystem', :path => '../../node_modules/.deno/@capacitor+filesystem@7.0.1/node_modules/@capacitor/filesystem'
+  pod 'CapacitorGeolocation', :path => '../../node_modules/.deno/@capacitor+geolocation@7.1.1/node_modules/@capacitor/geolocation'
+  pod 'CapacitorLocalNotifications', :path => '../../node_modules/@capacitor/local-notifications'
+  pod 'CapacitorNetwork', :path => '../../node_modules/.deno/@capacitor+network@7.0.1/node_modules/@capacitor/network'
+  pod 'CapacitorPreferences', :path => '../../node_modules/.deno/@capacitor+preferences@7.0.1/node_modules/@capacitor/preferences'
   pod 'SentryCapacitor', :path => '../../node_modules/.deno/@sentry+capacitor@1.4.0/node_modules/@sentry/capacitor'
   pod 'CapacitorIosAutofillSavePassword', :path => '../../node_modules/capacitor-ios-autofill-save-password'
   pod 'CapacitorNativeSettings', :path => '../../node_modules/.deno/capacitor-native-settings@6.0.5/node_modules/capacitor-native-settings'

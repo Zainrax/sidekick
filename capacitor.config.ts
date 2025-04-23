@@ -1,10 +1,11 @@
+/// <reference types="@capacitor/local-notifications" />
+
 import { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "nz.org.cacophony.sidekick",
   appName: "Sidekick",
   webDir: "dist",
-  bundledWebRuntime: false,
   backgroundColor: "#f9fafb",
   server: {
     hostname: "sidekick.cacophony.org.nz",
@@ -28,6 +29,11 @@ const config: CapacitorConfig = {
         biometricTitle: "Biometric login for capacitor sqlite",
         biometricSubTitle: "Log in using your biometric",
       },
+    },
+    LocalNotifications: {
+      smallIcon: "ic_stat_notify_upload", // Ensure this drawable exists
+      iconColor: "#488AFF",
+      // sound: "beep.wav", // Optional: Add if you have a sound file in res/raw
     },
   },
 };

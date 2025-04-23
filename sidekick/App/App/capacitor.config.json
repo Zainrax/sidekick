@@ -2,7 +2,6 @@
 	"appId": "nz.org.cacophony.sidekick",
 	"appName": "Sidekick",
 	"webDir": "dist",
-	"bundledWebRuntime": false,
 	"backgroundColor": "#f9fafb",
 	"server": {
 		"hostname": "sidekick.cacophony.org.nz",
@@ -26,6 +25,10 @@
 				"biometricTitle": "Biometric login for capacitor sqlite",
 				"biometricSubTitle": "Log in using your biometric"
 			}
+		},
+		"LocalNotifications": {
+			"smallIcon": "ic_stat_notify_upload",
+			"iconColor": "#488AFF"
 		}
 	},
 	"packageClassList": [
@@ -38,6 +41,7 @@
 		"DialogPlugin",
 		"FilesystemPlugin",
 		"GeolocationPlugin",
+		"LocalNotificationsPlugin",
 		"CAPNetworkPlugin",
 		"PreferencesPlugin",
 		"SentryCapacitor",

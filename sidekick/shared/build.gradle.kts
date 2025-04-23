@@ -62,7 +62,7 @@ kotlin {
                 implementation(kotlin("test"))
             }
         }
-        val androidMain by getting  {
+        val androidMain by getting {
             dependsOn(commonMain)
             dependencies {
                 implementation("androidx.activity:activity-compose:1.4.0")
@@ -97,10 +97,9 @@ kotlin {
 
 android {
     namespace = "nz.org.cacophony.sidekick.shared"
-    compileSdk = 34
+    compileSdk = 35
     defaultConfig {
-        minSdk = 22
-        targetSdk = 33
+        minSdk = 23
     }
 }
 dependencies {

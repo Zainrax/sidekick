@@ -13,13 +13,13 @@ val performSigning = keystorePropertiesFile.exists()
 if (performSigning) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
-val sdk = 34
-val minSdkVersion = 22
+val sdk = 35
+val minSdkVersion = 23
 val majorVersion = 3
 val minorVersion = 11
 val patchVersion = 0
 android {
-    buildToolsVersion = "34.0.0"
+    buildToolsVersion = "35.0.0"
     namespace = "nz.org.cacophony.sidekick"
     compileSdk = sdk
     if (performSigning) {
@@ -44,7 +44,7 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.12"
+        kotlinCompilerExtensionVersion = "1.5.15"
     }
     packagingOptions {
         resources {
@@ -61,6 +61,18 @@ android {
     }
     sourceSets.getByName("main") {
         java.srcDir("../capacitor-cordova-android-plugins/src/main/libs")
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+    kotlinOptions {
+        jvmTarget = "21"
+    }
+    java {
+        toolchain {
+            languageVersion.set(JavaLanguageVersion.of(21))
+        }
     }
 }
 

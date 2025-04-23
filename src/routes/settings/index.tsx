@@ -6,8 +6,13 @@ import ActionContainer from "~/components/ActionContainer";
 import { A } from "@solidjs/router";
 import { RiArrowsArrowRightSLine } from "solid-icons/ri";
 import { Dialog } from "@capacitor/dialog";
-import { BiRegularLogOut } from "solid-icons/bi";
+import { BiRegularLogOut, BiRegularTestTube } from "solid-icons/bi";
 import { CacophonyPlugin } from "~/contexts/CacophonyApi";
+import {
+  LocalNotifications,
+  PermissionStatus,
+} from "@capacitor/local-notifications";
+import { Capacitor } from "@capacitor/core";
 
 function Settings() {
   const userContext = useUserContext();
@@ -67,7 +72,7 @@ function Settings() {
   };
 
   return (
-    <section class="pt-bar mt-2 h-full space-y-2 bg-gray-200 px-2">
+    <section class="pt-bar mb-bar mt-2 h-full space-y-2 bg-gray-200 px-2">
       {/* Account Section */}
       <div class="space-y-2 rounded-xl bg-slate-50 p-2">
         <h1 class="ml-2 text-xl text-neutral-500">Account</h1>
@@ -146,6 +151,43 @@ function Settings() {
                 </button>
               </div>
             </div>
+          </ActionContainer>
+
+          {/* Test Button */}
+          <ActionContainer icon={BiRegularTestTube} header="Test Notification">
+            <button
+              class="flex w-full justify-center rounded-md bg-green-500 px-4 py-2 text-white hover:bg-green-600"
+              onClick={async () => {
+                // Check and request permission if needed
+                let perm: PermissionStatus =
+                  await LocalNotifications.checkPermissions();
+                if (
+                  perm.display === "prompt" ||
+                  perm.display === "prompt-with-rationale"
+                ) {
+                  perm = await LocalNotifications.requestPermissions();
+                }
+                if (perm.display === "granted") {
+                  await LocalNotifications.schedule({
+                    notifications: [
+                      {
+                        id: 2000,
+                        title: "Test Notification",
+                        body: "This is a test local notification.",
+                        schedule: { at: new Date(Date.now() + 1000) },
+                        smallIcon: "ic_stat_notify_upload",
+                        autoCancel: true,
+                      },
+                    ],
+                  });
+                  console.log("Scheduled test notification");
+                } else {
+                  console.warn("Notification permission not granted");
+                }
+              }}
+            >
+              Run Test
+            </button>
           </ActionContainer>
         </Show>
       </div>

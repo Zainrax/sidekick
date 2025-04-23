@@ -1,7 +1,7 @@
 import { KeepAwake } from "@capacitor-community/keep-awake";
 import { CapacitorSQLite, SQLiteConnection } from "@capacitor-community/sqlite";
 import { createContextProvider } from "@solid-primitives/context";
-import { createEffect, createResource, createSignal, on } from "solid-js";
+import { createEffect, createSignal, on, onMount } from "solid-js";
 import { openConnection } from "../../database";
 import { useEventStorage } from "./event";
 import { useLocationStorage } from "./location";
@@ -9,6 +9,11 @@ import { useRecordingStorage } from "./recording";
 import { Network } from "@capacitor/network";
 import { useLogsContext } from "../LogsContext";
 import { useDeviceImagesStorage } from "./deviceImages";
+import {
+  LocalNotifications,
+  PermissionStatus,
+} from "@capacitor/local-notifications";
+import { Capacitor } from "@capacitor/core";
 
 const DatabaseName = "Cacophony";
 
@@ -28,10 +33,32 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
   const deviceImages = useDeviceImagesStorage();
   const event = useEventStorage();
   const log = useLogsContext();
+  const UPLOAD_NOTIFICATION_ID = 1001;
+
+  onMount(async () => {
+    if (Capacitor.getPlatform() === "android") {
+      let permStatus: PermissionStatus =
+        await LocalNotifications.checkPermissions();
+      if (
+        permStatus.display === "prompt" ||
+        permStatus.display === "prompt-with-rationale"
+      ) {
+        permStatus = await LocalNotifications.requestPermissions();
+      }
+      if (permStatus.display !== "granted") {
+        log.logWarning({
+          message:
+            "Notification permission not granted. Upload reminders will not be shown.",
+        });
+      }
+    }
+  });
+
   const uploadItems = async (warn = true) => {
     try {
-      if (isUploading()) return;
-      setIsUploading(true);
+      await LocalNotifications.cancel({
+        notifications: [{ id: UPLOAD_NOTIFICATION_ID }],
+      });
       if (await KeepAwake.isSupported()) {
         await KeepAwake.keepAwake();
       }
@@ -56,6 +83,9 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
     setIsUploading(false);
     recording.stopUploading();
     event.stopUploading();
+    LocalNotifications.cancel({
+      notifications: [{ id: UPLOAD_NOTIFICATION_ID }],
+    });
   };
 
   const hasItemsToUpload = () => {
@@ -70,12 +100,62 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
   createEffect(
     on(hasItemsToUpload, async (hasItems) => {
       try {
+        if (hasItems) {
+          let permStatus: PermissionStatus =
+            await LocalNotifications.checkPermissions();
+          if (permStatus.display === "granted") {
+            await LocalNotifications.schedule({
+              notifications: [
+                {
+                  id: UPLOAD_NOTIFICATION_ID,
+                  title: "Upload Pending",
+                  body: "You have recordings or events ready to upload.",
+                  schedule: { at: new Date(Date.now() + 1000) },
+                  smallIcon: "ic_stat_notify_upload",
+                  autoCancel: true,
+                },
+              ],
+            });
+          } else if (
+            permStatus.display === "prompt" ||
+            permStatus.display === "prompt-with-rationale"
+          ) {
+            permStatus = await LocalNotifications.requestPermissions();
+            if (permStatus.display === "granted") {
+              await LocalNotifications.schedule({
+                notifications: [
+                  {
+                    id: UPLOAD_NOTIFICATION_ID,
+                    title: "Upload Pending",
+                    body: "You have recordings or events ready to upload.",
+                    schedule: { at: new Date(Date.now() + 1000) },
+                    smallIcon: "ic_stat_notify_upload",
+                    autoCancel: true,
+                  },
+                ],
+              });
+            }
+          } else {
+            log.logWarning({
+              message:
+                "Cannot schedule upload notification: Permission not granted.",
+            });
+          }
+        } else {
+          await LocalNotifications.cancel({
+            notifications: [{ id: UPLOAD_NOTIFICATION_ID }],
+          });
+        }
+
         const status = await Network.getStatus();
         if (status.connectionType === "wifi" && hasItems) {
           uploadItems(false);
         }
       } catch (error) {
-        console.error("Error getting network status:", error);
+        log.logError({
+          message: "Error handling upload notification or auto-upload",
+          error,
+        });
       }
     })
   );
@@ -91,5 +171,14 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
     hasItemsToUpload,
   };
 });
-const definiteUseStorage = () => useStorage()!;
-export { StorageProvider, definiteUseStorage as useStorage };
+
+// Provide a safe useStorage hook that ensures the context is available
+function useStorageSafe() {
+  const context = useStorage();
+  if (!context) {
+    throw new Error("useStorage must be used within StorageProvider");
+  }
+  return context;
+}
+
+export { StorageProvider, useStorageSafe as useStorage };
