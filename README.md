@@ -18,6 +18,7 @@ The Cacophony Project uses thermal cameras with AI-powered detection to monitor 
 ## Technology Stack
 
 Sidekick is built using:
+
 - [Kotlin Multiplatform Mobile](https://kotlinlang.org/docs/multiplatform-mobile-getting-started.html) for shared native code
 - [Capacitor.js](https://capacitorjs.com/) for cross-platform native runtime
 - [Solid.js](https://www.solidjs.com/) for the user interface
@@ -35,30 +36,40 @@ This architecture provides native performance with cross-platform compatibility 
 
 ## Development Setup
 
-1. Install pnpm (recommended package manager):
-   ```bash
-   npm install -g pnpm
-   ```
+1. Install deno (recommended package manager):
+
+### Windows
+
+irm <https://deno.land/install.ps1> | iex
+
+### Linux
+
+```bash
+curl -fsSL https://deno.land/install.sh | sh
+```
 
 2. Open the project in Android Studio:
+
    - Open the `/sidekick` directory in Android Studio
    - Let Gradle download all dependencies
 
 3. Install JavaScript dependencies:
+
    ```bash
-   pnpm install
+   deno install
    ```
 
 4. Build and run:
+
    ```bash
    # Development mode with hot reloading
-   pnpm dev
+   deno dev
 
    # OR
 
    # Build a release version
-   pnpm build
-   pnpm sync
+   deno build
+   deno sync
    ```
 
 5. Connect a physical device:
@@ -71,18 +82,24 @@ This architecture provides native performance with cross-platform compatibility 
 ## Release Process
 
 ### Android
+
 Builds are automated through GitHub releases.
 
 ### iOS
+
 Builds are created manually using Xcode Archive.
 
 ### Version Updates
+
 When creating a new release, update version numbers in:
+
 - `./sidekick/app/build.gradle.kts`
 - `./sidekick/App/App.xcodeproj/project.pbxproj`
 
 ## Documentation
 
 For more information about the Cacophony Project:
+
 - [Cacophony Project Website](https://cacophony.org.nz/)
 - [GitHub Organization](https://github.com/TheCacophonyProject)
+

@@ -1,4 +1,4 @@
-import { createComputed, createSignal, on, Show } from "solid-js";
+import { createComputed, createSignal, on, Show, untrack } from "solid-js"; // Import untrack from solid-js
 import { Browser } from "@capacitor/browser";
 import { z } from "zod";
 import CacaophonyLogo from "./components/CacaophonyLogo";
@@ -6,7 +6,6 @@ import { LoginResult, useUserContext } from "./contexts/User";
 import { ImCog } from "solid-icons/im";
 import { FaRegularEye, FaRegularEyeSlash } from "solid-icons/fa";
 import { useDevice } from "./contexts/Device";
-import { untrack } from "solid-js/web";
 import Dialog from "./components/Dialog"; // Import the Dialog component
 
 type LoginInput = {
@@ -17,6 +16,7 @@ type LoginInput = {
   label: string;
   invalid: boolean;
   onInput: (event: Event) => void;
+  value?: string; // Add value prop
 };
 
 const LoginInput = (props: LoginInput) => {
@@ -52,6 +52,7 @@ const LoginInput = (props: LoginInput) => {
         type={type()}
         placeholder={props.placeholder}
         name={props.name}
+        value={props.value ?? ""} // Use the value prop
         onInput={(e) => props.onInput(e)}
         required
       />
@@ -83,6 +84,7 @@ function Login() {
   let form: HTMLFormElement | undefined;
   const [emailError, setEmailError] = createSignal("");
   const [passwordError, setPasswordError] = createSignal("");
+  const [loginEmail, setLoginEmail] = createSignal(""); // Add state for login email
 
   const [error, setError] = createSignal("");
   const [loggingIn, setLoggingIn] = createSignal(false);
@@ -168,6 +170,7 @@ function Login() {
     const target = event.target as HTMLInputElement;
     if (target.name === "email") {
       setEmailError("");
+      setLoginEmail(target.value); // Update login email state
     }
     if (target.name === "password") {
       setPasswordError("");
@@ -182,17 +185,19 @@ function Login() {
   const [resettingPassword, setResettingPassword] = createSignal(false);
   const handleReset = async () => {
     setResettingPassword(true);
-    setResetError(""); setResetSuccess(null);
+    setResetError("");
+    setResetSuccess(null);
     const parsed = emailSchema.safeParse(resetEmail());
-    if (!parsed.success) { 
-      setResetError(parsed.error.message); 
+    if (!parsed.success) {
+      setResetError(parsed.error.message);
       setResettingPassword(false);
-      return; 
+      return;
     }
     try {
       const result = await user?.resetPassword(parsed.data);
       if (result) {
-        if (result.success) setResetSuccess(result.messages[0] || "Password reset email sent.");
+        if (result.success)
+          setResetSuccess(result.messages[0] || "Password reset email sent.");
         else setResetError(result.messages[0] || "Reset failed.");
       } else {
         setResetError("Reset request failed.");
@@ -225,7 +230,8 @@ function Login() {
         <div class="flex flex-col gap-4">
           <h2 class="text-xl font-bold text-gray-800">Forgot Password?</h2>
           <p class="text-sm text-gray-600">
-            Enter your email address and we'll send you instructions to reset your password.
+            Enter your email address and we'll send you instructions to reset
+            your password.
           </p>
           <LoginInput
             autoComplete="email"
@@ -234,9 +240,21 @@ function Login() {
             label="Email"
             placeholder="example@gmail.com"
             invalid={Boolean(resetError())}
-            onInput={(e) => { setResetEmail((e.target as HTMLInputElement).value); setResetError(""); setResetSuccess(null); }}
+            value={resetEmail()} // Set value for reset email input
+            onInput={(e) => {
+              setResetEmail((e.target as HTMLInputElement).value);
+              setResetError("");
+              setResetSuccess(null);
+            }}
           />
-          <Show when={resetError()} fallback={<Show when={resetSuccess()}><p class="text-xs text-green-600">{resetSuccess()}</p></Show>}>
+          <Show
+            when={resetError()}
+            fallback={
+              <Show when={resetSuccess()}>
+                <p class="text-xs text-green-600">{resetSuccess()}</p>
+              </Show>
+            }
+          >
             <p class="text-xs text-red-500">{resetError()}</p>
           </Show>
           <button
@@ -244,12 +262,20 @@ function Login() {
             class="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
             onClick={handleReset}
             disabled={resettingPassword()}
-          >{resettingPassword() ? "Sending..." : "Send Reset Email"}</button>
+          >
+            {resettingPassword() ? "Sending..." : "Send Reset Email"}
+          </button>
           <button
             type="button"
             class="w-full rounded-md border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-700 transition-all hover:border-gray-400 hover:bg-gray-50 hover:text-gray-800"
-            onClick={() => { setForgotMode(false); setResetError(""); setResetSuccess(null); }}
-          >Cancel</button>
+            onClick={() => {
+              setForgotMode(false);
+              setResetError("");
+              setResetSuccess(null);
+            }}
+          >
+            Cancel
+          </button>
         </div>
       </Dialog>
 
@@ -312,7 +338,9 @@ function Login() {
                         const loginResult = await user?.login(email, password);
                         handleLoginResult(loginResult);
                       } else {
-                        setError("Missing credentials. Please try logging in again.");
+                        setError(
+                          "Missing credentials. Please try logging in again."
+                        );
                       }
                     } else {
                       setError("Failed to accept agreement. Please try again.");
@@ -347,6 +375,7 @@ function Login() {
           label="Email"
           invalid={Boolean(emailError())}
           onInput={onInput}
+          value={loginEmail()} // Set value for main email input
         />
         <div>
           <LoginInput
@@ -357,7 +386,16 @@ function Login() {
             invalid={Boolean(passwordError())}
             onInput={onInput}
           />
-          <button type="button" class="text-sm text-blue-500 hover:underline" onClick={() => setForgotMode(true)}>Forgot Password?</button>
+          <button
+            type="button"
+            class="text-sm text-blue-500 hover:underline"
+            onClick={() => {
+              setResetEmail(loginEmail()); // Pre-fill reset email
+              setForgotMode(true);
+            }}
+          >
+            Forgot Password?
+          </button>
         </div>
         <Show when={error} fallback={<div class="h-8" />}>
           <p class="h-8 text-red-500">{error()}</p>
@@ -370,12 +408,25 @@ function Login() {
         </button>
         <p class="text-base text-gray-600 md:text-base">
           Don't have a Cacophony Account?
-          <button class="ml-1 text-blue-500" onClick={openRegisterPage}>
+          <button
+            type="button"
+            class="ml-1 text-blue-500"
+            onClick={openRegisterPage}
+          >
             Register
           </button>
         </p>
       </Show>
-      <button class="text-blue-500" onClick={(e) => { e.preventDefault(); user?.skip(); }}>Skip Login</button>
+      <button
+        type="button"
+        class="text-blue-500"
+        onClick={(e) => {
+          e.preventDefault();
+          user?.skip();
+        }}
+      >
+        Skip Login
+      </button>
     </form>
   );
 }

@@ -7,8 +7,8 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   backgroundColor: "#f9fafb",
   server: {
-    hostname: "cacophony.org.nz",
-    androidScheme: "http",
+    hostname: "sidekick.cacophony.org.nz",
+    androidScheme: "https",
   },
   android: {
     path: "sidekick",
