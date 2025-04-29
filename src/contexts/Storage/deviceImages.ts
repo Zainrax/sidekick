@@ -320,9 +320,23 @@ export function useDeviceImagesStorage() {
         } else if (op.serverStatus === "pending-upload") {
           const photo = op;
           const { filePath, deviceId, isProd } = photo;
-          const fileContents = await Filesystem.readFile({
-            path: filePath, // Use local file path instead of URL
-          });
+          let fileContents;
+          try {
+            fileContents = await Filesystem.readFile({
+              path: filePath, // Use local file path instead of URL
+            });
+          } catch (e: any) {
+            if (e.message === "File does not exist.") {
+              log.logError({
+                message: `File missing for pending upload, deleting record: ${filePath}`,
+                error: e,
+              });
+              await deleteDeviceReferenceImage(db)(deviceId, isProd, filePath);
+              continue; // Skip to the next operation
+            }
+            throw e; // Re-throw other errors
+          }
+
 
           if (photo.lat && photo.lng) {
             const updateData = {
@@ -648,9 +662,22 @@ export function useDeviceImagesStorage() {
           if (photo.serverStatus === "pending-deletion") {
             await deleteDevicePhoto(photo, false);
           } else if (photo.serverStatus === "pending-upload") {
-            const fileContents = await Filesystem.readFile({
-              path: filePath, // Use local file path instead of URL
-            });
+            let fileContents;
+            try {
+              fileContents = await Filesystem.readFile({
+                path: filePath, // Use local file path instead of URL
+              });
+            } catch (e: any) {
+              if (e.message === "File does not exist.") {
+                log.logError({
+                  message: `File missing for pending sync, deleting record: ${filePath}`,
+                  error: e,
+                });
+                await deleteDeviceReferenceImage(db)(deviceId, isProd, filePath);
+                continue; // Skip to the next photo
+              }
+              throw e; // Re-throw other errors
+            }
 
             if (photo.lat && photo.lng) {
               const updateData = {
