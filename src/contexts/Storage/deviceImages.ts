@@ -88,7 +88,7 @@ export function useDeviceImagesStorage() {
       // If no user or we're connected to the device AP, store as pending
       if (!user || isDeviceApConnected) {
         await insertDeviceReferenceImage(db)({
-          deviceId: parseInt(deviceId),
+          deviceId: Number.parseInt(deviceId),
           filePath,
           timestamp: timestamp?.toISOString() ?? new Date().toISOString(),
           type,
@@ -154,7 +154,7 @@ export function useDeviceImagesStorage() {
 
       const currImages = deviceImages();
       const existingImage = currImages?.find(
-        (img) => img.deviceId === parseInt(deviceId) && img.isProd === isProd
+        (img) => img.deviceId === Number.parseInt(deviceId) && img.isProd === isProd
       );
       if (existingImage && res.status === 200) {
         await deleteDeviceReferenceImage(db)(
@@ -164,7 +164,7 @@ export function useDeviceImagesStorage() {
         );
       }
       const insertRes = await insertDeviceReferenceImage(db)({
-        deviceId: parseInt(deviceId),
+        deviceId: Number.parseInt(deviceId),
         filePath,
         timestamp: timestamp?.toISOString() ?? new Date().toISOString(),
         type,
@@ -267,7 +267,7 @@ export function useDeviceImagesStorage() {
 
     if (downloadRes.success) {
       await insertDeviceReferenceImage(db)({
-        deviceId: parseInt(deviceId),
+        deviceId: Number.parseInt(deviceId),
         filePath,
         timestamp: serverImage.timestamp,
         type: serverImage.type,
@@ -385,7 +385,7 @@ export function useDeviceImagesStorage() {
 
       const imgs = deviceImages();
       const localImage = imgs?.find(
-        (img) => img.deviceId === parseInt(deviceId) && img.isProd === isProd
+        (img) => img.deviceId === Number.parseInt(deviceId) && img.isProd === isProd
       );
 
       // Try to get the reference image
@@ -424,7 +424,7 @@ export function useDeviceImagesStorage() {
             console.log("Settings Res", settingsRes);
 
             await insertDeviceReferenceImage(db)({
-              deviceId: parseInt(deviceId),
+              deviceId: Number.parseInt(deviceId),
               filePath: file.uri,
               timestamp: date,
               type: "pov", // Default type - adjust as needed
@@ -496,7 +496,7 @@ export function useDeviceImagesStorage() {
         );
       });
       const image = images?.find(
-        (i) => i.deviceId === parseInt(device.id) && i.isProd === device.isProd
+        (i) => i.deviceId === Number.parseInt(device.id) && i.isProd === device.isProd
       );
       console.log("Get Device Photo", image);
       if (image) {
@@ -735,7 +735,7 @@ export function useDeviceImagesStorage() {
   ) => {
     try {
       const photos = deviceImages()?.filter(
-        (p) => p.deviceId === parseInt(deviceId) && p.isProd === isProd
+        (p) => p.deviceId === Number.parseInt(deviceId) && p.isProd === isProd
       );
       console.log("Delete Device Images", photos);
       if (!photos || photos.length === 0) return;
