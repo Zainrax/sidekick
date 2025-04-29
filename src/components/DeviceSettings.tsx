@@ -235,22 +235,44 @@ export function AudioSettingsTab(props: SettingProps) {
 		}, 500);
 	});
 
-	// long recording controls
-	const [longSeconds, setLongSeconds] = createSignal(60);
+	// --- Long Recording Controls ---
+	const [selectedDuration, setSelectedDuration] = createSignal<number | null>(
+		null,
+	); // Duration in seconds
+	const [customSeconds, setCustomSeconds] = createSignal(60);
 	const [longLoading, setLongLoading] = createSignal(false);
+	const [recordingDuration, setRecordingDuration] = createSignal<number | null>(
+		null,
+	); // Track which duration is actually recording
 	const [longResult, setLongResult] = createSignal<"failed" | "success" | null>(
 		null,
 	);
-	const startLongRecording = async () => {
+
+	const startLongRecording = async (duration: number) => {
+		if (longLoading()) return; // Prevent multiple starts
 		setLongLoading(true);
-		const ok = await context.takeLongAudioRecording(id(), longSeconds());
+		setRecordingDuration(duration);
+		setLongResult(null); // Clear previous result
+		const ok = await context.takeLongAudioRecording(id(), duration);
 		setLongResult(ok ? "success" : "failed");
 		setLongLoading(false);
-		setTimeout(() => setLongResult(null), 3000);
+		// Keep showing the result for a bit, then clear recording duration
+		setTimeout(() => {
+			setLongResult(null);
+			setRecordingDuration(null);
+		}, 3000);
 	};
 
+	const handleStartClick = () => {
+		const duration = selectedDuration() ?? customSeconds();
+		if (duration > 0) {
+			startLongRecording(duration);
+		}
+	};
+	// --- End Long Recording Controls ---
+
 	return (
-		<section class="space-y-2  px-2 py-4">
+		<section class="space-y-4 px-2 py-4">
 			<div class="flex items-center  text-gray-800">
 				<p class="pl-2">
 					Audio recordings are made 32 times a day for one minute at random
@@ -396,39 +418,99 @@ export function AudioSettingsTab(props: SettingProps) {
 				</div>
 			</div>
 
-			<div class="flex items-center space-x-2 rounded-lg border p-2">
-				<label for="long-recording-sec" class="min-w-24 text-xs font-light text-gray-700">Long Recording</label>
-				<input
-					id="long-recording-sec"
-					type="number"
-					class="w-20 rounded border px-2 py-1"
-					value={longSeconds()}
-					onInput={(e) =>
-						setLongSeconds(
-							Number.parseInt((e.currentTarget as HTMLInputElement).value) ||
-							0,
-						)
-					}
-				/>
-				<span class="flex-1 text-xs text-gray-500">seconds</span>
-				<button
-					type="button"
-					class="rounded bg-green-500 px-4 py-1 text-white disabled:bg-gray-300"
-					onClick={startLongRecording}
-					disabled={longLoading() || recording() || audioMode() === "Disabled"}
-				>
-					{longLoading() ? "Recording..." : "Start"}
-				</button>
-				<Show when={longResult()}>
-					<span
-						class={`ml-2 text-sm ${longResult() === "success" ? "text-green-600" : "text-red-600"
-							}`}
-					>
-						{longResult() === "success" ? "Done" : "Failed"}
-					</span>
-				</Show>
-			</div>
+			{/* Long Recording Section */}
+			<div class="space-y-2 rounded-lg border p-3 shadow-sm">
+				<label class="block text-sm font-medium text-gray-700">
+					Long Audio Recording
+				</label>
+				<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+					{/* Preset Buttons */}
+					<For each={[180, 300]}>
+						{(duration) => (
+							<button
+								type="button"
+								onClick={() => setSelectedDuration(duration)}
+								disabled={longLoading()}
+								classList={{
+									"bg-blue-500 text-white": selectedDuration() === duration,
+									"bg-gray-200 text-gray-700 hover:bg-gray-300":
+										selectedDuration() !== duration,
+									"opacity-50 cursor-not-allowed": longLoading(),
+								}}
+								class="rounded px-3 py-1.5 text-sm transition"
+							>
+								{duration / 60} min
+							</button>
+						)}
+					</For>
 
+					{/* Custom Input */}
+					<div class="col-span-2 flex items-center space-x-2 rounded border border-gray-300 px-2 py-1 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 sm:col-span-1">
+						<input
+							id="long-recording-sec"
+							type="number"
+							min="1"
+							class="w-full appearance-none bg-transparent p-0 text-sm outline-none [-moz-appearance:_textfield] [&::-inner-spin-button]:m-0 [&::-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none"
+							placeholder="Custom"
+							value={customSeconds()}
+							onInput={(e) => {
+								setSelectedDuration(null); // Deselect presets when typing custom
+								setCustomSeconds(
+									Number.parseInt((e.currentTarget as HTMLInputElement).value) ||
+										1, // Ensure positive number
+								);
+							}}
+							onFocus={() => setSelectedDuration(null)} // Deselect presets on focus
+							disabled={longLoading()}
+						/>
+						<span class="text-xs text-gray-500">sec</span>
+					</div>
+
+					{/* Start Button */}
+					<button
+						type="button"
+						class="col-span-2 flex items-center justify-center space-x-1 rounded bg-green-500 px-3 py-1.5 text-sm text-white transition hover:bg-green-600 disabled:bg-gray-400 sm:col-span-1"
+						onClick={handleStartClick}
+						disabled={
+							longLoading() ||
+							audioMode() === "Disabled" ||
+							audioStatus()?.status === "busy" ||
+							(!selectedDuration() && customSeconds() <= 0)
+						}
+					>
+						<Switch>
+							<Match when={longLoading()}>
+								<FaSolidSpinner class="animate-spin" size={16} />
+								<span>Recording...</span>
+							</Match>
+							<Match when={!longLoading()}>
+								<FaSolidFileAudio size={16} />
+								<span>Start</span>
+							</Match>
+						</Switch>
+					</button>
+				</div>
+				{/* Status/Result Display */}
+				<div class="mt-1 min-h-[20px] text-center text-sm">
+					<Show when={recordingDuration() && longLoading()}>
+						<span class="text-orange-600">
+							Recording for {recordingDuration()} seconds...
+						</span>
+					</Show>
+					<Show when={longResult() && !longLoading()}>
+						<span
+							class={`${longResult() === "success" ? "text-green-600" : "text-red-600"}`}
+						>
+							{longResult() === "success"
+								? `Recording (${recordingDuration()}s) finished.`
+								: `Recording (${recordingDuration()}s) failed.`}
+						</span>
+					</Show>
+				</div>
+			</div>
+			{/* End Long Recording Section */}
+
+			{/* Test Recording Button */}
 			<button
 				type="button"
 				classList={{
@@ -436,15 +518,16 @@ export function AudioSettingsTab(props: SettingProps) {
 					"bg-gray-300":
 						audioMode() === "Disabled" || audioStatus()?.status === "busy",
 				}}
-				class="flex w-full items-center justify-center space-x-2 rounded-lg py-3 text-white" // Removed bg-blue-500 from here as classList handles it
+				class="flex w-full items-center justify-center space-x-2 rounded-lg py-3 text-white"
 				onClick={() => createTestRecording()}
 				disabled={
+					longLoading() || // Disable if long recording is active
 					recording() ||
 					audioMode() === "Disabled" ||
 					audioStatus()?.status === "busy"
 				}
 			>
-				<Switch fallback={<FaSolidSpinner class="animate-spin" size={24} />}>
+				<Switch fallback={<FaSolidSpinner class="animate-spin" size={20} />}>
 					<Match when={audioMode() === "Disabled"}>
 						<p>Test Recording</p>
 						<FaSolidFileAudio size={24} />
