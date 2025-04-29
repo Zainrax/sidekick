@@ -1,5 +1,5 @@
-import { IconTypes } from "solid-icons";
-import { JSX, Show } from "solid-js";
+import type { IconTypes } from "solid-icons";
+import { type JSX, Show } from "solid-js";
 
 const ActionContainer = (props: {
   icon?: IconTypes;

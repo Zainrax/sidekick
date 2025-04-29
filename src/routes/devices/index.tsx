@@ -32,7 +32,7 @@ import BackgroundLogo from "~/components/BackgroundLogo";
 import { DeviceSettingsModal } from "~/components/DeviceSettings";
 import { useHeaderContext } from "~/components/Header";
 import SetupWizard from "~/components/SetupWizard";
-import { Device, useDevice } from "~/contexts/Device";
+import { type Device, useDevice } from "~/contexts/Device";
 import { useLogsContext } from "~/contexts/LogsContext";
 import { useStorage } from "~/contexts/Storage";
 import { useUserContext } from "~/contexts/User";
@@ -202,9 +202,8 @@ function DeviceDetails(props: DeviceDetailsProps) {
               }
             >
               <button
-                class={`${
-                  disabledDownload() ? "text-slate-300" : "text-blue-500"
-                } p-2`}
+                class={`${disabledDownload() ? "text-slate-300" : "text-blue-500"
+                  } p-2`}
                 disabled={disabledDownload()}
                 onClick={() => context.saveItems(props.id)}
               >
@@ -346,6 +345,7 @@ function compareOptionalDates(date1?: Date, date2?: Date): boolean {
 }
 function Devices() {
   const context = useDevice();
+  const userContext = useUserContext();
   const devices = createMemo(() => [...context.devices.values()], [], {
     equals: compareDeviceArrays,
   });
@@ -481,9 +481,8 @@ function Devices() {
               }
               setIsDialogOpen(false);
             } else {
-              const message = `${
-                context.devices.get(devicesToUpdate[0])?.name
-              } has a different location stored. Would you like to update it to your current location?`;
+              const message = `${context.devices.get(devicesToUpdate[0])?.name
+                } has a different location stored. Would you like to update it to your current location?`;
 
               setIsDialogOpen(true);
               const { value } = await Prompt.confirm({
@@ -542,6 +541,28 @@ function Devices() {
     });
   };
 
+  // DEV only: add a fake device for testing
+  function createFakeDevice() {
+    const id = `fake-${Math.random().toString(36).substr(2, 5)}`;
+    const device = {
+      id,
+      host: "fakeHost",
+      endpoint: id,
+      name: "Fake Device",
+      group: "new",
+      isConnected: true,
+      isProd: false,
+      locationSet: false,
+      url: "",
+      type: "tc2" as const,
+      hasAudioCapabilities: true,
+      timeFound: new Date(),
+    };
+    context.devices.set(id, device);
+    context.deviceRecordings.set(id, []);
+    context.deviceEventKeys.set(id, []);
+  }
+
   const [promptedPermission, setPromptedPermission] = createSignal(false);
   const [permission, { refetch }] = createResource(async () => {
     try {
@@ -578,10 +599,6 @@ function Devices() {
       refetch();
     });
   });
-  createEffect(() => {
-    //log devices
-    console.log("DEVICES", devices());
-  });
 
   return (
     <>
@@ -615,6 +632,17 @@ function Devices() {
               </div>
               <p>Find Device</p>
             </button>
+            <Show when={userContext.dev()}>
+              <button
+                class="ml-2 flex rounded-md bg-white px-4 py-4"
+                onClick={createFakeDevice}
+              >
+                <div class="text-blue-500">
+                  <ImSearch size={28} />
+                </div>
+                <p>Test Device</p>
+              </button>
+            </Show>
           </div>
         </Portal>
         <Portal>

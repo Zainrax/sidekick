@@ -3,7 +3,7 @@ import { createContextProvider } from "@solid-primitives/context";
 import { ReactiveMap } from "@solid-primitives/map";
 import { A, useLocation, useNavigate } from "@solidjs/router";
 import { RiArrowsArrowLeftSLine } from "solid-icons/ri";
-import { JSXElement, createEffect, createSignal, onMount } from "solid-js";
+import { type JSXElement, createEffect, createSignal, onMount } from "solid-js";
 
 type Header = string;
 type BackLink = string;

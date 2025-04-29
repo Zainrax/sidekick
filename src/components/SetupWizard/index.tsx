@@ -5,7 +5,7 @@ import {
   Match,
   createSignal,
   Show,
-  JSX,
+  type JSX,
   For,
   createEffect,
   onMount,
@@ -16,7 +16,7 @@ import {
 } from "solid-js";
 import { Motion, Presence } from "solid-motionone";
 import HelpSection from "./HelpSection";
-import { Device, useDevice } from "~/contexts/Device";
+import { type Device, useDevice } from "~/contexts/Device";
 import {
   RiArrowsArrowLeftSLine,
   RiArrowsArrowRightSLine,
@@ -168,7 +168,7 @@ const createLightAnimation = (sequence: LightSequence) => {
     transition: {
       duration,
       ease: "ease-in-out",
-      repeat: Infinity,
+      repeat: Number.POSITIVE_INFINITY,
       opacity: {
         offset: durations.map((val) => {
           const value = val / duration;

@@ -10,7 +10,7 @@ import { BiRegularLogOut, BiRegularTestTube } from "solid-icons/bi";
 import { CacophonyPlugin } from "~/contexts/CacophonyApi";
 import {
   LocalNotifications,
-  PermissionStatus,
+  type PermissionStatus,
 } from "@capacitor/local-notifications";
 import { Capacitor } from "@capacitor/core";
 
@@ -32,9 +32,8 @@ function Settings() {
     if (existingUser) {
       const { value } = await Dialog.confirm({
         title: "Confirm",
-        message: `Are you sure you want to ${
-          userContext.data() ? "logout" : "return to login screen"
-        }?`,
+        message: `Are you sure you want to ${userContext.data() ? "logout" : "return to login screen"
+          }?`,
       });
       if (value) {
         userContext.logout();
@@ -109,20 +108,17 @@ function Settings() {
           </ActionContainer>
         </div>
 
-        {/* Show a banner if the user is pointing to the test server */}
         <Show when={!userContext.isProd()}>
           <ActionContainer icon={ImCog}>
             <h1>Test Server Activated</h1>
           </ActionContainer>
         </Show>
 
-        {/* Developer Section */}
         <Show when={userContext.dev()}>
           <ActionContainer icon={ImCog}>
             <h1>Dev Mode Activated</h1>
           </ActionContainer>
 
-          {/* Dev Server Management */}
           <ActionContainer icon={ImCog} header="Dev Server">
             <div class="space-y-2">
               <label for="customUrl" class="text-sm font-semibold">
@@ -153,7 +149,6 @@ function Settings() {
             </div>
           </ActionContainer>
 
-          {/* Test Button */}
           <ActionContainer icon={BiRegularTestTube} header="Test Notification">
             <button
               class="flex w-full justify-center rounded-md bg-green-500 px-4 py-2 text-white hover:bg-green-600"

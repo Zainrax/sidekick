@@ -209,9 +209,23 @@ export function AudioSettingsTab(props: SettingProps) {
 		id,
 		async (id) => context.getAudioRecordingSettings(id),
 	);
-	const [seedValue, setSeedValue] = createSignal<string>(
+	createEffect(() => {
+		console.log("Audio Settings: ", audioSettings());
+	});
+	const [seedValue, setSeed] = createSignal<string>(
 		audioSettings()?.seed ?? "",
 	);
+	// add debounce effect to auto-save after typing stops
+	let seedSaveTimeout: ReturnType<typeof setTimeout>;
+	const setSeedValue = (value: string) => {
+		setSeed(value);
+		clearTimeout(seedSaveTimeout);
+		seedSaveTimeout = setTimeout(() => {
+			if (seedValue !== audioSettings()?.seed) {
+				saveSeed();
+			}
+		}, 1000);
+	};
 	const [seedSaving, setSeedSaving] = createSignal(false);
 	const saveSeed = async () => {
 		setSeedSaving(true);
@@ -224,47 +238,49 @@ export function AudioSettingsTab(props: SettingProps) {
 		setSeedSaving(false);
 	};
 
-	// add debounce effect to auto-save after typing stops
-	let seedSaveTimeout: ReturnType<typeof setTimeout>;
-	createEffect(on(seedValue, (seedValue) => {
-		debugger;
-		clearTimeout(seedSaveTimeout);
-		seedSaveTimeout = setTimeout(() => {
-			if (seedValue !== audioSettings()?.seed) {
-				saveSeed();
-			}
-		}, 500);
-	}));
-
 	// --- Long Recording Controls ---
 	const [selectedDuration, setSelectedDuration] = createSignal<number | null>(
 		60,
 	); // Duration in seconds
 	const [customSeconds, setCustomSeconds] = createSignal(60);
-	const [initiatingLongRecording, setInitiatingLongRecording] = createSignal(false); // Tracks the API call itself
-	const [lastLongRecordingDuration, setLastLongRecordingDuration] = createSignal<number | null>(null); // Stores the duration for result display
-	const [longResult, setLongResult] = createSignal<"failed" | "success" | null>(null);
+	const [initiatingLongRecording, setInitiatingLongRecording] =
+		createSignal(false); // Tracks the API call itself
+	const [lastLongRecordingDuration, setLastLongRecordingDuration] =
+		createSignal<number | null>(null); // Stores the duration for result display
+	const [longResult, setLongResult] = createSignal<"failed" | "success" | null>(
+		null,
+	);
 
 	// Effect to show success/failure message when recording finishes
-	createEffect(on(audioStatus, (currentStatus, prevStatus) => {
-		// Check if the status transitioned *from* long_recording *to* ready
-		if (prevStatus?.status === "long_recording" && currentStatus?.status === "ready") {
-			// Assume success if the API call didn't explicitly fail
-			if (longResult() !== "failed") {
-				setLongResult("success");
+	createEffect(
+		on(audioStatus, (currentStatus, prevStatus) => {
+			// Check if the status transitioned *from* long_recording *to* ready
+			if (
+				prevStatus?.status === "long_recording" &&
+				currentStatus?.status === "ready"
+			) {
+				// Assume success if the API call didn't explicitly fail
+				if (longResult() !== "failed") {
+					setLongResult("success");
+				}
+				// Show result message for a few seconds
+				setTimeout(() => {
+					setLongResult(null);
+					setLastLongRecordingDuration(null);
+				}, 5000);
 			}
-			// Show result message for a few seconds
-			setTimeout(() => {
-				setLongResult(null);
-				setLastLongRecordingDuration(null);
-			}, 5000);
-		}
-	}));
-
+		}),
+	);
 
 	const startLongRecording = async (duration: number) => {
 		// Disable if already recording (any type) or initiating
-		if (initiatingLongRecording() || audioStatus()?.status === "recording" || audioStatus()?.status === "long_recording" || audioStatus()?.status === "busy") return;
+		if (
+			initiatingLongRecording() ||
+			audioStatus()?.status === "recording" ||
+			audioStatus()?.status === "long_recording" ||
+			audioStatus()?.status === "busy"
+		)
+			return;
 
 		setInitiatingLongRecording(true);
 		setLastLongRecordingDuration(duration); // Store duration for potential result message
@@ -291,9 +307,9 @@ export function AudioSettingsTab(props: SettingProps) {
 		const duration = selectedDuration() ?? customSeconds();
 		if (duration > 0) {
 			startLongRecording(duration);
+			monitorAudioStatus();
 		}
 	};
-	// --- End Long Recording Controls ---
 
 	return (
 		<section class="space-y-4 px-2 py-4">
@@ -425,29 +441,32 @@ export function AudioSettingsTab(props: SettingProps) {
 				</div>
 
 			</Show> */}
-			<div>
-
+			{/*<div>
 				<div class="flex items-center rounded-lg border">
-					<label for="audio-seed" class="text-xs text-center font-light text-gray-700 min-w-[96px]">Audio Seed</label>
+					<label
+						for="audio-seed"
+						class="text-xs text-center font-light text-gray-700 min-w-[96px]"
+					>
+						Audio Seed
+					</label>
 					<input
 						id="audio-seed"
-						type="text"
+						type="number"
 						class="flex-1 rounded-r border-l px-2 py-1"
 						value={seedValue()}
-						onInput={(e) => setSeedValue((e.currentTarget as HTMLInputElement).value)}
+						onInput={(e) =>
+							setSeedValue((e.currentTarget as HTMLInputElement).value)
+						}
 					/>
 					<Show when={seedSaving()}>
 						<FaSolidSpinner class="animate-spin text-blue-500" size={16} />
 					</Show>
 				</div>
 			</div>
-
-			{/* Long Recording Section - Conditionally Rendered */}
+*/}
 			<Show when={context.devices.get(id())?.hasLongRecordingSupport}>
 				<div class="space-y-2 rounded-lg border p-3 pb-0 shadow-sm">
-					<label class="block text-sm text-gray-600">
-						Audio Recording
-					</label>
+					<label class="block text-sm text-gray-600">Audio Recording</label>
 					{/* Updated Grid Layout */}
 					<div class="grid grid-cols-4 gap-2">
 						{/* Preset Buttons */}
@@ -456,12 +475,19 @@ export function AudioSettingsTab(props: SettingProps) {
 								<button
 									type="button"
 									onClick={() => setSelectedDuration(duration)}
-									disabled={initiatingLongRecording() || audioStatus()?.status === "long_recording" || audioStatus()?.status === "busy"}
+									disabled={
+										initiatingLongRecording() ||
+										audioStatus()?.status === "long_recording" ||
+										audioStatus()?.status === "busy"
+									}
 									classList={{
 										"bg-blue-500 text-white": selectedDuration() === duration,
 										"bg-gray-200 text-gray-700 hover:bg-gray-300":
 											selectedDuration() !== duration,
-										"opacity-50 cursor-not-allowed": initiatingLongRecording() || audioStatus()?.status === "long_recording" || audioStatus()?.status === "busy",
+										"opacity-50 cursor-not-allowed":
+											initiatingLongRecording() ||
+											audioStatus()?.status === "long_recording" ||
+											audioStatus()?.status === "busy",
 									}}
 									class="col-span-1 rounded px-3 py-1.5 text-sm transition" // Ensure col-span-1
 								>
@@ -486,14 +512,18 @@ export function AudioSettingsTab(props: SettingProps) {
 						>
 							<Switch>
 								<Match when={initiatingLongRecording()}>
-									<FaSolidSpinner class="animate-spin" size={16} />
 									<span>Starting...</span>
 								</Match>
 								<Match when={audioStatus()?.status === "long_recording"}>
-									<FaSolidSpinner class="animate-spin" size={16} />
-									<span>Recording...</span>
+									<FaSolidFileAudio size={16} />
+									<span>Start</span>
 								</Match>
-								<Match when={!initiatingLongRecording() && audioStatus()?.status !== "long_recording"}>
+								<Match
+									when={
+										!initiatingLongRecording() &&
+										audioStatus()?.status !== "long_recording"
+									}
+								>
 									<FaSolidFileAudio size={16} />
 									<span>Start</span>
 								</Match>
@@ -501,13 +531,12 @@ export function AudioSettingsTab(props: SettingProps) {
 						</button>
 					</div>
 					{/* Status/Result Display */}
-					<div class="min-h-[20px] text-center text-sm"> {/* Added min-height */}
-						<Show when={audioStatus()?.status === "long_recording"}>
-							<span class="text-orange-600">
-								Long recording in progress...
-							</span>
-						</Show>
-						<Show when={longResult() && audioStatus()?.status !== "long_recording"}>
+					<div class=" text-center text-sm">
+						{" "}
+						{/* Added min-height */}
+						<Show
+							when={longResult() && audioStatus()?.status !== "long_recording"}
+						>
 							<span
 								class={`${longResult() === "success" ? "text-green-600" : "text-red-600"}`}
 							>
@@ -524,12 +553,7 @@ export function AudioSettingsTab(props: SettingProps) {
 			{/* Test Recording Button */}
 			<button
 				type="button"
-				classList={{
-					"bg-blue-500": audioMode() !== "Disabled",
-					"bg-gray-300":
-						audioMode() === "Disabled" || audioStatus()?.status === "busy",
-				}}
-				class="flex w-full items-center justify-center space-x-2 rounded-lg py-3 text-white"
+				class="flex w-full items-center justify-center space-x-2 rounded-lg py-3 text-white disabled:bg-gray-300 bg-blue-500"
 				onClick={() => createTestRecording()}
 				disabled={
 					initiatingLongRecording() || // Disable if initiating long recording
@@ -2250,9 +2274,7 @@ export function WifiSettingsTab(props: SettingProps) {
 													<Show when={val.SSID === currentWifi()?.SSID}>
 														<Switch>
 															<Match
-																when={
-																	wifiConnectedToInternet() === "connected"
-																}
+																when={wifiConnectedToInternet() === "connected"}
 															>
 																<p>Internet Connection</p>
 															</Match>
@@ -2846,8 +2868,8 @@ export function GeneralSettingsTab(props: SettingProps) {
 			if (res) {
 				setLowPowerMode(
 					res.values.thermalRecorder?.UseLowPowerMode ??
-					res.defaults["thermal-recorder"]?.UseLowPowerMode ??
-					null,
+						res.defaults["thermal-recorder"]?.UseLowPowerMode ??
+						null,
 				);
 			}
 		} catch (error) {
@@ -2957,8 +2979,9 @@ export function GeneralSettingsTab(props: SettingProps) {
 							<div
 								class="transition-width m-1 h-4 rounded-full bg-blue-500 duration-500"
 								style={{
-									width: `${context.getDeviceUpdating(id())?.UpdateProgressPercentage
-										}%`,
+									width: `${
+										context.getDeviceUpdating(id())?.UpdateProgressPercentage
+									}%`,
 								}}
 							/>
 							<span class="absolute left-1/2 top-1 -translate-x-1/2 transform text-xs text-white">

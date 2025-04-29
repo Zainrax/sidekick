@@ -1,5 +1,5 @@
 //import { Motion, Presence } from "@motionone/solid";
-import { JSXElement, Show } from "solid-js";
+import { type JSXElement, Show } from "solid-js";
 
 interface CircleButtonProps {
   text: string;

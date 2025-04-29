@@ -2,10 +2,10 @@ import {
   RiArrowsArrowLeftSLine,
   RiArrowsArrowRightSLine,
 } from "solid-icons/ri";
-import { createSignal, For, JSX, Match, Show, Switch } from "solid-js";
+import { createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import {
-  ColorType,
-  DeviceType,
+  type ColorType,
+  type DeviceType,
   DeviceTypeToggle,
   LightSequence,
   StartupProcess,

@@ -1,7 +1,7 @@
 import {
   createRecordingSchema,
-  Recording,
-  UploadedRecording,
+  type Recording,
+  type UploadedRecording,
 } from "~/database/Entities/Recording";
 import {
   getRecordings,
@@ -12,7 +12,7 @@ import {
 } from "~/database/Entities/Recording";
 import { db } from ".";
 import { CacophonyPlugin } from "../CacophonyApi";
-import { DeviceDetails, DevicePlugin } from "../Device";
+import { type DeviceDetails, DevicePlugin } from "../Device";
 import { createMemo, createSignal, onMount } from "solid-js";
 import { useUserContext } from "../User";
 import { useLogsContext } from "../LogsContext";

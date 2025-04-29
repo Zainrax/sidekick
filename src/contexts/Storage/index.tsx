@@ -11,7 +11,7 @@ import { useLogsContext } from "../LogsContext";
 import { useDeviceImagesStorage } from "./deviceImages";
 import {
   LocalNotifications,
-  PermissionStatus,
+  type PermissionStatus,
 } from "@capacitor/local-notifications";
 import { Capacitor } from "@capacitor/core";
 

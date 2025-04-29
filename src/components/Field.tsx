@@ -3,9 +3,9 @@ import { AiFillEdit } from "solid-icons/ai";
 import { BiSolidGroup } from "solid-icons/bi";
 import { ImCross } from "solid-icons/im";
 import {
-  Component,
+  type Component,
   For,
-  JSX,
+  type JSX,
   Match,
   Show,
   Switch,

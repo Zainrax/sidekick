@@ -1,6 +1,6 @@
 import { registerPlugin } from "@capacitor/core";
 import { z } from "zod";
-import { Result } from ".";
+import type { Result } from ".";
 
 export type AuthToken = {
   token: string;

@@ -4,7 +4,7 @@ import { createContextProvider } from "@solid-primitives/context";
 import {
   createEffect,
   createSignal,
-  JSX,
+  type JSX,
   onCleanup,
   on,
   onMount,
@@ -12,10 +12,10 @@ import {
 } from "solid-js";
 import * as Sentry from "@sentry/capacitor";
 import * as SentrySolid from "@sentry/solid";
-import { User, useUserContext } from "./User"; // Import User context
+import { type User, useUserContext } from "./User"; // Import User context
 import { useLocation } from "@solidjs/router"; // Import router location
 import { Preferences } from "@capacitor/preferences";
-import { Primitive } from "zod";
+import type { Primitive } from "zod";
 import { browserTracingIntegration } from "@sentry/capacitor";
 
 export enum TracingLevel {

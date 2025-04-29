@@ -25,10 +25,10 @@ function DeviceSettings() {
   const location = useLocation();
   const childPath = () => {
     const path = location.pathname.split("/");
-    const id = path.filter((p) => !isNaN(parseInt(p)) && p.length > 0)[0];
+    const id = path.filter((p) => !isNaN(Number.parseInt(p)) && p.length > 0)[0];
 
     const childPath = path.slice(path.indexOf(id) + 1)[0];
-    return [parseInt(id), childPath] as const;
+    return [Number.parseInt(id), childPath] as const;
   };
   const url = createMemo(
     () =>

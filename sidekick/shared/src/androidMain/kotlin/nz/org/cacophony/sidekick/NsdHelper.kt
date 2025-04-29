@@ -46,7 +46,9 @@ class NsdHelper(private val context: Context) {
         var resolved: Boolean = false,
         var reachable: Boolean = false,
         var resolveAttempts: Int = 0,
-        var lastSeen: Long = System.currentTimeMillis()
+        var lastSeen: Long = System.currentTimeMillis(),
+        var isCurrentlyResolving: Boolean = false, // Track if service is currently being resolved
+        var pendingRetryRunnable: Runnable? = null // Track pending retries
     )
 
     // Event callbacks
@@ -69,7 +71,6 @@ class NsdHelper(private val context: Context) {
     private var discoveryListener: NsdManager.DiscoveryListener? = null
     private val pendingQueue = ConcurrentLinkedQueue<NsdServiceInfo>()
     private val knownServices = ConcurrentHashMap<String, ServiceState>()
-    private val isResolving = AtomicBoolean(false)
     private val discoveryRetryCount = AtomicInteger(0)
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -97,12 +98,22 @@ class NsdHelper(private val context: Context) {
 
         updateState(DiscoveryState.STARTING)
 
-        // Clear any existing resources to prevent leaks
-        cleanupDiscovery(false)
+        // Always stop previous listener properly to prevent state inconsistencies
+        cleanupDiscovery(true)
 
-        // Start reachability checker for ongoing health monitoring of discovered services
+        // Clear all pending retries to avoid stale operations
+        cancelAllPendingRetries()
+        
+        // Reset service states but preserve known services
+        knownServices.values.forEach { state ->
+            state.isCurrentlyResolving = false
+            state.pendingRetryRunnable = null
+        }
+
+        // Start reachability checker for ongoing health monitoring
         startReachabilityChecker()
 
+        // Create new discovery listener
         discoveryListener = createDiscoveryListener()
 
         try {
@@ -138,11 +149,11 @@ class NsdHelper(private val context: Context) {
         cleanupDiscovery(true)
         stopReachabilityChecker()
         cancelDiscoveryRestart()
+        cancelAllPendingRetries() // Cancel all pending retries when stopping discovery
 
         // Reset state variables
         pendingQueue.clear()
         knownServices.clear()
-        isResolving.set(false)
         discoveryRetryCount.set(0)
 
         updateState(DiscoveryState.INACTIVE)
@@ -163,19 +174,42 @@ class NsdHelper(private val context: Context) {
             override fun onServiceFound(service: NsdServiceInfo) {
                 Log.d(TAG, "Service found: ${service.serviceName}")
                 if (service.serviceType.contains(SERVICE_TYPE)) {
-                    // Add to known services map
-                    knownServices.putIfAbsent(service.serviceName, ServiceState(service))
-                    // Queue for resolution
-                    pendingQueue.offer(service)
-                    tryResolveNext()
+                    // Add to known services or update existing entry
+                    knownServices.computeIfAbsent(service.serviceName) {
+                        ServiceState(service)
+                    }
+                    
+                    // Queue for resolution only if not already resolving or resolved
+                    knownServices[service.serviceName]?.let { state ->
+                        if (!state.isCurrentlyResolving && !state.resolved) {
+                            // Add to pending queue only if necessary, prevent duplicates
+                            if (!pendingQueue.any { it.serviceName == service.serviceName }) {
+                                pendingQueue.offer(service)
+                                tryResolveNext() // Trigger resolve check
+                            } else {
+                                Log.d(TAG, "Service ${service.serviceName} already in pending queue.")
+                            }
+                        } else {
+                            Log.d(TAG, "Service ${service.serviceName} is already resolving or resolved.")
+                        }
+                    }
                 }
             }
 
             override fun onServiceLost(service: NsdServiceInfo) {
                 Log.d(TAG, "Service lost: ${service.serviceName}")
-                // Remove from queue and known services
+                
+                // Remove from queue
                 removeFromQueue(service.serviceName)
-                knownServices.remove(service.serviceName)?.let {
+                
+                // Remove from known services and cancel any pending retry
+                knownServices.remove(service.serviceName)?.let { state ->
+                    // Cancel pending retry if service is lost while resolve was ongoing
+                    state.pendingRetryRunnable?.let { runnable ->
+                        Log.d(TAG, "Cancelling pending resolve retry for lost service: ${service.serviceName}")
+                        mainHandler.removeCallbacks(runnable)
+                    }
+                    // Notify listener
                     onServiceLost?.invoke(service)
                 }
             }
@@ -216,91 +250,162 @@ class NsdHelper(private val context: Context) {
 
     /**
      * Try to resolve the next service in the queue
-     * Uses a lock to ensure only one resolve happens at a time
      */
     private fun tryResolveNext() {
-        if (isResolving.compareAndSet(false, true)) {
-            val service = pendingQueue.poll()
-            if (service != null) {
-                val serviceState = knownServices[service.serviceName]
-                if (serviceState != null) {
-                    resolveService(service, serviceState.resolveAttempts)
-                } else {
-                    // Service was removed from known services, skip it
-                    isResolving.set(false)
-                    tryResolveNext()
-                }
-            } else {
-                isResolving.set(false)
-            }
+        val service = pendingQueue.poll() ?: return // Get next service or exit if queue is empty
+        
+        val serviceState = knownServices[service.serviceName]
+        if (serviceState == null) {
+            // Service was removed from knownServices between queuing and processing
+            Log.w(TAG, "Service ${service.serviceName} not found in knownServices, skipping resolve.")
+            // Try the next one immediately
+            mainHandler.post { tryResolveNext() }
+            return
         }
+        
+        // Check if already resolving (double check) or resolved
+        if (serviceState.isCurrentlyResolving || serviceState.resolved) {
+            Log.d(TAG, "Skipping resolve for ${service.serviceName}, already resolving/resolved.")
+            // Try the next one in the queue immediately
+            mainHandler.post { tryResolveNext() }
+            return
+        }
+        
+        // Mark as resolving *before* starting
+        serviceState.isCurrentlyResolving = true
+        resolveService(service, 0) // Start with attempt 0
     }
 
     /**
      * Resolve a service with exponential backoff for retries
      */
     private fun resolveService(service: NsdServiceInfo, attempt: Int) {
+        val serviceName = service.serviceName
+        val serviceState = knownServices[serviceName]
+        
+        // Check if service still exists and is marked as resolving
+        if (serviceState == null || !serviceState.isCurrentlyResolving) {
+            Log.w(TAG, "Resolve called for ${serviceName}, but state is invalid or not resolving. Aborting.")
+            // Try the next service in queue
+            mainHandler.post { tryResolveNext() }
+            return
+        }
+        
         if (attempt >= MAX_RESOLVE_RETRIES) {
-            Log.w(TAG, "Max resolve retries reached for ${service.serviceName}")
-            knownServices[service.serviceName]?.let { state ->
-                state.resolveAttempts = 0  // Reset for future attempts
-                onServiceResolveFailed?.invoke(
-                    service.serviceName,
-                    -1,
-                    "Max retry attempts ($MAX_RESOLVE_RETRIES) exceeded"
-                )
-            }
-            isResolving.set(false)
-            tryResolveNext()
+            Log.w(TAG, "Max resolve retries reached for $serviceName")
+            onServiceResolveFailed?.invoke(
+                serviceName,
+                NsdManager.FAILURE_MAX_LIMIT,
+                "Max retry attempts ($MAX_RESOLVE_RETRIES) exceeded"
+            )
+            // Reset state and allow next resolve
+            serviceState.resolveAttempts = 0
+            serviceState.isCurrentlyResolving = false
+            serviceState.pendingRetryRunnable = null // Clear any pending runnable
+            mainHandler.post { tryResolveNext() }
             return
         }
 
         // Save current attempt count
-        knownServices[service.serviceName]?.resolveAttempts = attempt + 1
+        serviceState.resolveAttempts = attempt + 1
 
         val resolveListener = object : NsdManager.ResolveListener {
             override fun onServiceResolved(resolvedService: NsdServiceInfo) {
                 Log.d(TAG, "Service resolved: ${resolvedService.serviceName}")
-                // Update the known service with resolved info
-                knownServices[resolvedService.serviceName]?.let { state ->
-                    state.resolved = true
-                    state.lastSeen = System.currentTimeMillis()
-                }
 
-                // Verify service is actually reachable
-                checkIfStillReachable(resolvedService)
+                knownServices[resolvedService.serviceName]?.let { state ->
+                    // Resolution succeeded
+                    state.lastSeen = System.currentTimeMillis()
+                    state.pendingRetryRunnable = null // Clear retry runnable
+                    
+                    // Don't mark as fully resolved yet - that happens after reachability check
+                    // Verify service is actually reachable
+                    checkIfStillReachable(resolvedService)
+                } ?: run {
+                    // Service was removed during resolution somehow
+                    Log.w(TAG, "Resolved service ${resolvedService.serviceName} not found in knownServices")
+                    // Allow next resolve
+                    mainHandler.post { tryResolveNext() }
+                }
             }
 
             override fun onResolveFailed(failedService: NsdServiceInfo, errorCode: Int) {
                 Log.w(
                     TAG,
-                    "Resolve failed: ${failedService.serviceName}, code=$errorCode, attempt=${attempt + 1}"
+                    "Resolve failed: ${failedService.serviceName}, code=$errorCode (FAILURE_ALREADY_ACTIVE=3), attempt=${attempt + 1}"
                 )
 
-                // Calculate backoff delay with exponential increase
-                val delayMs = calculateBackoffDelay(attempt)
+                knownServices[failedService.serviceName]?.let { state ->
+                    // Ensure we are still tracking this service
+                    if (!state.isCurrentlyResolving) {
+                        Log.w(TAG, "Resolve failed for ${failedService.serviceName}, but no longer marked as resolving. Ignoring.")
+                        mainHandler.post { tryResolveNext() }
+                        return@let
+                    }
 
-                onServiceResolveFailed?.invoke(
-                    failedService.serviceName,
-                    errorCode,
-                    "Resolve failed (attempt ${attempt + 1}/$MAX_RESOLVE_RETRIES)"
-                )
+                    val delayMs = calculateBackoffDelay(attempt)
 
-                // Schedule retry with increasing delay
-                mainHandler.postDelayed({
-                    resolveService(failedService, attempt + 1)
-                }, delayMs)
+                    // Notify listener about the specific error
+                    onServiceResolveFailed?.invoke(
+                        failedService.serviceName,
+                        errorCode,
+                        "Resolve failed (attempt ${attempt + 1}/$MAX_RESOLVE_RETRIES)"
+                    )
+
+                    // Schedule retry with proper tracking
+                    val retryRunnable = Runnable {
+                        // Check state again before retrying
+                        knownServices[failedService.serviceName]?.let { currentState ->
+                            if (currentState.isCurrentlyResolving) {
+                                resolveService(failedService, attempt + 1)
+                            } else {
+                                Log.w(TAG, "Retry scheduled for ${failedService.serviceName}, but no longer resolving.")
+                                mainHandler.post { tryResolveNext() }
+                            }
+                        } ?: run {
+                            Log.w(TAG, "Retry scheduled for ${failedService.serviceName}, but service removed.")
+                            mainHandler.post { tryResolveNext() }
+                        }
+                    }
+                    state.pendingRetryRunnable = retryRunnable
+                    mainHandler.postDelayed(retryRunnable, delayMs)
+                } ?: run {
+                    // Service disappeared between start and failure
+                    Log.w(TAG, "Resolve failed for ${failedService.serviceName} but service not found in knownServices.")
+                    mainHandler.post { tryResolveNext() }
+                }
             }
         }
 
+        Log.d(TAG, "Attempting to resolve ${service.serviceName} (attempt ${attempt + 1})")
         try {
             nsdManager.resolveService(service, resolveListener)
         } catch (e: Exception) {
-            Log.e(TAG, "Exception resolving service: ${e.message}")
-            val delayMs = calculateBackoffDelay(attempt)
-            mainHandler.postDelayed({
-                resolveService(service, attempt + 1)
-            }, delayMs)
+            // Handle exceptions during resolveService call
+            Log.e(TAG, "Exception calling nsdManager.resolveService for ${service.serviceName}: ${e.message}")
+            
+            knownServices[serviceName]?.let { state ->
+                // Schedule retry if appropriate
+                val delayMs = calculateBackoffDelay(attempt)
+                val retryRunnable = Runnable {
+                    knownServices[serviceName]?.let { currentState ->
+                        if (currentState.isCurrentlyResolving) {
+                            resolveService(service, attempt + 1)
+                        } else {
+                            Log.w(TAG, "Retry after exception scheduled for ${serviceName}, but no longer resolving.")
+                            mainHandler.post { tryResolveNext() }
+                        }
+                    } ?: run {
+                        Log.w(TAG, "Retry after exception scheduled for ${serviceName}, but service removed.")
+                        mainHandler.post { tryResolveNext() }
+                    }
+                }
+                state.pendingRetryRunnable = retryRunnable
+                mainHandler.postDelayed(retryRunnable, delayMs)
+            } ?: run {
+                Log.w(TAG, "Exception calling resolveService for ${serviceName} but service not found.")
+                mainHandler.post { tryResolveNext() }
+            }
         }
     }
 
@@ -314,7 +419,6 @@ class NsdHelper(private val context: Context) {
 
     /**
      * Check if a resolved service is actually reachable
-     * Uses a separate thread to avoid blocking the main thread
      */
     private fun checkIfStillReachable(service: NsdServiceInfo) {
         executor.submit {
@@ -335,17 +439,26 @@ class NsdHelper(private val context: Context) {
                 knownServices[service.serviceName]?.let { state ->
                     state.reachable = reachable
                     state.lastSeen = System.currentTimeMillis()
+                    
+                    // Update resolved state based on reachability result
+                    state.resolved = reachable
 
                     if (reachable) {
+                        Log.d(TAG, "Service ${service.serviceName} is reachable")
                         onServiceResolved?.invoke(service)
                     } else {
                         Log.w(TAG, "Resolved service not reachable: ${service.serviceName}")
                         onServiceLost?.invoke(service)
                     }
+                    
+                    // IMPORTANT: Mark as no longer resolving after all checks complete
+                    state.isCurrentlyResolving = false
+                    
+                } ?: run {
+                    Log.w(TAG, "checkIfStillReachable: Service ${service.serviceName} not found in knownServices")
                 }
 
-                // Allow next resolve to proceed
-                isResolving.set(false)
+                // Allow next resolve to proceed regardless of what happened
                 tryResolveNext()
             }
         }
@@ -469,6 +582,41 @@ class NsdHelper(private val context: Context) {
     private fun cancelDiscoveryRestart() {
         discoveryRestartTask?.cancel(false)
         discoveryRestartTask = null
+    }
+
+    /**
+     * Cancel all pending retry operations
+     */
+    private fun cancelAllPendingRetries() {
+        Log.d(TAG, "Cancelling all pending resolve retries")
+        knownServices.values.forEach { state ->
+            state.pendingRetryRunnable?.let { runnable ->
+                mainHandler.removeCallbacks(runnable)
+            }
+            state.pendingRetryRunnable = null
+        }
+    }
+
+    /**
+     * Restart discovery properly
+     */
+    fun restartDiscovery() {
+        Log.d(TAG, "Restarting discovery")
+        updateState(DiscoveryState.RESTARTING)
+        
+        // First clean up all resources
+        cleanupDiscovery(true)
+        cancelAllPendingRetries()
+        
+        // Reset state but don't clear all known services
+        knownServices.values.forEach { state ->
+            state.isCurrentlyResolving = false
+        }
+        
+        // Start discovery after a short delay to ensure everything is cleaned up
+        mainHandler.postDelayed({
+            startDiscovery()
+        }, 300)
     }
 
     /**

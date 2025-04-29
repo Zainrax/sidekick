@@ -1,4 +1,4 @@
-import {
+import type {
   SQLiteConnection,
   SQLiteDBConnection,
 } from "@capacitor-community/sqlite";

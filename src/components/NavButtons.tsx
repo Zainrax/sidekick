@@ -1,5 +1,5 @@
 import { A } from "@solidjs/router";
-import LabelledIcon, { LabelledIconProps } from "./LabelledIcon";
+import LabelledIcon, { type LabelledIconProps } from "./LabelledIcon";
 import { BiSolidDashboard } from "solid-icons/bi";
 import { BsCameraVideoFill, BsHddStackFill } from "solid-icons/bs";
 import { IoSettingsSharp } from "solid-icons/io";

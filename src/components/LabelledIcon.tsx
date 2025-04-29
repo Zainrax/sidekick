@@ -1,4 +1,4 @@
-import { IconProps, IconTypes } from "solid-icons";
+import type { IconProps, IconTypes } from "solid-icons";
 
 export interface LabelledIconProps extends IconProps {
 	label: string;

@@ -123,3 +123,5 @@ signing.tar
 android-keystore.jks
 api.json
 keystore.properties
+.aider*
+.env

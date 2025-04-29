@@ -190,7 +190,7 @@ class DevicePlugin : Plugin() {
     }
 
     /**
-     * Plugin cleanup
+     * Clean up all resources
      */
     override fun handleOnDestroy() {
         super.handleOnDestroy()
@@ -204,6 +204,7 @@ class DevicePlugin : Plugin() {
             multicastLock.release()
         }
 
+        // Ensure nsdHelper is properly cleaned up
         nsdHelper.cleanup()
         apConnector.cleanup()
         coroutineScope.cancel()

@@ -1,6 +1,6 @@
 import { createMemo, createResource, onMount } from "solid-js";
 import {
-  Location,
+  type Location,
   LocationSchema,
   createLocationSchema,
   deleteLocation,
@@ -11,7 +11,7 @@ import {
 } from "~/database/Entities/Location";
 import { db } from ".";
 import {
-  ApiLocation,
+  type ApiLocation,
   CacophonyPlugin,
   getLocationsForUser,
 } from "../CacophonyApi";
@@ -475,7 +475,7 @@ export function useLocationStorage() {
               });
               if (res.success) {
                 // Successfully created on server
-                baseLocation.id = parseInt(res.data);
+                baseLocation.id = Number.parseInt(res.data);
                 baseLocation.needsCreation = false;
               }
             }, 3);

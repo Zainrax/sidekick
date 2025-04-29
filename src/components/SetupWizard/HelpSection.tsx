@@ -1,5 +1,5 @@
 import { RiArrowsArrowLeftSLine } from "solid-icons/ri";
-import { JSX } from "solid-js";
+import type { JSX } from "solid-js";
 import Manual from "../Manual";
 
 type HelpSectionProps = {

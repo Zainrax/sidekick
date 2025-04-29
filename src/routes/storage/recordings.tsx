@@ -11,7 +11,7 @@ import { For, Show, createMemo, createSignal, mergeProps } from "solid-js";
 import ActionContainer from "~/components/ActionContainer";
 import { useStorage } from "~/contexts/Storage";
 import { useUserContext } from "~/contexts/User";
-import { UploadedRecording } from "~/database/Entities/Recording";
+import type { UploadedRecording } from "~/database/Entities/Recording";
 
 interface DeviceRecordingsProps {
   deviceName: string;

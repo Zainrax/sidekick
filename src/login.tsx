@@ -2,7 +2,7 @@ import { createComputed, createSignal, on, Show, untrack } from "solid-js"; // I
 import { Browser } from "@capacitor/browser";
 import { z } from "zod";
 import CacaophonyLogo from "./components/CacaophonyLogo";
-import { LoginResult, useUserContext } from "./contexts/User";
+import { type LoginResult, useUserContext } from "./contexts/User";
 import { ImCog } from "solid-icons/im";
 import { FaRegularEye, FaRegularEyeSlash } from "solid-icons/fa";
 import { useDevice } from "./contexts/Device";

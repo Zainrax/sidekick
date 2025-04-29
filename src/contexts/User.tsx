@@ -8,14 +8,14 @@ import {
 
 import { createContextProvider } from "@solid-primitives/context";
 import { Preferences } from "@capacitor/preferences";
-import { Result } from ".";
+import type { Result } from ".";
 import { z } from "zod";
 import { CacophonyPlugin } from "./CacophonyApi";
 import { useNavigate } from "@solidjs/router";
 import { CapacitorHttp } from "@capacitor/core";
 import { useLogsContext } from "./LogsContext";
 import { Effect, Either } from "effect";
-import { createTokenService, User, UserSchema } from "./TokenService";
+import { createTokenService, type User, UserSchema } from "./TokenService";
 
 // Response schema definitions
 export type UserAuthResponse = z.infer<typeof UserAuthResponseSchema>;

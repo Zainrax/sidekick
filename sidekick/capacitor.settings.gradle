@@ -3,10 +3,10 @@ include ':capacitor-android'
 project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')
 
 include ':capacitor-community-keep-awake'
-project(':capacitor-community-keep-awake').projectDir = new File('../node_modules/.deno/@capacitor-community+keep-awake@5.0.1/node_modules/@capacitor-community/keep-awake/android')
+project(':capacitor-community-keep-awake').projectDir = new File('../node_modules/@capacitor-community/keep-awake/android')
 
 include ':capacitor-community-sqlite'
-project(':capacitor-community-sqlite').projectDir = new File('../node_modules/.deno/@capacitor-community+sqlite@6.0.1/node_modules/@capacitor-community/sqlite/android')
+project(':capacitor-community-sqlite').projectDir = new File('../node_modules/@capacitor-community/sqlite/android')
 
 include ':capacitor-app'
 project(':capacitor-app').projectDir = new File('../node_modules/@capacitor/app/android')
@@ -39,7 +39,7 @@ include ':capacitor-preferences'
 project(':capacitor-preferences').projectDir = new File('../node_modules/@capacitor/preferences/android')
 
 include ':sentry-capacitor'
-project(':sentry-capacitor').projectDir = new File('../node_modules/.deno/@sentry+capacitor@1.4.0/node_modules/@sentry/capacitor/android')
+project(':sentry-capacitor').projectDir = new File('../node_modules/@sentry/capacitor/android')
 
 include ':capacitor-native-settings'
-project(':capacitor-native-settings').projectDir = new File('../node_modules/.deno/capacitor-native-settings@6.0.5/node_modules/capacitor-native-settings/android')
+project(':capacitor-native-settings').projectDir = new File('../node_modules/capacitor-native-settings/android')

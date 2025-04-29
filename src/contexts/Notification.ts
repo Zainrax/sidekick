@@ -3,7 +3,7 @@
 // and will be used to manage the state of the notifications
 // such as error messages, success messages, and loading messages
 
-import { JSX, createSignal } from "solid-js";
+import { type JSX, createSignal } from "solid-js";
 
 type NotifcationType = "error" | "warning" | "sync" | "success" | "loading";
 type NotificationID = string;

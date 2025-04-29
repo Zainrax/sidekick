@@ -1,7 +1,7 @@
 import { createSignal, createMemo, onMount } from "solid-js";
 import { db } from ".";
 import { CapacitorHttp } from "@capacitor/core";
-import { DeviceId } from "../Device";
+import type { DeviceId } from "../Device";
 import {
   type Event,
   createEventSchema,
@@ -196,7 +196,7 @@ export function useEventStorage() {
     setIsUploading(true);
 
     try {
-      let events = unuploadedEvents().filter(
+      const events = unuploadedEvents().filter(
         (e) => e.isProd === userContext.isProd()
       );
 

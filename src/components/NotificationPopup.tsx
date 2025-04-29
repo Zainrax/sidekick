@@ -4,7 +4,7 @@
 import { createSignal, createEffect, For, Show, Switch, Match } from "solid-js";
 import {
   notifications,
-  Notification,
+  type Notification,
   keepNotification,
   hideNotification,
 } from "../contexts/Notification";

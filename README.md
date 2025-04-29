@@ -28,24 +28,23 @@ This architecture provides native performance with cross-platform compatibility 
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/en/) version 18 or higher
-- Java 17
+- Bun
+- Java 21
 - [Android Studio](https://developer.android.com/studio) (for Android development)
 - Xcode (for iOS development, requires macOS)
 - A physical mobile device for testing (most features require hardware access)
 
 ## Development Setup
 
-1. Install deno (recommended package manager):
+1. Install Bun (recommended package manager):
 
 ### Windows
 
-irm <https://deno.land/install.ps1> | iex
+powershell -c "irm bun.sh/install.ps1|iex"
 
 ### Linux
 
-```bash
-curl -fsSL https://deno.land/install.sh | sh
+curl -fsSL https://bun.sh/install | bash
 ```
 
 2. Open the project in Android Studio:
@@ -56,20 +55,20 @@ curl -fsSL https://deno.land/install.sh | sh
 3. Install JavaScript dependencies:
 
    ```bash
-   deno install
+   bun install
    ```
 
 4. Build and run:
 
    ```bash
    # Development mode with hot reloading
-   deno dev
+   bun dev
 
    # OR
 
    # Build a release version
-   deno build
-   deno sync
+   bun run build
+   bun sync
    ```
 
 5. Connect a physical device:
