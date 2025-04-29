@@ -529,24 +529,24 @@ export function AudioSettingsTab(props: SettingProps) {
 			>
 				<Switch fallback={<FaSolidSpinner class="animate-spin" size={20} />}>
 					<Match when={audioMode() === "Disabled"}>
-						<p>Test Recording</p>
-						<FaSolidFileAudio size={24} />
+						<span>Test Recording</span>
+						<FaSolidFileAudio size={20} />
 					</Match>
 					<Match when={audioStatus()?.status === "pending"}>
-						<p>Setting up...</p>
-						<FaSolidSpinner class="animate-spin" size={24} />
+						<span>Setting up...</span>
+						<FaSolidSpinner class="animate-spin" size={20} />
 					</Match>
 					<Match when={audioStatus()?.status === "recording"}>
-						<p>Recording...</p>
-						<FaSolidSpinner class="animate-spin" size={24} />
+						<span>Recording...</span>
+						<FaSolidSpinner class="animate-spin" size={20} />
 					</Match>
 					<Match when={audioStatus()?.status === "busy"}>
-						<p class="sm:text-sm">Busy Recording Video...</p>
-						<FaSolidSpinner class="animate-spin" size={24} />
+						<span class="sm:text-sm">Busy Recording Video...</span>
+						<FaSolidSpinner class="animate-spin" size={20} />
 					</Match>
 					<Match when={audioStatus()?.status === "ready"}>
-						<p>Test Recording</p>
-						<FaSolidFileAudio size={24} />
+						<span>Test Recording</span>
+						<FaSolidFileAudio size={20} />
 					</Match>
 				</Switch>
 			</button>
