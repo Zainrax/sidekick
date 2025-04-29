@@ -107,8 +107,9 @@ const AudioModeSchema = z.union([
 const AudioStatusSchema = z.union([
   z.literal(1).transform(() => "ready" as const),
   z.literal(2).transform(() => "pending" as const),
-  z.literal(3).transform(() => "recording" as const),
-  z.literal(4).transform(() => "busy" as const),
+  z.literal(3).transform(() => "recording" as const), // Short test recording
+  z.literal(4).transform(() => "busy" as const), // Busy with video
+  z.literal(5).transform(() => "long_recording" as const), // Long audio recording
 ]);
 const AudioModeResSchema = z.object({
   "audio-mode": AudioModeSchema,
@@ -2407,7 +2408,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       url: `${device.url}/api/audio/long-recording?seconds=${seconds}`,
       headers: { ...headers, "Content-Type": "application/json" },
       webFetchExtra: { credentials: "include" },
+      connectTimeout: 5000, // Add timeouts
+      readTimeout: 5000,
     });
+    // Refetch status immediately after initiating the request
+    getAudioStatus(deviceId); // No need to await, let it run in background
     return res.status === 200;
   };
 

@@ -241,27 +241,50 @@ export function AudioSettingsTab(props: SettingProps) {
 		60,
 	); // Duration in seconds
 	const [customSeconds, setCustomSeconds] = createSignal(60);
-	const [longLoading, setLongLoading] = createSignal(false);
-	const [recordingDuration, setRecordingDuration] = createSignal<number | null>(
-		null,
-	); // Track which duration is actually recording
-	const [longResult, setLongResult] = createSignal<"failed" | "success" | null>(
-		null,
-	);
+	const [initiatingLongRecording, setInitiatingLongRecording] = createSignal(false); // Tracks the API call itself
+	const [lastLongRecordingDuration, setLastLongRecordingDuration] = createSignal<number | null>(null); // Stores the duration for result display
+	const [longResult, setLongResult] = createSignal<"failed" | "success" | null>(null);
+
+	// Effect to show success/failure message when recording finishes
+	createEffect(on(audioStatus, (currentStatus, prevStatus) => {
+		// Check if the status transitioned *from* long_recording *to* ready
+		if (prevStatus?.status === "long_recording" && currentStatus?.status === "ready") {
+			// Assume success if the API call didn't explicitly fail
+			if (longResult() !== "failed") {
+				setLongResult("success");
+			}
+			// Show result message for a few seconds
+			setTimeout(() => {
+				setLongResult(null);
+				setLastLongRecordingDuration(null);
+			}, 5000);
+		}
+	}));
+
 
 	const startLongRecording = async (duration: number) => {
-		if (longLoading()) return; // Prevent multiple starts
-		setLongLoading(true);
-		setRecordingDuration(duration);
+		// Disable if already recording (any type) or initiating
+		if (initiatingLongRecording() || audioStatus()?.status === "recording" || audioStatus()?.status === "long_recording" || audioStatus()?.status === "busy") return;
+
+		setInitiatingLongRecording(true);
+		setLastLongRecordingDuration(duration); // Store duration for potential result message
 		setLongResult(null); // Clear previous result
+
 		const ok = await context.takeLongAudioRecording(id(), duration);
-		setLongResult(ok ? "success" : "failed");
-		setLongLoading(false);
-		// Keep showing the result for a bit, then clear recording duration
-		setTimeout(() => {
-			setLongResult(null);
-			setRecordingDuration(null);
-		}, 3000);
+
+		// If the API call itself failed immediately
+		if (!ok) {
+			setLongResult("failed");
+			// Show failure message briefly
+			setTimeout(() => {
+				setLongResult(null);
+				setLastLongRecordingDuration(null);
+			}, 5000);
+		}
+		// Don't set longResult to success here, wait for status change effect
+
+		setInitiatingLongRecording(false);
+		// Status should update via the interval check or the immediate refetch in takeLongAudioRecording
 	};
 
 	const handleStartClick = () => {
@@ -433,12 +456,12 @@ export function AudioSettingsTab(props: SettingProps) {
 								<button
 									type="button"
 									onClick={() => setSelectedDuration(duration)}
-									disabled={longLoading()}
+									disabled={initiatingLongRecording() || audioStatus()?.status === "long_recording" || audioStatus()?.status === "busy"}
 									classList={{
 										"bg-blue-500 text-white": selectedDuration() === duration,
 										"bg-gray-200 text-gray-700 hover:bg-gray-300":
 											selectedDuration() !== duration,
-										"opacity-50 cursor-not-allowed": longLoading(),
+										"opacity-50 cursor-not-allowed": initiatingLongRecording() || audioStatus()?.status === "long_recording" || audioStatus()?.status === "busy",
 									}}
 									class="col-span-1 rounded px-3 py-1.5 text-sm transition" // Ensure col-span-1
 								>
@@ -453,18 +476,24 @@ export function AudioSettingsTab(props: SettingProps) {
 							class="col-span-1 flex items-center justify-center space-x-1 rounded bg-green-500 px-3 py-1.5 text-sm text-white transition hover:bg-green-600 disabled:bg-gray-400 md:col-span-1" // Adjust col-span for different screen sizes
 							onClick={handleStartClick}
 							disabled={
-								longLoading() ||
+								initiatingLongRecording() || // Disable while initiating
+								audioStatus()?.status === "long_recording" || // Disable if already long recording
+								audioStatus()?.status === "recording" || // Disable if short recording
+								audioStatus()?.status === "busy" || // Disable if busy with video
 								audioMode() === "Disabled" ||
-								audioStatus()?.status === "busy" ||
 								(!selectedDuration() && customSeconds() <= 0)
 							}
 						>
 							<Switch>
-								<Match when={longLoading()}>
+								<Match when={initiatingLongRecording()}>
+									<FaSolidSpinner class="animate-spin" size={16} />
+									<span>Starting...</span>
+								</Match>
+								<Match when={audioStatus()?.status === "long_recording"}>
 									<FaSolidSpinner class="animate-spin" size={16} />
 									<span>Recording...</span>
 								</Match>
-								<Match when={!longLoading()}>
+								<Match when={!initiatingLongRecording() && audioStatus()?.status !== "long_recording"}>
 									<FaSolidFileAudio size={16} />
 									<span>Start</span>
 								</Match>
@@ -472,19 +501,19 @@ export function AudioSettingsTab(props: SettingProps) {
 						</button>
 					</div>
 					{/* Status/Result Display */}
-					<div class="text-center text-sm">
-						<Show when={recordingDuration() && longLoading()}>
+					<div class="min-h-[20px] text-center text-sm"> {/* Added min-height */}
+						<Show when={audioStatus()?.status === "long_recording"}>
 							<span class="text-orange-600">
-								Recording for {recordingDuration()} seconds...
+								Long recording in progress...
 							</span>
 						</Show>
-						<Show when={longResult() && !longLoading()}>
+						<Show when={longResult() && audioStatus()?.status !== "long_recording"}>
 							<span
 								class={`${longResult() === "success" ? "text-green-600" : "text-red-600"}`}
 							>
 								{longResult() === "success"
-									? `Recording (${recordingDuration()}s) finished.`
-									: `Recording (${recordingDuration()}s) failed.`}
+									? `Recording (${lastLongRecordingDuration()}s) finished.`
+									: `Recording (${lastLongRecordingDuration()}s) failed.`}
 							</span>
 						</Show>
 					</div>
@@ -503,10 +532,11 @@ export function AudioSettingsTab(props: SettingProps) {
 				class="flex w-full items-center justify-center space-x-2 rounded-lg py-3 text-white"
 				onClick={() => createTestRecording()}
 				disabled={
-					longLoading() || // Disable if long recording is active
-					recording() ||
-					audioMode() === "Disabled" ||
-					audioStatus()?.status === "busy"
+					initiatingLongRecording() || // Disable if initiating long recording
+					audioStatus()?.status === "long_recording" || // Disable if long recording active
+					audioStatus()?.status === "recording" || // Disable if short recording active
+					audioStatus()?.status === "busy" || // Disable if busy with video
+					audioMode() === "Disabled"
 				}
 			>
 				<Switch fallback={<FaSolidSpinner class="animate-spin" size={20} />}>
@@ -520,6 +550,10 @@ export function AudioSettingsTab(props: SettingProps) {
 					</Match>
 					<Match when={audioStatus()?.status === "recording"}>
 						<span>Recording...</span>
+						<FaSolidSpinner class="animate-spin" size={20} />
+					</Match>
+					<Match when={audioStatus()?.status === "long_recording"}>
+						<span>Long Recording Active...</span>
 						<FaSolidSpinner class="animate-spin" size={20} />
 					</Match>
 					<Match when={audioStatus()?.status === "busy"}>
