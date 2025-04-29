@@ -379,8 +379,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   // Function to check if the long recording endpoint exists
   const checkLongRecordingSupport = async (url: string): Promise<boolean> => {
     try {
+      debugger;
       const res = await CapacitorHttp.request({
-        method: 'HEAD', // Use HEAD to check existence without fetching body
+        method: 'GET',
         url: `${url}/api/audio/long-recording`,
         headers,
         connectTimeout: 3000,
@@ -388,7 +389,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       });
       // Status 200 OK or 405 Method Not Allowed likely mean the endpoint exists
       return res.status === 200 || res.status === 405;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // A 404 error means the endpoint doesn't exist
       if (error?.status === 404) {
         return false;
@@ -458,9 +459,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       if (!device) throw new Error("Failed to connect to device");
 
       const [batteryPercentage, hasAudio, hasLongRecording] = await Promise.all([
-          getBattery(device.url).catch(() => undefined),
-          hasAudioCapabilities(device.url).catch(() => false),
-          checkLongRecordingSupport(device.url).catch(() => false)
+        getBattery(device.url).catch(() => undefined),
+        hasAudioCapabilities(device.url).catch(() => false),
+        checkLongRecordingSupport(device.url).catch(() => false)
       ]);
 
 
@@ -977,7 +978,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           const info = DeviceInfoSchema.safeParse(data);
 
           if (info.success) {
-            const [battery, hasAudio] = await Promise.all([
+            const [battery, hasAudio, hasLongRecording] = await Promise.all([
               getBattery(device.url).catch(() => undefined),
               hasAudioCapabilities(device.url).catch(() => device.hasAudioCapabilities),
               checkLongRecordingSupport(device.url).catch(() => device.hasLongRecordingSupport ?? false),
@@ -1004,7 +1005,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
               batteryPercentage: battery?.mainBattery,
               isConnected: true,
               hasAudioCapabilities: hasAudio,
-              hasLongRecordingSupport: hasLongRecording, // Update flag here too
+              hasLongRecordingSupport: hasLongRecording,
             };
 
             devices.set(newId, updatedDevice);
