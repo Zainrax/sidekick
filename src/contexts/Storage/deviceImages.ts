@@ -446,19 +446,66 @@ export function useDeviceImagesStorage() {
             });
           } else {
             // We have a local image - check if it needs updating
-            const file = await Filesystem.readFile({
-              path: localImage.filePath,
-            });
-            // Use a simple hash function for the file contents
-            const data = file.data as string;
-            const localHash = data.substring(0, 50);
-            const serverHash = (response.data as string).substring(0, 50);
-            if (serverHash !== localHash) {
-              await insertDeviceReferenceImage(db)({
-                ...localImage,
-                timestamp: new Date().toISOString(),
+            try {
+              const file = await Filesystem.readFile({
+                path: localImage.filePath,
               });
+              // Use a simple hash function for the file contents
+              const data = file.data as string;
+              const localHash = data.substring(0, 50);
+              const serverHash = (response.data as string).substring(0, 50);
+              if (serverHash !== localHash) {
+                // File content differs, update timestamp or re-download?
+                // For now, let's assume re-downloading is handled by deleting and letting the 'no local image' logic run
+                log.logInfo({ message: `Local file ${localImage.filePath} differs from server. Deleting local record.` });
+                await deleteDeviceReferenceImage(db)(localImage.deviceId, localImage.isProd, localImage.filePath);
+                // Re-run the download logic as if no local image existed
+                // This part might need refinement based on desired behavior (e.g., update vs replace)
+                // Falling through to the download logic below by effectively nullifying localImage for this block
+                localImage = null; // Mark as null so the download logic below runs
+              }
+            } catch (e: any) {
+               if (e.message === "File does not exist.") {
+                 log.logError({
+                   message: `Local file missing during sync, deleting record: ${localImage.filePath}`,
+                   error: e,
+                 });
+                 await deleteDeviceReferenceImage(db)(localImage.deviceId, localImage.isProd, localImage.filePath);
+                 localImage = null; // Mark as null so the download logic below runs
+               } else {
+                 throw e; // Re-throw other errors
+               }
             }
+          }
+          // If localImage is now null (either initially or because it was deleted above), download server image
+          if (!localImage) {
+             // No local image - download server image
+             const date = new Date().toISOString();
+             const fileName = `${deviceId}-$${
+               isProd ? "prod" : "dev"
+             }-reference-${date}.jpg`;
+
+             const settingsRes = await CapacitorHttp.get({
+               url: `${userContext.getServerUrl()}/api/v1/devices/${deviceId}/settings`,
+               headers: {
+                 Authorization: user.token,
+               },
+               responseType: "blob",
+             });
+             const file = await Filesystem.writeFile({
+               path: fileName,
+               data: response.data,
+               directory: Directory.Data,
+             });
+             console.log("Settings Res", settingsRes);
+
+             await insertDeviceReferenceImage(db)({
+               deviceId: Number.parseInt(deviceId),
+               filePath: file.uri,
+               timestamp: date,
+               type: "pov", // Default type - adjust as needed
+               isProd,
+             });
           }
           break;
         case 404: // No image on server
