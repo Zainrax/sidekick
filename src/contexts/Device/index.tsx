@@ -1,7 +1,7 @@
 import { KeepAwake } from "@capacitor-community/keep-awake";
 import {
-  HttpResponse,
-  PluginListenerHandle,
+  type HttpResponse,
+  type PluginListenerHandle,
   registerPlugin,
 } from "@capacitor/core";
 import { CapacitorHttp } from "@capacitor/core";
@@ -22,8 +22,8 @@ import {
 } from "solid-js";
 import { z } from "zod";
 import { GoToPermissions } from "~/components/GoToPermissions";
-import { Location } from "~/database/Entities/Location";
-import { Result, URL } from "..";
+import type { Location } from "~/database/Entities/Location";
+import type { Result, URL } from "..";
 import { useStorage } from "../Storage";
 import { isWithinRange } from "../Storage/location";
 import DeviceCamera from "./Camera";
@@ -42,7 +42,7 @@ const WifiNetwork = z
   })
   .transform((val) => {
     // Quality is a string of the form "xx/70" where xx is the signal level
-    const quality = Math.round((parseInt(val.Quality) / 70) * 100);
+    const quality = Math.round((Number.parseInt(val.Quality) / 70) * 100);
     const isSecured = !val.Security || val.Security !== "Unknown";
     return {
       SSID: val.SSID,
@@ -54,7 +54,7 @@ const WifiNetwork = z
 export type WifiNetwork = z.infer<typeof WifiNetwork>;
 export const asInt = z
   .union([z.string(), z.number()])
-  .transform((val) => (typeof val === "string" ? parseInt(val) : val));
+  .transform((val) => (typeof val === "string" ? Number.parseInt(val) : val));
 export const tc2ModemSchema = z
   .object({
     failedToFindModem: z.boolean().optional(),
@@ -111,7 +111,7 @@ const AudioStatusSchema = z.union([
   z.literal(4).transform(() => "busy" as const),
 ]);
 const AudioModeResSchema = z.object({
-  ["audio-mode"]: AudioModeSchema,
+  "audio-mode": AudioModeSchema,
 });
 const AudioStatusResSchema = z.object({
   mode: z.union([
@@ -788,8 +788,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       case "DISCONNECTED":
         setApState("disconnected");
         break;
-      case "CONNECTION_FAILED":
-      case "CONNECTION_LOST":
       default:
         setApState("default");
         break;
@@ -890,7 +888,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   };
 
   const removeAllListeners = () => {
-    listeners().forEach((listener) => listener.remove());
+    for (const listener of listeners()) {
+      listener.remove();
+    }
     setListeners([]);
   };
 
@@ -926,6 +926,9 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   ): Promise<ConnectedDevice | undefined> => {
     if (!device.isConnected) {
       return undefined;
+    }
+    if (device.url === "fakeHost") {
+      return device;
     }
 
     const isConnected = await verifyDeviceConnection(device.url);
@@ -1056,12 +1059,15 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
   };
 
   let isSearching = false;
-  // Modify searchDevice to handle WiFi state changes more clearly
   const searchDevice = async () => {
     if (isSearching) return;
     try {
       isSearching = true;
       await stopDiscovery();
+
+      // Add a small delay to ensure proper cleanup before restarting discovery
+      await new Promise(resolve => setTimeout(resolve, 200));
+
       await startDiscovery();
 
       // After discovery, also check existing devices' connections
@@ -1069,28 +1075,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         (d) => d.isConnected
       );
       for (const device of connectedDevices) {
-        if (device.isConnected) {
-          await clearUploaded(device);
-
-          // Check WiFi status of connected devices
-          // But don't do this during AP connection/disconnection to avoid race conditions
-          if (
-            apState() !== "loadingConnect" &&
-            apState() !== "loadingDisconnect"
-          ) {
-            const wifiStatus = await getCurrentWifiNetwork(device.id).catch(
-              () => null
-            );
-
-            // If this device should have WiFi but doesn't, update app state by calling checkDeviceConnection
-            if (device.type === "tc2") {
-              // tc2 devices should have WiFi
-              if (!wifiStatus || wifiStatus.SSID === "") {
-                await checkDeviceConnection(device);
-              }
-            }
-          }
-        }
+        // Keep checking existing device connections
       }
     } catch (e) {
       console.error(e);
@@ -1139,10 +1124,10 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       return thermalRecordings === null && audioRecordings !== null
         ? audioRecordings
         : thermalRecordings !== null && audioRecordings === null
-        ? thermalRecordings
-        : thermalRecordings !== null && audioRecordings !== null
-        ? thermalRecordings.concat(audioRecordings)
-        : null;
+          ? thermalRecordings
+          : thermalRecordings !== null && audioRecordings !== null
+            ? thermalRecordings.concat(audioRecordings)
+            : null;
     } catch (error) {
       log.logError({
         message: "Could not get recordings",
@@ -1173,8 +1158,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
             });
             if (res.status !== 200) continue;
             await storage.deleteRecording(rec);
-          } else {
-            continue;
           }
         } else {
           await storage.deleteRecording(rec);
@@ -1345,7 +1328,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     );
     for (const event of events) {
       storage?.saveEvent({
-        key: parseInt(event.key),
+        key: Number.parseInt(event.key),
         device: device.id,
         isProd: device.isProd,
         type: event.Type,
@@ -1418,8 +1401,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const res = await DevicePlugin.setDeviceLocation(options);
       if (res.success) {
         tryUpdateServerLocation(deviceId, {
-          lat: parseFloat(location.data.latitude),
-          lng: parseFloat(location.data.longitude),
+          lat: Number.parseFloat(location.data.latitude),
+          lng: Number.parseFloat(location.data.longitude),
         });
         devices.set(device.id, {
           ...device,
@@ -1507,12 +1490,11 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           success: true,
           data: location.data,
         };
-      } else {
-        return {
-          success: false,
-          message: "Could not get location",
-        };
       }
+      return {
+        success: false,
+        message: "Could not get location",
+      };
     } catch (error) {
       return {
         success: false,
@@ -1684,14 +1666,14 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const networks = WifiNetwork.array().parse(JSON.parse(res.data));
       return networks
         ? networks
-            .filter((network) => network.SSID)
-            .reduce((acc, curr) => {
-              const found = acc.find((a) => a.SSID === curr.SSID);
-              if (!found) {
-                acc.push(curr);
-              }
-              return acc;
-            }, [] as WifiNetwork[])
+          .filter((network) => network.SSID)
+          .reduce((acc, curr) => {
+            const found = acc.find((a) => a.SSID === curr.SSID);
+            if (!found) {
+              acc.push(curr);
+            }
+            return acc;
+          }, [] as WifiNetwork[])
         : [];
     } catch (e) {
       console.error(e);
@@ -1971,9 +1953,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       const connection =
         res.status === 200
           ? ConnectionRes.parse(JSON.parse(res.data)).connected
-          : res.status === 404
-          ? true
-          : false;
+          : res.status === 404;
       return connection;
     } catch (error) {
       console.error(error);
@@ -2290,6 +2270,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
   const getAudioStatus = async (deviceId: DeviceId) => {
     try {
+      debugger;
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return null;
       const { url } = device;
@@ -2332,6 +2313,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     try {
       const device = devices.get(deviceId);
       if (!device || !device.isConnected) return [];
+      debugger;
       const { url } = device;
       const res = await CapacitorHttp.get({
         url: `${url}/api/audio/recordings`,
@@ -2342,22 +2324,27 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
       });
       return res.status === 200 ? JSON.parse(res.data) : [];
     } catch (error) {
-      console.error(error);
+      console.log(error);
       return [];
     }
   };
 
   const getAudioRecordingSettings = async (deviceId: DeviceId) => {
-    const device = devices.get(deviceId);
-    if (!device || !device.isConnected) return null;
-    const res = await CapacitorHttp.get({
-      url: `${device.url}/api/audiorecording`,
-      headers,
-      webFetchExtra: { credentials: "include" },
-    });
-    if (res.status !== 200) return null;
-    const data = AudioRecordingResSchema.parse(JSON.parse(res.data));
-    return { mode: data["audio-mode"], seed: data["audio-seed"] };
+    try {
+      const device = devices.get(deviceId);
+      if (!device || !device.isConnected) return null;
+      const res = await CapacitorHttp.get({
+        url: `${device.url}/api/audiorecording`,
+        headers,
+        webFetchExtra: { credentials: "include" },
+      });
+      if (res.status !== 200) return null;
+      const data = AudioRecordingResSchema.parse(JSON.parse(res.data));
+      return { mode: data["audio-mode"], seed: data["audio-seed"] };
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
   };
 
   const setAudioRecordingSettings = async (
@@ -2896,6 +2883,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     hasAudioCapabilities,
     getAudioRecordingSettings,
     setAudioRecordingSettings,
+    takeAudioRecording,
     takeLongAudioRecording,
     // Update
     checkDeviceUpdate,

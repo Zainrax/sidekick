@@ -420,12 +420,9 @@ export function AudioSettingsTab(props: SettingProps) {
 
 			{/* Long Recording Section */}
 			<div class="space-y-2 rounded-lg border p-3 shadow-sm">
-				<label class="block text-sm font-medium text-gray-700">
-					Long Audio Recording
-				</label>
-				<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+				<div class="grid grid-cols-3 gap-2">
 					{/* Preset Buttons */}
-					<For each={[180, 300]}>
+					<For each={[60, 180, 300]}>
 						{(duration) => (
 							<button
 								type="button"
@@ -457,7 +454,7 @@ export function AudioSettingsTab(props: SettingProps) {
 								setSelectedDuration(null); // Deselect presets when typing custom
 								setCustomSeconds(
 									Number.parseInt((e.currentTarget as HTMLInputElement).value) ||
-										1, // Ensure positive number
+									1, // Ensure positive number
 								);
 							}}
 							onFocus={() => setSelectedDuration(null)} // Deselect presets on focus
