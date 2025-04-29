@@ -149,6 +149,7 @@ export type DeviceDetails = {
   url: string;
   type: "pi" | "tc2";
   hasAudioCapabilities: boolean;
+  hasLongRecordingSupport?: boolean; // Add this flag
   lastUpdated?: Date;
   batteryPercentage?: string;
 };
@@ -375,6 +376,30 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
     }
   };
 
+  // Function to check if the long recording endpoint exists
+  const checkLongRecordingSupport = async (url: string): Promise<boolean> => {
+    try {
+      const res = await CapacitorHttp.request({
+        method: 'HEAD', // Use HEAD to check existence without fetching body
+        url: `${url}/api/audio/long-recording`,
+        headers,
+        connectTimeout: 3000,
+        readTimeout: 3000,
+      });
+      // Status 200 OK or 405 Method Not Allowed likely mean the endpoint exists
+      return res.status === 200 || res.status === 405;
+    } catch (error: any) {
+      // A 404 error means the endpoint doesn't exist
+      if (error?.status === 404) {
+        return false;
+      }
+      // Other errors might indicate network issues, but assume no support for safety
+      console.warn(`Error checking long recording support for ${url}:`, error);
+      return false;
+    }
+  };
+
+
   const createDevice = async (url: string) => {
     if (!url) throw new Error("No URL provided to create device");
 
@@ -432,8 +457,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
       if (!device) throw new Error("Failed to connect to device");
 
-      const batteryPercentage = await getBattery(device.url);
-      const hasAudio = await hasAudioCapabilities(device.url);
+      const [batteryPercentage, hasAudio, hasLongRecording] = await Promise.all([
+          getBattery(device.url).catch(() => undefined),
+          hasAudioCapabilities(device.url).catch(() => false),
+          checkLongRecordingSupport(device.url).catch(() => false)
+      ]);
+
 
       return {
         ...device,
@@ -441,6 +470,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
         endpoint,
         batteryPercentage: batteryPercentage?.mainBattery,
         hasAudioCapabilities: hasAudio,
+        hasLongRecordingSupport: hasLongRecording,
       };
     } catch (error) {
       console.error("Error in endpointToDevice:", error);
@@ -949,9 +979,8 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
           if (info.success) {
             const [battery, hasAudio] = await Promise.all([
               getBattery(device.url).catch(() => undefined),
-              hasAudioCapabilities(device.url).catch(
-                () => device.hasAudioCapabilities
-              ),
+              hasAudioCapabilities(device.url).catch(() => device.hasAudioCapabilities),
+              checkLongRecordingSupport(device.url).catch(() => device.hasLongRecordingSupport ?? false),
             ]);
 
             const newId = info.data.deviceID.toString();
@@ -975,6 +1004,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
               batteryPercentage: battery?.mainBattery,
               isConnected: true,
               hasAudioCapabilities: hasAudio,
+              hasLongRecordingSupport: hasLongRecording, // Update flag here too
             };
 
             devices.set(newId, updatedDevice);

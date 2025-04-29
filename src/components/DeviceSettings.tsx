@@ -418,34 +418,39 @@ export function AudioSettingsTab(props: SettingProps) {
 				</div>
 			</div>
 
-			{/* Long Recording Section */}
-			<div class="space-y-2 rounded-lg border p-3 shadow-sm">
-				<div class="grid grid-cols-3 gap-2">
-					{/* Preset Buttons */}
-					<For each={[60, 180, 300]}>
+			{/* Long Recording Section - Conditionally Rendered */}
+			<Show when={context.devices.get(id())?.hasLongRecordingSupport}>
+				<div class="space-y-2 rounded-lg border p-3 shadow-sm">
+					<label class="block text-sm font-medium text-gray-700">
+						Long Audio Recording
+					</label>
+					{/* Updated Grid Layout */}
+					<div class="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
+						{/* Preset Buttons */}
+						<For each={[60, 180, 300]}>
 						{(duration) => (
 							<button
 								type="button"
 								onClick={() => setSelectedDuration(duration)}
 								disabled={longLoading()}
-								classList={{
-									"bg-blue-500 text-white": selectedDuration() === duration,
-									"bg-gray-200 text-gray-700 hover:bg-gray-300":
-										selectedDuration() !== duration,
-									"opacity-50 cursor-not-allowed": longLoading(),
-								}}
-								class="rounded px-3 py-1.5 text-sm transition"
-							>
-								{duration / 60} min
+									classList={{
+										"bg-blue-500 text-white": selectedDuration() === duration,
+										"bg-gray-200 text-gray-700 hover:bg-gray-300":
+											selectedDuration() !== duration,
+										"opacity-50 cursor-not-allowed": longLoading(),
+									}}
+									class="col-span-1 rounded px-3 py-1.5 text-sm transition" // Ensure col-span-1
+								>
+									{duration / 60} min
 							</button>
 						)}
-					</For>
+						</For>
 
-					{/* Custom Input */}
-					<div class="col-span-2 flex items-center space-x-2 rounded border border-gray-300 px-2 py-1 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 sm:col-span-1">
-						<input
-							id="long-recording-sec"
-							type="number"
+						{/* Custom Input */}
+						<div class="col-span-1 flex items-center space-x-2 rounded border border-gray-300 px-2 py-1 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500"> {/* Ensure col-span-1 */}
+							<input
+								id="long-recording-sec"
+								type="number"
 							min="1"
 							class="w-full appearance-none bg-transparent p-0 text-sm outline-none [-moz-appearance:_textfield] [&::-inner-spin-button]:m-0 [&::-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none"
 							placeholder="Custom"
@@ -461,15 +466,15 @@ export function AudioSettingsTab(props: SettingProps) {
 							disabled={longLoading()}
 						/>
 						<span class="text-xs text-gray-500">sec</span>
-					</div>
+						</div>
 
-					{/* Start Button */}
-					<button
-						type="button"
-						class="col-span-2 flex items-center justify-center space-x-1 rounded bg-green-500 px-3 py-1.5 text-sm text-white transition hover:bg-green-600 disabled:bg-gray-400 sm:col-span-1"
-						onClick={handleStartClick}
-						disabled={
-							longLoading() ||
+						{/* Start Button */}
+						<button
+							type="button"
+							class="col-span-2 flex items-center justify-center space-x-1 rounded bg-green-500 px-3 py-1.5 text-sm text-white transition hover:bg-green-600 disabled:bg-gray-400 md:col-span-1" // Adjust col-span for different screen sizes
+							onClick={handleStartClick}
+							disabled={
+								longLoading() ||
 							audioMode() === "Disabled" ||
 							audioStatus()?.status === "busy" ||
 							(!selectedDuration() && customSeconds() <= 0)
@@ -505,6 +510,7 @@ export function AudioSettingsTab(props: SettingProps) {
 					</Show>
 				</div>
 			</div>
+		</Show>
 			{/* End Long Recording Section */}
 
 			{/* Test Recording Button */}
