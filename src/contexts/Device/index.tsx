@@ -109,13 +109,16 @@ const AudioStatusSchema = z.union([
 	z.literal(2).transform(() => "pending" as const),
 	z
 		.literal(3)
-		.transform(() => "recording" as const), // Short test recording
+		.transform(() => "test_recording" as const), // Short test recording
 	z
 		.literal(4)
-		.transform(() => "busy" as const), // Busy with video
+		.transform(() => "recording" as const), // Busy with video
 	z
 		.literal(5)
 		.transform(() => "long_recording" as const), // Long audio recording
+	z
+		.literal(6)
+		.transform(() => "setting_up_long_recording" as const), // Setting up long recording
 ]);
 const AudioModeResSchema = z.object({
 	"audio-mode": AudioModeSchema,

@@ -23,6 +23,10 @@ import {
 	FaSolidPlus,
 	FaSolidSpinner,
 	FaSolidVideo,
+	FaSolidStop,
+	FaSolidMicrophoneSlash,
+	FaSolidClock,
+	FaSolidPlay,
 } from "solid-icons/fa";
 import { FiCloud, FiCloudOff, FiMapPin } from "solid-icons/fi";
 import { ImCog, ImCross } from "solid-icons/im";
@@ -70,6 +74,7 @@ type SettingProps = { deviceId: DeviceId };
 export function AudioSettingsTab(props: SettingProps) {
 	// Simple test recording button
 	const context = useDevice();
+	const log = useLogsContext(); // Add this line
 	const id = () => props.deviceId;
 
 	const [audioFiles, { refetch: refetchAudioFiles }] = createResource(
@@ -101,21 +106,14 @@ export function AudioSettingsTab(props: SettingProps) {
 				if (!audioFiles.loading) {
 					refetchAudioFiles();
 				}
-			} else {
-				refetchAudioStatus();
 			}
+			refetchAudioStatus();
 		}, 10000);
 		setCurrentStatusMonitor(interval);
 	};
 
 	onMount(() => {
 		monitorAudioStatus();
-		onCleanup(() => {
-			const currInterval = currentStatusMonitor();
-			if (currInterval) {
-				clearInterval(currInterval as number);
-			}
-		});
 	});
 
 	const [audioMode, { refetch: refetchAudioMode }] = createResource(
@@ -221,7 +219,7 @@ export function AudioSettingsTab(props: SettingProps) {
 		setSeed(value);
 		clearTimeout(seedSaveTimeout);
 		seedSaveTimeout = setTimeout(() => {
-			if (seedValue !== audioSettings()?.seed) {
+			if (seedValue() !== audioSettings()?.seed) {
 				saveSeed();
 			}
 		}, 1000);
@@ -272,45 +270,40 @@ export function AudioSettingsTab(props: SettingProps) {
 		}),
 	);
 
-	const startLongRecording = async (duration: number) => {
-		// Disable if already recording (any type) or initiating
-		if (
-			initiatingLongRecording() ||
-			audioStatus()?.status === "recording" ||
-			audioStatus()?.status === "long_recording" ||
-			audioStatus()?.status === "busy"
-		)
-			return;
-
-		setInitiatingLongRecording(true);
-		setLastLongRecordingDuration(duration); // Store duration for potential result message
-		setLongResult(null); // Clear previous result
-
-		const ok = await context.takeLongAudioRecording(id(), duration);
-
-		// If the API call itself failed immediately
-		if (!ok) {
-			setLongResult("failed");
-			// Show failure message briefly
-			setTimeout(() => {
-				setLongResult(null);
-				setLastLongRecordingDuration(null);
-			}, 5000);
-		}
-		// Don't set longResult to success here, wait for status change effect
-
-		setInitiatingLongRecording(false);
-		// Status should update via the interval check or the immediate refetch in takeLongAudioRecording
-	};
-
-	const handleStartClick = () => {
+	const handleStartClick = async () => {
 		const duration = selectedDuration() ?? customSeconds();
-		if (duration > 0) {
-			startLongRecording(duration);
-			monitorAudioStatus();
+		if (!duration) {
+			log.logWarning({ message: "No duration selected for long recording." });
+			return;
+		}
+		setInitiatingLongRecording(true);
+		try {
+			const success = await context.takeLongAudioRecording(id(), duration);
+			if (success) {
+				log.logSuccess({
+					message: `Started long audio recording for ${duration / 60} minutes.`,
+				});
+				refetchAudioStatus();
+			} else {
+				log.logWarning({
+					message: "Failed to start long audio recording.",
+				});
+			}
+		} catch (error) {
+			log.logError({
+				message: "Error starting long audio recording",
+				error,
+			});
+		} finally {
+			setInitiatingLongRecording(false);
+			// Also refresh status in case of failure or completion of the API call itself
+			void context.getAudioStatus(id());
 		}
 	};
 
+	createEffect(() => {
+		console.log("Audio Status", audioStatus());
+	});
 	return (
 		<section class="space-y-4 px-2 py-4">
 			<div class="flex items-center  text-gray-800">
@@ -418,58 +411,10 @@ export function AudioSettingsTab(props: SettingProps) {
 					</div>
 				</div>
 			</div>
-			{/* <Show when={audioMode() !== "Disabled"}>
-				<div class="flex items-center  rounded-md border-2 border-slate-200 p-2 pl-2 text-slate-500">
-					<AiOutlineInfoCircle class="mr-2" size={18} />
-					<Switch>
-						<Match when={audioMode() === "AudioOnly"}>
-							<p>
-								Records audio in a 24 hour window, and disables thermal
-								recording.
-							</p>
-						</Match>
-						<Match when={audioMode() === "AudioOrThermal"}>
-							<p>Records audio outside of the thermal recording window.</p>
-						</Match>
-						<Match when={audioMode() === "AudioAndThermal"}>
-							<p>
-								Records audio in a 24 hour window, however the camera cannot
-								record during the 1 minute of audio recording.
-							</p>
-						</Match>
-					</Switch>
-				</div>
-
-			</Show> */}
-			{/*<div>
-				<div class="flex items-center rounded-lg border">
-					<label
-						for="audio-seed"
-						class="text-xs text-center font-light text-gray-700 min-w-[96px]"
-					>
-						Audio Seed
-					</label>
-					<input
-						id="audio-seed"
-						type="number"
-						class="flex-1 rounded-r border-l px-2 py-1"
-						value={seedValue()}
-						onInput={(e) =>
-							setSeedValue((e.currentTarget as HTMLInputElement).value)
-						}
-					/>
-					<Show when={seedSaving()}>
-						<FaSolidSpinner class="animate-spin text-blue-500" size={16} />
-					</Show>
-				</div>
-			</div>
-*/}
 			<Show when={context.devices.get(id())?.hasLongRecordingSupport}>
 				<div class="space-y-2 rounded-lg border p-3 pb-0 shadow-sm">
 					<label class="block text-sm text-gray-600">Audio Recording</label>
-					{/* Updated Grid Layout */}
 					<div class="grid grid-cols-4 gap-2">
-						{/* Preset Buttons */}
 						<For each={[60, 180, 300]}>
 							{(duration) => (
 								<button
@@ -478,7 +423,8 @@ export function AudioSettingsTab(props: SettingProps) {
 									disabled={
 										initiatingLongRecording() ||
 										audioStatus()?.status === "long_recording" ||
-										audioStatus()?.status === "busy"
+										audioStatus()?.status === "setting_up_long_recording" ||
+										audioStatus()?.status === "recording"
 									}
 									classList={{
 										"bg-blue-500 text-white": selectedDuration() === duration,
@@ -487,7 +433,8 @@ export function AudioSettingsTab(props: SettingProps) {
 										"opacity-50 cursor-not-allowed":
 											initiatingLongRecording() ||
 											audioStatus()?.status === "long_recording" ||
-											audioStatus()?.status === "busy",
+											audioStatus()?.status === "setting_up_long_recording" ||
+											audioStatus()?.status === "recording",
 									}}
 									class="col-span-1 rounded px-3 py-1.5 text-sm transition" // Ensure col-span-1
 								>
@@ -495,8 +442,6 @@ export function AudioSettingsTab(props: SettingProps) {
 								</button>
 							)}
 						</For>
-
-						{/* Start Button */}
 						<button
 							type="button"
 							class="col-span-1 flex items-center justify-center space-x-1 rounded bg-green-500 px-3 py-1.5 text-sm text-white transition hover:bg-green-600 disabled:bg-gray-400 md:col-span-1" // Adjust col-span for different screen sizes
@@ -504,8 +449,10 @@ export function AudioSettingsTab(props: SettingProps) {
 							disabled={
 								initiatingLongRecording() || // Disable while initiating
 								audioStatus()?.status === "long_recording" || // Disable if already long recording
+								audioStatus()?.status === "setting_up_long_recording" || // Disable while setting up
 								audioStatus()?.status === "recording" || // Disable if short recording
-								audioStatus()?.status === "busy" || // Disable if busy with video
+								audioStatus()?.status === "pending" || // Disable if short recording
+								audioStatus()?.status === "test_recording" || // Disable if busy with video
 								audioMode() === "Disabled" ||
 								(!selectedDuration() && customSeconds() <= 0)
 							}
@@ -513,6 +460,11 @@ export function AudioSettingsTab(props: SettingProps) {
 							<Switch>
 								<Match when={initiatingLongRecording()}>
 									<span>Starting...</span>
+								</Match>
+								<Match
+									when={audioStatus()?.status === "setting_up_long_recording"}
+								>
+									<span>Setting up...</span>
 								</Match>
 								<Match when={audioStatus()?.status === "long_recording"}>
 									<FaSolidFileAudio size={16} />
@@ -548,9 +500,6 @@ export function AudioSettingsTab(props: SettingProps) {
 					</div>
 				</div>
 			</Show>
-			{/* End Long Recording Section */}
-
-			{/* Test Recording Button */}
 			<button
 				type="button"
 				class="flex w-full items-center justify-center space-x-2 rounded-lg py-3 text-white disabled:bg-gray-300 bg-blue-500"
@@ -558,8 +507,8 @@ export function AudioSettingsTab(props: SettingProps) {
 				disabled={
 					initiatingLongRecording() || // Disable if initiating long recording
 					audioStatus()?.status === "long_recording" || // Disable if long recording active
-					audioStatus()?.status === "recording" || // Disable if short recording active
-					audioStatus()?.status === "busy" || // Disable if busy with video
+					audioStatus()?.status === "recording" || // Disable if recording active
+					audioStatus()?.status === "test_recording" || // Disable if short recording active
 					audioMode() === "Disabled"
 				}
 			>
@@ -572,15 +521,15 @@ export function AudioSettingsTab(props: SettingProps) {
 						<span>Setting up...</span>
 						<FaSolidSpinner class="animate-spin" size={20} />
 					</Match>
-					<Match when={audioStatus()?.status === "recording"}>
+					<Match when={audioStatus()?.status === "test_recording"}>
 						<span>Recording...</span>
 						<FaSolidSpinner class="animate-spin" size={20} />
 					</Match>
 					<Match when={audioStatus()?.status === "long_recording"}>
-						<span>Long Recording Active...</span>
+						<span>Recording...</span>
 						<FaSolidSpinner class="animate-spin" size={20} />
 					</Match>
-					<Match when={audioStatus()?.status === "busy"}>
+					<Match when={audioStatus()?.status === "recording"}>
 						<span class="sm:text-sm">Busy Recording Video...</span>
 						<FaSolidSpinner class="animate-spin" size={20} />
 					</Match>

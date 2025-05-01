@@ -13,6 +13,7 @@ const config: CapacitorConfig = {
   },
   android: {
     path: "sidekick",
+    allowMixedContent: true, // Add this line to allow mixed content
   },
   ios: {
     path: "sidekick",

@@ -9,7 +9,8 @@
 		"url": "http://localhost:5173"
 	},
 	"android": {
-		"path": "sidekick"
+		"path": "sidekick",
+		"allowMixedContent": true
 	},
 	"ios": {
 		"path": "sidekick"
