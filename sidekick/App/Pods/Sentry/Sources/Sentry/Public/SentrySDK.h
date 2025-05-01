@@ -1,10 +1,22 @@
-#import "SentryDefines.h"
+#if __has_include(<Sentry/Sentry.h>)
+#    import <Sentry/SentryDefines.h>
+#else
+#    import <SentryWithoutUIKit/SentryDefines.h>
+#endif
 
 @protocol SentrySpan;
 
-@class SentryOptions, SentryEvent, SentryBreadcrumb, SentryScope, SentryUser, SentryId,
-    SentryUserFeedback, SentryTransactionContext;
+@class SentryBreadcrumb;
+@class SentryEvent;
+@class SentryFeedback;
+@class SentryId;
 @class SentryMetricsAPI;
+@class SentryOptions;
+@class SentryReplayApi;
+@class SentryScope;
+@class SentryTransactionContext;
+@class SentryUser;
+@class SentryUserFeedback;
 @class UIView;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -27,6 +39,13 @@ SENTRY_NO_INIT
 @property (class, nonatomic, readonly) BOOL isEnabled;
 
 @property (class, nonatomic, readonly) SentryMetricsAPI *metrics;
+
+#if SENTRY_TARGET_REPLAY_SUPPORTED
+/**
+ * API to control session replay
+ */
+@property (class, nonatomic, readonly) SentryReplayApi *replay;
+#endif
 
 /**
  * Inits and configures Sentry (SentryHub, SentryClient) and sets up all integrations. Make sure to
@@ -232,11 +251,24 @@ SENTRY_NO_INIT
     NS_SWIFT_NAME(capture(message:block:));
 
 /**
- * Captures a manually created user feedback and sends it to Sentry.
+ * Captures user feedback that was manually gathered and sends it to Sentry.
  * @param userFeedback The user feedback to send to Sentry.
+ * @deprecated Use @c SentrySDK.captureFeedback or use or configure our new managed UX with
+ * @c SentryOptions.configureUserFeedback .
  */
 + (void)captureUserFeedback:(SentryUserFeedback *)userFeedback
-    NS_SWIFT_NAME(capture(userFeedback:));
+    NS_SWIFT_NAME(capture(userFeedback:)) DEPRECATED_MSG_ATTRIBUTE(
+        "Use SentrySDK.captureFeedback or use or configure our new managed UX with "
+        "SentryOptions.configureUserFeedback.");
+
+/**
+ * Captures user feedback that was manually gathered and sends it to Sentry.
+ * @param feedback The feedback to send to Sentry.
+ * @note If you'd prefer not to have to build the UI required to gather the feedback from the user,
+ * see @c SentryOptions.configureUserFeedback to customize a fully managed integration. See
+ * https://docs.sentry.io/platforms/apple/user-feedback/ for more information.
+ */
++ (void)captureFeedback:(SentryFeedback *)feedback NS_SWIFT_NAME(capture(feedback:));
 
 /**
  * Adds a Breadcrumb to the current Scope of the current Hub. If the total number of breadcrumbs
@@ -270,6 +302,8 @@ SENTRY_NO_INIT
 /**
  * Set user to the current Scope of the current Hub.
  * @param user The user to set to the current Scope.
+ *
+ * @note You must start the SDK before calling this method, otherwise it doesn't set the user.
  */
 + (void)setUser:(nullable SentryUser *)user;
 
@@ -333,25 +367,6 @@ SENTRY_NO_INIT
  * @c SentryOptions.shutdownTimeInterval .
  */
 + (void)close;
-
-#if SENTRY_TARGET_REPLAY_SUPPORTED
-
-/**
- * @warning This is an experimental feature and may still have bugs.
- *
- * Marks this view to be redacted during replays.
- */
-+ (void)replayRedactView:(UIView *)view;
-
-/**
- * @warning This is an experimental feature and may still have bugs.
- *
- * Marks this view to be ignored during redact step
- * of session replay. All its content will be visible in the replay.
- */
-+ (void)replayIgnoreView:(UIView *)view;
-
-#endif
 
 #if SENTRY_TARGET_PROFILING_SUPPORTED
 /**

@@ -9,17 +9,16 @@
 #    import "SentryPerformanceTracker.h"
 #    import "SentrySDK+Private.h"
 #    import "SentrySpanId.h"
+#    import "SentrySpanOperation.h"
 #    import "SentrySwift.h"
 #    import "SentryTimeToDisplayTracker.h"
-#    import "SentryTraceOrigins.h"
+#    import "SentryTraceOrigin.h"
 #    import "SentryTracer.h"
 #    import <SentryInAppLogic.h>
-#    import <SentrySpanOperations.h>
 #    import <UIKit/UIKit.h>
 #    import <objc/runtime.h>
 
-@interface
-SentryUIViewControllerPerformanceTracker ()
+@interface SentryUIViewControllerPerformanceTracker ()
 
 @property (nonatomic, strong) SentryPerformanceTracker *tracker;
 @property (nullable, nonatomic, weak) SentryTimeToDisplayTracker *currentTTDTracker;
@@ -46,7 +45,7 @@ SentryUIViewControllerPerformanceTracker ()
         self.inAppLogic = [[SentryInAppLogic alloc] initWithInAppIncludes:options.inAppIncludes
                                                             inAppExcludes:options.inAppExcludes];
 
-        _enableWaitForFullDisplay = NO;
+        _alwaysWaitForFullDisplay = NO;
         _dispatchQueueWrapper = SentryDependencyContainer.sharedInstance.dispatchQueueWrapper;
     }
     return self;
@@ -69,13 +68,24 @@ SentryUIViewControllerPerformanceTracker ()
         return;
     }
 
+    SentryOptions *options = [SentrySDK options];
+
+    if ([SentrySwizzleClassNameExclude
+            shouldExcludeClassWithClassName:NSStringFromClass([controller class])
+                   swizzleClassNameExcludes:options.swizzleClassNameExcludes]) {
+        SENTRY_LOG_DEBUG(@"Won't track view controller because it's excluded with the option "
+                         @"swizzleClassNameExcludes: %@",
+            controller);
+        callbackToOrigin();
+        return;
+    }
+
     [self limitOverride:@"loadView"
                   target:controller
         callbackToOrigin:callbackToOrigin
                    block:^{
                        SENTRY_LOG_DEBUG(@"Tracking loadView");
-                       [self createTransaction:controller];
-                       [self createTimeToDisplay:controller];
+                       [self startRootSpanFor:controller];
                        [self measurePerformance:@"loadView"
                                          target:controller
                                callbackToOrigin:callbackToOrigin];
@@ -90,14 +100,14 @@ SentryUIViewControllerPerformanceTracker ()
         callbackToOrigin:callbackToOrigin
                    block:^{
                        SENTRY_LOG_DEBUG(@"Tracking viewDidLoad");
-                       [self createTransaction:controller];
+                       [self startRootSpanFor:controller];
                        [self measurePerformance:@"viewDidLoad"
                                          target:controller
                                callbackToOrigin:callbackToOrigin];
                    }];
 }
 
-- (void)createTransaction:(UIViewController *)controller
+- (void)startRootSpanFor:(UIViewController *)controller
 {
     SentrySpanId *spanId
         = objc_getAssociatedObject(controller, &SENTRY_UI_PERFORMANCE_TRACKER_SPAN_ID);
@@ -105,13 +115,22 @@ SentryUIViewControllerPerformanceTracker ()
     // If the user manually calls loadView outside the lifecycle we don't start a new transaction
     // and override the previous id stored.
     if (spanId == nil) {
-        NSString *name = [SwiftDescriptor getObjectClassName:controller];
+
+        // The tracker must create a new transaction and bind it to the scope when there is no
+        // active span. If the user didn't call reportFullyDisplayed, the previous UIViewController
+        // transaction is still bound to the scope because it waits for its children to finish,
+        // including the TTFD span. Therefore, we need to finish the TTFD span so the tracer can
+        // finish and remove itself from the scope. We don't need to finish the transaction because
+        // we already finished it in viewControllerViewDidAppear.
+        if (self.tracker.activeSpanId == nil) {
+            [self.currentTTDTracker finishSpansIfNotFinished];
+        }
+
+        NSString *name = [SwiftDescriptor getViewControllerClassName:controller];
         spanId = [self.tracker startSpanWithName:name
                                       nameSource:kSentryTransactionNameSourceComponent
-                                       operation:SentrySpanOperationUILoad
+                                       operation:SentrySpanOperationUiLoad
                                           origin:SentryTraceOriginAutoUIViewController];
-        SENTRY_LOG_DEBUG(@"Started span with id %@ to track view controller %@.",
-            spanId.sentrySpanIdString, name);
 
         // Use the target itself to store the spanId to avoid using a global mapper.
         objc_setAssociatedObject(controller, &SENTRY_UI_PERFORMANCE_TRACKER_SPAN_ID, spanId,
@@ -121,13 +140,15 @@ SentryUIViewControllerPerformanceTracker ()
         // to serve as an umbrella transaction that will capture every span
         // happening while the transaction is active.
         if (self.tracker.activeSpanId == nil) {
+            SENTRY_LOG_DEBUG(@"Started new transaction with id %@ to track view controller %@.",
+                spanId.sentrySpanIdString, name);
             [self.tracker pushActiveSpan:spanId];
+        } else {
+            SENTRY_LOG_DEBUG(@"Started child span with id %@ to track view controller %@.",
+                spanId.sentrySpanIdString, name);
         }
     }
-}
 
-- (void)createTimeToDisplay:(UIViewController *)controller
-{
     SentrySpan *vcSpan = [self viewControllerPerformanceSpan:controller];
 
     if (![vcSpan isKindOfClass:[SentryTracer self]]) {
@@ -143,23 +164,50 @@ SentryUIViewControllerPerformanceTracker ()
     }
 
     SentryTimeToDisplayTracker *ttdTracker =
-        [[SentryTimeToDisplayTracker alloc] initForController:controller
-                                           waitForFullDisplay:self.enableWaitForFullDisplay
-                                         dispatchQueueWrapper:_dispatchQueueWrapper];
+        [self startTimeToDisplayTrackerForScreen:[SwiftDescriptor getObjectClassName:controller]
+                              waitForFullDisplay:self.alwaysWaitForFullDisplay
+                                          tracer:(SentryTracer *)vcSpan];
 
-    if ([ttdTracker startForTracer:(SentryTracer *)vcSpan]) {
+    if (ttdTracker) {
         objc_setAssociatedObject(controller, &SENTRY_UI_PERFORMANCE_TRACKER_TTD_TRACKER, ttdTracker,
             OBJC_ASSOCIATION_ASSIGN);
-
-        self.currentTTDTracker = ttdTracker;
-    } else {
-        self.currentTTDTracker = nil;
     }
 }
 
 - (void)reportFullyDisplayed
 {
+    SentryTimeToDisplayTracker *tracker = self.currentTTDTracker;
+    if (tracker == nil) {
+        SENTRY_LOG_DEBUG(@"No screen transaction being tracked right now.")
+        return;
+    }
+    if (!tracker.waitForFullDisplay) {
+        SENTRY_LOG_WARN(@"Transaction is not waiting for full display report. You can enable "
+                        @"`enableTimeToFullDisplay` option, or use the waitForFullDisplay "
+                        @"property in our `SentryTracedView` view for SwiftUI.");
+        return;
+    }
     [self.currentTTDTracker reportFullyDisplayed];
+}
+
+- (SentryTimeToDisplayTracker *)startTimeToDisplayTrackerForScreen:(NSString *)screenName
+                                                waitForFullDisplay:(BOOL)waitForFullDisplay
+                                                            tracer:(SentryTracer *)tracer
+{
+    [self.currentTTDTracker finishSpansIfNotFinished];
+
+    SentryTimeToDisplayTracker *ttdTracker =
+        [[SentryTimeToDisplayTracker alloc] initWithName:screenName
+                                      waitForFullDisplay:waitForFullDisplay
+                                    dispatchQueueWrapper:_dispatchQueueWrapper];
+
+    if ([ttdTracker startForTracer:tracer] == NO) {
+        self.currentTTDTracker = nil;
+        return nil;
+    }
+
+    self.currentTTDTracker = ttdTracker;
+    return ttdTracker;
 }
 
 - (void)viewControllerViewWillAppear:(UIViewController *)controller
@@ -172,6 +220,8 @@ SentryUIViewControllerPerformanceTracker ()
         if (spanId == nil || ![self.tracker isSpanAlive:spanId]) {
             // We are no longer tracking this UIViewController, just call the base
             // method.
+            SENTRY_LOG_DEBUG(
+                @"Not tracking UIViewController.viewWillAppear because there is no active span.");
             callbackToOrigin();
             return;
         }
@@ -180,16 +230,13 @@ SentryUIViewControllerPerformanceTracker ()
             SENTRY_LOG_DEBUG(@"Tracking UIViewController.viewWillAppear");
             [self.tracker measureSpanWithDescription:@"viewWillAppear"
                                           nameSource:kSentryTransactionNameSourceComponent
-                                           operation:SentrySpanOperationUILoad
+                                           operation:SentrySpanOperationUiLoad
                                               origin:SentryTraceOriginAutoUIViewController
                                              inBlock:callbackToOrigin];
         };
 
         [self.tracker activateSpan:spanId duringBlock:duringBlock];
-
-        SentryTimeToDisplayTracker *ttdTracker
-            = objc_getAssociatedObject(controller, &SENTRY_UI_PERFORMANCE_TRACKER_TTD_TRACKER);
-        [ttdTracker reportInitialDisplay];
+        [self reportInitialDisplay:controller];
     };
 
     [self limitOverride:@"viewWillAppear"
@@ -210,10 +257,10 @@ SentryUIViewControllerPerformanceTracker ()
 
 /**
  * According to the apple docs, see
- * https://developer.apple.com/documentation/uikit/uiviewcontroller: Not all ‘will’ callback methods
- * are paired with only a ‘did’ callback method. You need to ensure that if you start a process in a
- * ‘will’ callback method, you end the process in both the corresponding ‘did’ and the opposite
- * ‘will’ callback method.
+ * https://developer.apple.com/documentation/uikit/uiviewcontroller: Not all ‘will’ callback
+ * methods are paired with only a ‘did’ callback method. You need to ensure that if you start a
+ * process in a ‘will’ callback method, you end the process in both the corresponding ‘did’ and
+ * the opposite ‘will’ callback method.
  *
  * As stated above @c viewWillAppear doesn't need to be followed by a @c viewDidAppear. A
  * @c viewWillAppear can also be followed by a @c viewWillDisappear. Therefore, we finish the
@@ -242,6 +289,8 @@ SentryUIViewControllerPerformanceTracker ()
         if (spanId == nil || ![self.tracker isSpanAlive:spanId]) {
             // We are no longer tracking this UIViewController, just call the base
             // method.
+            SENTRY_LOG_DEBUG(@"Not tracking UIViewController.%@ because there is no active span.",
+                lifecycleMethod);
             callbackToOrigin();
             return;
         }
@@ -249,7 +298,7 @@ SentryUIViewControllerPerformanceTracker ()
         void (^duringBlock)(void) = ^{
             [self.tracker measureSpanWithDescription:lifecycleMethod
                                           nameSource:kSentryTransactionNameSourceComponent
-                                           operation:SentrySpanOperationUILoad
+                                           operation:SentrySpanOperationUiLoad
                                               origin:SentryTraceOriginAutoUIViewController
                                              inBlock:callbackToOrigin];
         };
@@ -286,6 +335,8 @@ SentryUIViewControllerPerformanceTracker ()
         if (spanId == nil || ![self.tracker isSpanAlive:spanId]) {
             // We are no longer tracking this UIViewController, just call the base
             // method.
+            SENTRY_LOG_DEBUG(@"Not tracking UIViewController.viewWillLayoutSubviews because there "
+                             @"is no active span.");
             callbackToOrigin();
             return;
         }
@@ -293,14 +344,14 @@ SentryUIViewControllerPerformanceTracker ()
         void (^duringBlock)(void) = ^{
             [self.tracker measureSpanWithDescription:@"viewWillLayoutSubviews"
                                           nameSource:kSentryTransactionNameSourceComponent
-                                           operation:SentrySpanOperationUILoad
+                                           operation:SentrySpanOperationUiLoad
                                               origin:SentryTraceOriginAutoUIViewController
                                              inBlock:callbackToOrigin];
 
             SentrySpanId *layoutSubViewId =
                 [self.tracker startSpanWithName:@"layoutSubViews"
                                      nameSource:kSentryTransactionNameSourceComponent
-                                      operation:SentrySpanOperationUILoad
+                                      operation:SentrySpanOperationUiLoad
                                          origin:SentryTraceOriginAutoUIViewController];
 
             objc_setAssociatedObject(controller,
@@ -308,6 +359,16 @@ SentryUIViewControllerPerformanceTracker ()
                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         };
         [self.tracker activateSpan:spanId duringBlock:duringBlock];
+
+        // According to the Apple docs
+        // (https://developer.apple.com/documentation/uikit/uiviewcontroller/1621510-viewwillappear),
+        // viewWillAppear should be called for before the UIViewController is added to the view
+        // hierarchy. There are some edge cases, though, when this doesn't happen, and we saw
+        // customers' transactions also proofing this. Therefore, we must also report the
+        // initial display here, as the customers' transactions had spans for
+        // `viewWillLayoutSubviews`.
+
+        [self reportInitialDisplay:controller];
     };
 
     [self limitOverride:@"viewWillLayoutSubviews"
@@ -326,6 +387,8 @@ SentryUIViewControllerPerformanceTracker ()
         if (spanId == nil || ![self.tracker isSpanAlive:spanId]) {
             // We are no longer tracking this UIViewController, just call the base
             // method.
+            SENTRY_LOG_DEBUG(@"Not tracking UIViewController.viewDidLayoutSubviews because there "
+                             @"is no active span.");
             callbackToOrigin();
             return;
         }
@@ -340,7 +403,7 @@ SentryUIViewControllerPerformanceTracker ()
 
             [self.tracker measureSpanWithDescription:@"viewDidLayoutSubviews"
                                           nameSource:kSentryTransactionNameSourceComponent
-                                           operation:SentrySpanOperationUILoad
+                                           operation:SentrySpanOperationUiLoad
                                               origin:SentryTraceOriginAutoUIViewController
                                              inBlock:callbackToOrigin];
 
@@ -359,9 +422,10 @@ SentryUIViewControllerPerformanceTracker ()
 }
 
 /**
- * When a custom UIViewController is a subclass of another custom UIViewController, the SDK swizzles
- * both functions, which would create one span for each UIViewController leading to duplicate spans
- * in the transaction. To fix this, we only allow one span per lifecycle method at a time.
+ * When a custom UIViewController is a subclass of another custom UIViewController, the SDK
+ * swizzles both functions, which would create one span for each UIViewController leading to
+ * duplicate spans in the transaction. To fix this, we only allow one span per lifecycle method
+ * at a time.
  */
 - (void)limitOverride:(NSString *)description
                target:(UIViewController *)viewController
@@ -385,6 +449,9 @@ SentryUIViewControllerPerformanceTracker ()
         block();
         [spansInExecution removeObject:description];
     } else {
+        SENTRY_LOG_DEBUG(@"Skipping tracking the method %@ for %@, cause we're already tracking it "
+                         @"for a parent or child class.",
+            description, viewController);
         callbackToOrigin();
     }
 }
@@ -402,11 +469,18 @@ SentryUIViewControllerPerformanceTracker ()
     } else {
         [self.tracker measureSpanWithDescription:description
                                       nameSource:kSentryTransactionNameSourceComponent
-                                       operation:SentrySpanOperationUILoad
+                                       operation:SentrySpanOperationUiLoad
                                           origin:SentryTraceOriginAutoUIViewController
                                     parentSpanId:spanId
                                          inBlock:callbackToOrigin];
     }
+}
+
+- (void)reportInitialDisplay:(UIViewController *)controller
+{
+    SentryTimeToDisplayTracker *ttdTracker
+        = objc_getAssociatedObject(controller, &SENTRY_UI_PERFORMANCE_TRACKER_TTD_TRACKER);
+    [ttdTracker reportInitialDisplay];
 }
 
 @end

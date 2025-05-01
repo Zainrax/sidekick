@@ -41,6 +41,7 @@ class SentrySessionReplay: NSObject {
     private let touchTracker: SentryTouchTracker?
     private let dispatchQueue: SentryDispatchQueueWrapper
     private let lock = NSLock()
+    var replayTags: [String: Any]?
     
     var isRunning: Bool {
         displayLink.isRunning()
@@ -96,7 +97,7 @@ class SentrySessionReplay: NSObject {
         delegate?.sessionReplayStarted(replayId: sessionReplayId)
     }
 
-    func pause() {
+    func pauseSessionMode() {
         lock.lock()
         defer { lock.unlock() }
         
@@ -104,7 +105,7 @@ class SentrySessionReplay: NSObject {
         self.videoSegmentStart = nil
     }
     
-    func stop() {
+    func pause() {
         lock.lock()
         defer { lock.unlock() }
         
@@ -130,7 +131,7 @@ class SentrySessionReplay: NSObject {
         videoSegmentStart = nil
         displayLink.link(withTarget: self, selector: #selector(newFrame(_:)))
     }
-
+  
     func captureReplayFor(event: Event) {
         guard isRunning else { return }
 
@@ -185,7 +186,7 @@ class SentrySessionReplay: NSObject {
         
         if let sessionStart = sessionStart, isFullSession && now.timeIntervalSince(sessionStart) > replayOptions.maximumDuration {
             reachedMaximumDuration = true
-            stop()
+            pause()
             return
         }
 
@@ -248,6 +249,7 @@ class SentrySessionReplay: NSObject {
     private func captureSegment(segment: Int, video: SentryVideoInfo, replayId: SentryId, replayType: SentryReplayType) {
         let replayEvent = SentryReplayEvent(eventId: replayId, replayStartTimestamp: video.start, replayType: replayType, segmentId: segment)
         
+        replayEvent.sdk = self.replayOptions.sdkInfo
         replayEvent.timestamp = video.end
         replayEvent.urls = video.screens
         
@@ -255,10 +257,18 @@ class SentrySessionReplay: NSObject {
 
         var events = convertBreadcrumbs(breadcrumbs: breadcrumbs, from: video.start, until: video.end)
         if let touchTracker = touchTracker {
-            events.append(contentsOf: touchTracker.replayEvents(from: video.start, until: video.end))
+            events.append(contentsOf: touchTracker.replayEvents(from: videoSegmentStart ?? video.start, until: video.end))
             touchTracker.flushFinishedEvents()
         }
-
+        
+        if segment == 0 {
+            if let customOptions = replayTags {
+                events.append(SentryRRWebOptionsEvent(timestamp: video.start, customOptions: customOptions))
+            } else {
+                events.append(SentryRRWebOptionsEvent(timestamp: video.start, options: self.replayOptions))
+            }
+        }
+        
         let recording = SentryReplayRecording(segmentId: segment, video: video, extraEvents: events)
                 
         delegate?.sessionReplayNewSegment(replayEvent: replayEvent, replayRecording: recording, videoUrl: video.path)
@@ -269,13 +279,25 @@ class SentrySessionReplay: NSObject {
             SentryLog.debug("Could not delete replay segment from disk: \(error.localizedDescription)")
         }
     }
-
+    
     private func convertBreadcrumbs(breadcrumbs: [Breadcrumb], from: Date, until: Date) -> [any SentryRRWebEventProtocol] {
-        return breadcrumbs.filter {
-            guard let time = $0.timestamp, time >= from && time < until else { return false }
-            return true
+        var filteredResult: [Breadcrumb] = []
+        var lastNavigationTime: Date = from.addingTimeInterval(-1)
+        
+        for breadcrumb in breadcrumbs {
+            guard let time = breadcrumb.timestamp, time >= from && time < until else { continue }
+            
+            // If it's a "navigation" breadcrumb, check the timestamp difference from the previous breadcrumb.
+            // Skip any breadcrumbs that have occurred within 50ms of the last one,
+            // as these represent child view controllers that don’t need their own navigation breadcrumb.
+            if breadcrumb.type == "navigation" {
+                if time.timeIntervalSince(lastNavigationTime) < 0.05 { continue }
+                lastNavigationTime = time
+            }
+            filteredResult.append(breadcrumb)
         }
-        .compactMap(breadcrumbConverter.convert(from:))
+        
+        return filteredResult.compactMap(breadcrumbConverter.convert(from:))
     }
     
     private func takeScreenshot() {
@@ -291,7 +313,7 @@ class SentrySessionReplay: NSObject {
 
         let screenName = delegate?.currentScreenNameForSessionReplay()
         
-        screenshotProvider.image(view: rootView, options: replayOptions) { [weak self] screenshot in
+        screenshotProvider.image(view: rootView) { [weak self] screenshot in
             self?.newImage(image: screenshot, forScreen: screenName)
         }
     }

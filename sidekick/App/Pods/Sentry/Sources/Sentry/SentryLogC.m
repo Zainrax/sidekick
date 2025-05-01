@@ -1,3 +1,4 @@
+#import "SentryLogC.h"
 #import "SentryAsyncSafeLog.h"
 #import "SentryFileManager.h"
 #import "SentryInternalCDefines.h"
@@ -6,14 +7,14 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-void
-sentry_initializeAsyncLogFile(void)
+@implementation SentryAsyncLogWrapper
++ (void)initializeAsyncLogFile
 {
     const char *asyncLogPath =
-        [[sentryApplicationSupportPath() stringByAppendingPathComponent:@"async.log"] UTF8String];
+        [[sentryStaticCachesPath() stringByAppendingPathComponent:@"async.log"] UTF8String];
 
     NSError *error;
-    if (!createDirectoryIfNotExists(sentryApplicationSupportPath(), &error)) {
+    if (!createDirectoryIfNotExists(sentryStaticCachesPath(), &error)) {
         SENTRY_LOG_ERROR(@"Failed to initialize directory for async log file: %@", error);
         return;
     }
@@ -25,5 +26,6 @@ sentry_initializeAsyncLogFile(void)
             @"Could not open a handle to specified path for async logging %s", asyncLogPath);
     };
 }
+@end
 
 NS_ASSUME_NONNULL_END

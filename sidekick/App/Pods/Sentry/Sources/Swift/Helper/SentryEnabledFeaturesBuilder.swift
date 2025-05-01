@@ -1,9 +1,12 @@
 import Foundation
 
 @objcMembers class SentryEnabledFeaturesBuilder: NSObject {
-    
-    static func getEnabledFeatures(options: Options) -> [String] {
-        
+
+    // swiftlint:disable cyclomatic_complexity
+    static func getEnabledFeatures(options: Options?) -> [String] {
+        guard let options = options else {
+            return []
+        }
         var features: [String] = []
         
         if options.enableCaptureFailedRequests {
@@ -35,11 +38,26 @@ import Foundation
         if options.swiftAsyncStacktraces {
             features.append("swiftAsyncStacktraces")
         }
-        
-        if options.enableMetrics {
-            features.append("metrics")
+
+#if os(iOS) || os(tvOS) || targetEnvironment(macCatalyst)
+        if options.enableAppHangTrackingV2 {
+            features.append("appHangTrackingV2")
         }
+#endif //os(iOS) || os(tvOS) || targetEnvironment(macCatalyst)
         
+        if options.enablePersistingTracesWhenCrashing {
+            features.append("persistingTracesWhenCrashing")
+        }
+
+#if os(iOS) && !SENTRY_NO_UIKIT
+        if options.sessionReplay.enableExperimentalViewRenderer {
+            features.append("experimentalViewRenderer")
+        }
+        if options.sessionReplay.enableFastViewRendering {
+            features.append("fastViewRendering")
+        }
+#endif // #if os(iOS) && !SENTRY_NO_UIKIT
         return features
     }
+    // swiftlint:enable cyclomatic_complexity
 }

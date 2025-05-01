@@ -2,8 +2,14 @@
 #import "SentryDataCategory.h"
 #import "SentryDiscardReason.h"
 
-@class SentrySession, SentryEnvelopeItem, SentryId, SentryAttachment, SentryThreadInspector,
-    SentryReplayEvent, SentryReplayRecording, SentryEnvelope;
+@class SentryAttachment;
+@class SentryEnvelope;
+@class SentryEnvelopeItem;
+@class SentryId;
+@class SentryReplayEvent;
+@class SentryReplayRecording;
+@class SentrySession;
+@class SentryThreadInspector;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -15,8 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
-@interface
-SentryClient ()
+@interface SentryClient ()
 
 @property (nonatomic, strong)
     NSMutableArray<id<SentryClientAttachmentProcessor>> *attachmentProcessors;
@@ -36,6 +41,10 @@ SentryClient ()
 - (SentryId *)captureCrashEvent:(SentryEvent *)event
                     withSession:(SentrySession *)session
                       withScope:(SentryScope *)scope;
+
+- (void)saveCrashTransaction:(SentryTransaction *)transaction
+                   withScope:(SentryScope *)scope
+    NS_SWIFT_NAME(saveCrashTransaction(transaction:scope:));
 
 - (SentryId *)captureEvent:(SentryEvent *)event
                   withScope:(SentryScope *)scope

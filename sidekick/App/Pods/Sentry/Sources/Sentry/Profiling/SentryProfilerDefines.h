@@ -3,7 +3,6 @@
 #if SENTRY_TARGET_PROFILING_SUPPORTED
 
 #    import "SentryDefines.h"
-#    import <Foundation/Foundation.h>
 
 typedef NS_ENUM(NSUInteger, SentryProfilerMode) {
     SentryProfilerModeTrace,
@@ -16,7 +15,7 @@ typedef NS_ENUM(NSUInteger, SentryProfilerTruncationReason) {
     SentryProfilerTruncationReasonAppMovedToBackground,
 };
 
-static NSTimeInterval kSentryProfilerChunkExpirationInterval = 10;
+static NSTimeInterval kSentryProfilerChunkExpirationInterval = 60;
 static NSTimeInterval kSentryProfilerTimeoutInterval = 30;
 
 NS_ASSUME_NONNULL_BEGIN

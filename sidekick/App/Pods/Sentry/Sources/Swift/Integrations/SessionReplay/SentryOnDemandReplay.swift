@@ -28,13 +28,13 @@ class SentryOnDemandReplay: NSObject, SentryReplayVideoMaker {
     private let workingQueue: SentryDispatchQueueWrapper
     private var _frames = [SentryReplayFrame]()
     
-    #if TEST || TESTCI || DEBUG
+    #if SENTRY_TEST || SENTRY_TEST_CI || DEBUG
     //This is exposed only for tests, no need to make it thread safe.
     var frames: [SentryReplayFrame] {
         get { _frames }
         set { _frames = newValue }
     }
-    #endif // TEST || TESTCI || DEBUG
+    #endif // SENTRY_TEST || SENTRY_TEST_CI || DEBUG
     var videoScale: Float = 1
     var bitRate = 20_000
     var frameRate = 1
@@ -65,13 +65,13 @@ class SentryOnDemandReplay: NSObject, SentryReplayVideoMaker {
     convenience init(outputPath: String) {
         self.init(outputPath: outputPath,
                   workingQueue: SentryDispatchQueueWrapper(name: "io.sentry.onDemandReplay", attributes: nil),
-                  dateProvider: SentryCurrentDateProvider())
+                  dateProvider: SentryDefaultCurrentDateProvider())
     }
     
     convenience init(withContentFrom outputPath: String) {
         self.init(withContentFrom: outputPath,
                   workingQueue: SentryDispatchQueueWrapper(name: "io.sentry.onDemandReplay", attributes: nil),
-                  dateProvider: SentryCurrentDateProvider())
+                  dateProvider: SentryDefaultCurrentDateProvider())
     }
     
     func addFrameAsync(image: UIImage, forScreen: String?) {

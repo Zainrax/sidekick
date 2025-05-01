@@ -1,11 +1,17 @@
 #import <Foundation/Foundation.h>
 
-#import "SentryDefines.h"
-#import "SentrySerializable.h"
+#if __has_include(<Sentry/Sentry.h>)
+#    import <Sentry/SentryDefines.h>
+#    import <Sentry/SentrySerializable.h>
+#else
+#    import <SentryWithoutUIKit/SentryDefines.h>
+#    import <SentryWithoutUIKit/SentrySerializable.h>
+#endif
 
 NS_ASSUME_NONNULL_BEGIN
 
-@class SentryNSError, SentryMechanismMeta;
+@class SentryNSError;
+@class SentryMechanismMeta;
 
 NS_SWIFT_NAME(Mechanism)
 @interface SentryMechanism : NSObject <SentrySerializable>

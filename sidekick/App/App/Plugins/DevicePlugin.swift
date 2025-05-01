@@ -117,6 +117,10 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     private var isMonitoringActive = false
     private var isMonitoringInitialized = false
     
+    private var knownDefunctConnections = Set<String>()
+    private let CONNECTION_CHECK_INTERVAL: TimeInterval = 2.0
+    private let DISCONNECT_DETECTION_TIMEOUT: TimeInterval = 5.0
+    
     public override func load() {
         super.load()
         
@@ -156,8 +160,8 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             self.isMonitoringInitialized = true
         }
         
-        // Set up periodic monitoring
-        connectionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        // Set up periodic monitoring with shorter interval for faster disconnect detection
+        connectionMonitorTimer = Timer.scheduledTimer(withTimeInterval: CONNECTION_CHECK_INTERVAL, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             
             self.checkCurrentConnection { isConnected in
@@ -201,7 +205,10 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     "canRetry": true
                 ])
             case .connectionLost:
-                notifyListeners("onAPConnectionLost", data: ["status": "lost"])
+                notifyListeners("onAPConnectionLost", data: [
+                    "status": "lost",
+                    "message": "Connection to device network lost"
+                ])
             default:
                 break
             }
@@ -223,8 +230,14 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         // Clean up any existing discovery
         cleanupDiscovery()
         
+        // Clear known defunct connections
+        knownDefunctConnections.removeAll()
+        
+        // Create parameters with improved error handling
         let parameters = NWParameters()
         parameters.requiredInterfaceType = .wifi
+        // Add a specific expiration timeout
+        parameters.expiredDNSBehavior = .systemDefault
         
         serviceBrowser = NWBrowser(for: .bonjour(type: type, domain: domain), using: parameters)
         serviceBrowser?.stateUpdateHandler = { [weak self] newState in
@@ -237,15 +250,38 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                 self.discoveryRetryCount = 0
                 
             case .failed(let error):
+                // Improved handling for defunct connection errors
+                let errorDescription = error.localizedDescription
+                
+                if case let NWError.dns(dnsError) = error {
+                    print("DNS Error during discovery: \(dnsError)")
+                }
+                
+                // Check if this is the -65569 (DefunctConnection) error
+                if errorDescription.contains("DefunctConnection") || errorDescription.contains("-65569") {
+                    print("Defunct connection error detected, will restart browser")
+                    
+                    // Don't report this as an error to the UI if we're going to retry
+                    if self.discoveryRetryCount < 3 {
+                        // Schedule immediate retry for this specific error
+                        self.scheduleDiscoveryRetry(immediate: true)
+                        return
+                    }
+                }
+                
                 self.updateDiscoveryState(.failed)
-                // Notify listeners of error
+                
+                // Only notify listeners of fatal errors to reduce UI noise
+                let isFatal = self.discoveryRetryCount >= 3
                 self.notifyListeners("onDiscoveryError", data: [
-                    "error": error.localizedDescription,
-                    "fatal": self.discoveryRetryCount >= 3
+                    "error": errorDescription,
+                    "fatal": isFatal
                 ])
                 
-                // Schedule retry if needed
-                self.scheduleDiscoveryRetry()
+                if !isFatal {
+                    // Schedule retry if not fatal
+                    self.scheduleDiscoveryRetry()
+                }
                 
             case .cancelled:
                 if self.discoveryState == .restarting {
@@ -274,6 +310,11 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     let (name, port) = extractServiceDetails(from: result.endpoint)
                     let endpoint = "\(name).local"
                     
+                    // Skip verification for known defunct connections
+                    if self.knownDefunctConnections.contains(endpoint) {
+                        continue
+                    }
+                    
                     // Verify the service is reachable
                     self.verifyServiceReachability(endpoint: endpoint) { isReachable in
                         if isReachable {
@@ -282,6 +323,9 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                                 "host": endpoint,
                                 "port": port
                             ])
+                        } else {
+                            // Track defunct connections to avoid repeated verification attempts
+                            self.knownDefunctConnections.insert(endpoint)
                         }
                     }
                     
@@ -292,12 +336,21 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     default:
                         result.endpoint.debugDescription
                     }
+                    
+                    // Remove from defunct connections if it was in there
+                    self.knownDefunctConnections.remove(endpoint)
+                    
                     self.notifyListeners("onServiceLost", data: ["endpoint": endpoint])
                     
                 case .changed(old: _, new: let new, flags: _):
                     // Extract service details
                     let (name, port) = extractServiceDetails(from: new.endpoint)
                     let endpoint = "\(name).local"
+                    
+                    // Skip verification for known defunct connections
+                    if self.knownDefunctConnections.contains(endpoint) {
+                        continue
+                    }
                     
                     // Verify the service is reachable
                     self.verifyServiceReachability(endpoint: endpoint) { isReachable in
@@ -307,6 +360,9 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                                 "host": endpoint,
                                 "port": port
                             ])
+                        } else {
+                            // Track defunct connections
+                            self.knownDefunctConnections.insert(endpoint)
                         }
                     }
                 case .identical:
@@ -323,8 +379,10 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
     }
     
     private func startDiscovery() {
+        // Create parameters with timeout settings
         let parameters = NWParameters()
         parameters.requiredInterfaceType = .wifi
+        parameters.expiredDNSBehavior = .systemDefault
         
         serviceBrowser = NWBrowser(for: .bonjour(type: type, domain: domain), using: parameters)
         serviceBrowser?.stateUpdateHandler = { [weak self] newState in
@@ -336,12 +394,28 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                 self.discoveryRetryCount = 0
                 
             case .failed(let error):
+                let errorDescription = error.localizedDescription
+                
+                // Special handling for defunct connection errors
+                if errorDescription.contains("DefunctConnection") || errorDescription.contains("-65569") {
+                    print("Defunct connection error detected in restart, retrying")
+                    
+                    if self.discoveryRetryCount < 3 {
+                        // Schedule immediate retry for this specific error
+                        self.scheduleDiscoveryRetry(immediate: true)
+                        return
+                    }
+                }
+                
                 self.updateDiscoveryState(.failed)
                 self.notifyListeners("onDiscoveryError", data: [
-                    "error": error.localizedDescription,
+                    "error": errorDescription,
                     "fatal": self.discoveryRetryCount >= 3
                 ])
-                self.scheduleDiscoveryRetry()
+                
+                if self.discoveryRetryCount < 3 {
+                    self.scheduleDiscoveryRetry()
+                }
                 
             case .cancelled:
                 if self.discoveryState == .restarting {
@@ -367,6 +441,11 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     let (name, port) = extractServiceDetails(from: result.endpoint)
                     let endpoint = "\(name).local"
                     
+                    // Skip verification for endpoints we already know are defunct
+                    if self.knownDefunctConnections.contains(endpoint) {
+                        continue
+                    }
+                    
                     self.verifyServiceReachability(endpoint: endpoint) { isReachable in
                         if isReachable {
                             self.notifyListeners("onServiceResolved", data: [
@@ -374,6 +453,8 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                                 "host": endpoint,
                                 "port": port
                             ])
+                        } else {
+                            self.knownDefunctConnections.insert(endpoint)
                         }
                     }
                     
@@ -384,6 +465,10 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     default:
                         result.endpoint.debugDescription
                     }
+                    
+                    // Clean up tracking
+                    self.knownDefunctConnections.remove(endpoint)
+                    
                     self.notifyListeners("onServiceLost", data: ["endpoint": endpoint])
                     
                 case .changed, .identical:
@@ -403,7 +488,11 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         let host = NWEndpoint.Host(endpoint)
         let port = NWEndpoint.Port(integerLiteral: 80)
         
-        let connection = NWConnection(host: host, port: port, using: .tcp)
+        // Create parameters optimized for fast verification
+        let parameters = NWParameters.tcp
+        parameters.prohibitedInterfaceTypes = [.cellular]
+        
+        let connection = NWConnection(host: host, port: port, using: parameters)
         
         connection.stateUpdateHandler = { state in
             switch state {
@@ -418,7 +507,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                 // Connection failed
                 connection.cancel()
                 DispatchQueue.main.async {
-                    print("Connection failed: \(error)")
+                    print("Connection verification failed: \(error)")
                     completion(false)
                 }
                 
@@ -432,16 +521,21 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             }
         }
         
-        // Start the connection attempt with a timeout
+        // Start the connection attempt with a shorter timeout (1.5 seconds)
         connection.start(queue: .global())
         
-        // Set timeout
-        DispatchQueue.global().asyncAfter(deadline: .now() + 3.0) {
-            connection.cancel()
+        // Set shorter timeout for faster verification
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) {
+            if connection.state != .cancelled && connection.state != .ready {
+                connection.cancel()
+                DispatchQueue.main.async {
+                    completion(false)
+                }
+            }
         }
     }
     
-    private func scheduleDiscoveryRetry() {
+    private func scheduleDiscoveryRetry(immediate: Bool = false) {
         // Cancel any existing retry timer
         discoveryRetryTimer?.invalidate()
         
@@ -454,7 +548,8 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         }
         
         // Calculate backoff delay - simple exponential backoff
-        let delaySeconds = 5.0 * pow(2.0, Double(discoveryRetryCount - 1))
+        // Use immediate retry for specific errors like defunct connections
+        let delaySeconds = immediate ? 0.5 : 5.0 * pow(2.0, Double(discoveryRetryCount - 1))
         
         updateDiscoveryState(.restarting)
         
@@ -468,18 +563,37 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
     
-    private func cleanupDiscovery() {
-        // Cancel any existing retry timer
-        discoveryRetryTimer?.invalidate()
-        discoveryRetryTimer = nil
+    private func startConnectionMonitoring() {
+        // Cancel any existing monitoring
+        connectionMonitorTimer?.invalidate()
         
-        // Stop browser if active
-        if let browser = serviceBrowser {
-            browser.cancel()
+        // Start periodic connection checks with shorter interval for faster disconnect detection
+        connectionMonitorTimer = Timer.scheduledTimer(withTimeInterval: CONNECTION_CHECK_INTERVAL, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            
+            if self.connectionState == .connected {
+                self.checkConnectionHealth()
+            }
         }
-        serviceBrowser = nil
     }
-
+    
+    private func checkConnectionHealth() {
+        checkCurrentConnection { [weak self] isConnected in
+            guard let self = self else { return }
+            
+            if !isConnected && self.connectionState == .connected {
+                // Connection lost - respond faster
+                self.connectionMonitorTimer?.invalidate()
+                self.updateConnectionState(.connectionLost)
+                
+                // Notify listeners with clear message
+                self.notifyListeners("onAPConnectionLost", data: [
+                    "status": "lost",
+                    "message": "Connection to device network lost"
+                ])
+            }
+        }
+    }
     
     @objc func stopDiscoverDevices(_ call: CAPPluginCall) {
         // Only attempt to stop if we're in an active state
@@ -500,6 +614,18 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         updateDiscoveryState(.inactive)
         
         call.resolve(["success": true])
+    }
+    
+    private func cleanupDiscovery() {
+        // Cancel any existing retry timer
+        discoveryRetryTimer?.invalidate()
+        discoveryRetryTimer = nil
+        
+        // Stop browser if active
+        if let browser = serviceBrowser {
+            browser.cancel()
+        }
+        serviceBrowser = nil
     }
     
     @objc func checkDeviceConnection(_ call: CAPPluginCall) {
@@ -595,33 +721,6 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
     
-    private func startConnectionMonitoring() {
-        // Cancel any existing monitoring
-        connectionMonitorTimer?.invalidate()
-        
-        // Start periodic connection checks
-        connectionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            
-            if self.connectionState == .connected {
-                self.checkConnectionHealth()
-            }
-        }
-    }
-    
-    private func checkConnectionHealth() {
-        checkCurrentConnection { [weak self] isConnected in
-            guard let self = self else { return }
-            
-            if !isConnected && self.connectionState == .connected {
-                // Connection lost
-                self.connectionMonitorTimer?.invalidate()
-                self.updateConnectionState(.connectionLost)
-            }
-        }
-    }
-    
-    
     @objc func disconnectFromDeviceAP(_ call: CAPPluginCall) {
         guard let bridge = self.bridge else { 
             return call.reject("Could not access bridge") 
@@ -637,7 +736,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
         updateConnectionState(.disconnecting)
         
         // Set a timeout for disconnection
-        let disconnectTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: false) { [weak self] _ in
+        let disconnectTimeoutTimer = Timer.scheduledTimer(withTimeInterval: DISCONNECT_DETECTION_TIMEOUT, repeats: false) { [weak self] _ in
             guard let self = self else { return }
             
             if self.connectionState == .disconnecting {
@@ -723,7 +822,7 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
             bridge.releaseCall(withID: call.callbackId)
         }
     }
-
+    
     @objc private func checkCurrentConnection(completion: @escaping (Bool) -> Void) {
         if #available(iOS 14.0, *) {
             NEHotspotNetwork.fetchCurrent { (currentConfiguration) in
@@ -748,7 +847,6 @@ public class DevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     return
                 }
             }
-            
             completion(false)
         }
     }

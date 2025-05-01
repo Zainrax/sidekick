@@ -42,7 +42,7 @@ sentry_manageTraceProfilerOnStartSDK(SentryOptions *options, SentryHub *hub)
     [SentryDependencyContainer.sharedInstance.dispatchQueueWrapper dispatchAsyncWithBlock:^{
         BOOL shouldStopAndTransmitLaunchProfile = options.profilesSampleRate != nil;
 #    if SENTRY_HAS_UIKIT
-        if (SentryUIViewControllerPerformanceTracker.shared.enableWaitForFullDisplay) {
+        if (SentryUIViewControllerPerformanceTracker.shared.alwaysWaitForFullDisplay) {
             shouldStopAndTransmitLaunchProfile = NO;
         }
 #    endif // SENTRY_HAS_UIKIT
@@ -56,17 +56,17 @@ sentry_manageTraceProfilerOnStartSDK(SentryOptions *options, SentryHub *hub)
 }
 
 @implementation SentryProfiler {
-    std::shared_ptr<SamplingProfiler> _samplingProfiler;
+    std::unique_ptr<SamplingProfiler> _samplingProfiler;
 }
 
 + (void)load
 {
-#    if defined(TEST) || defined(TESTCI)
+#    if defined(SENTRY_TEST) || defined(SENTRY_TEST_CI)
     // we want to allow starting a launch profile from here for UI tests, but not unit tests
     if (NSProcessInfo.processInfo.environment[@"--io.sentry.ui-test.test-name"] == nil) {
         return;
     }
-#    endif // defined(TEST) || defined(TESTCI)
+#    endif // defined(SENTRY_TEST) || defined(SENTRY_TEST_CI)
     sentry_startLaunchProfile();
 }
 
@@ -165,12 +165,14 @@ sentry_manageTraceProfilerOnStartSDK(SentryOptions *options, SentryHub *hub)
 
     SentryProfilerState *const state = [[SentryProfilerState alloc] init];
     self.state = state;
-    _samplingProfiler = std::make_shared<SamplingProfiler>(
+    _samplingProfiler = std::make_unique<SamplingProfiler>(
         [state](auto &backtrace) {
             Backtrace backtraceCopy = backtrace;
             backtraceCopy.absoluteTimestamp
                 = SentryDependencyContainer.sharedInstance.dateProvider.systemTime;
-            [state appendBacktrace:backtraceCopy];
+            @autoreleasepool {
+                [state appendBacktrace:backtraceCopy];
+            }
         },
         kSentryProfilerFrequencyHz);
     _samplingProfiler->startSampling();

@@ -33,8 +33,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface
-SentrySpan ()
+@interface SentrySpan ()
 @end
 
 @implementation SentrySpan {
@@ -43,7 +42,6 @@ SentrySpan ()
     NSObject *_stateLock;
     BOOL _isFinished;
     uint64_t _startSystemTime;
-    LocalMetricsAggregator *localMetricsAggregator;
 #if SENTRY_HAS_UIKIT
     NSUInteger initTotalFrames;
     NSUInteger initSlowFrames;
@@ -311,14 +309,6 @@ SentrySpan ()
     return self.tracer.traceContext;
 }
 
-- (LocalMetricsAggregator *)getLocalMetricsAggregator
-{
-    if (localMetricsAggregator == nil) {
-        localMetricsAggregator = [[LocalMetricsAggregator alloc] init];
-    }
-    return localMetricsAggregator;
-}
-
 - (NSDictionary *)serialize
 {
     NSMutableDictionary *mutableDictionary = @{
@@ -358,10 +348,6 @@ SentrySpan ()
 
     [mutableDictionary setValue:@(self.startTimestamp.timeIntervalSince1970)
                          forKey:@"start_timestamp"];
-
-    if (localMetricsAggregator != nil) {
-        mutableDictionary[@"_metrics_summary"] = [localMetricsAggregator serialize];
-    }
 
     @synchronized(_data) {
         NSMutableDictionary *data = _data.mutableCopy;
