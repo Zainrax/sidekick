@@ -175,7 +175,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 				// Schedule 1-hour reminder
 				notifications.push({
 					id: UPLOAD_REMINDER_1H_ID,
-					title: "Upload Reminder (1 Hour)",
+					title: "Upload Reminder",
 					body: uploadBody,
 					schedule: { at: new Date(oneHour) },
 					smallIcon: "ic_stat_notify_upload",
@@ -184,8 +184,8 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 
 				// Schedule 6-hour reminder
 				notifications.push({
-					id: UPLOAD_REMINDER_6H_ID,
-					title: "Upload Reminder (6 Hours)",
+					id: UPLOAD_REMINDER_1H_ID,
+					title: "Upload Reminder",
 					body: uploadBody,
 					schedule: { at: new Date(sixHours) },
 					smallIcon: "ic_stat_notify_upload",
@@ -195,7 +195,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 				// Schedule 12-hour reminder
 				notifications.push({
 					id: UPLOAD_REMINDER_12H_ID,
-					title: "Upload Reminder (12 Hours)",
+					title: "Upload Reminder",
 					body: uploadBody,
 					schedule: { at: new Date(twelveHours) },
 					smallIcon: "ic_stat_notify_upload",
