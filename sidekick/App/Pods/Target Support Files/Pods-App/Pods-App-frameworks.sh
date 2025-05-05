@@ -187,6 +187,8 @@ if [[ "$CONFIGURATION" == "Debug" ]]; then
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorDialog/CapacitorDialog.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorFilesystem/CapacitorFilesystem.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorGeolocation/CapacitorGeolocation.framework"
+  install_framework "${BUILT_PRODUCTS_DIR}/CapacitorIosAutofillSavePassword/CapacitorIosAutofillSavePassword.framework"
+  install_framework "${BUILT_PRODUCTS_DIR}/CapacitorLocalNotifications/CapacitorLocalNotifications.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorNativeSettings/CapacitorNativeSettings.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorNetwork/CapacitorNetwork.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorPreferences/CapacitorPreferences.framework"
@@ -195,6 +197,7 @@ if [[ "$CONFIGURATION" == "Debug" ]]; then
   install_framework "${BUILT_PRODUCTS_DIR}/SentryCapacitor/SentryCapacitor.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/ZIPFoundation/ZIPFoundation.framework"
   install_framework "${PODS_ROOT}/../../shared/build/cocoapods/framework/shared.framework"
+  install_framework "${PODS_XCFRAMEWORKS_BUILD_DIR}/IONGeolocationLib/IONGeolocationLib.framework"
 fi
 if [[ "$CONFIGURATION" == "Release" ]]; then
   install_framework "${BUILT_PRODUCTS_DIR}/Capacitor/Capacitor.framework"
@@ -208,6 +211,8 @@ if [[ "$CONFIGURATION" == "Release" ]]; then
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorDialog/CapacitorDialog.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorFilesystem/CapacitorFilesystem.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorGeolocation/CapacitorGeolocation.framework"
+  install_framework "${BUILT_PRODUCTS_DIR}/CapacitorIosAutofillSavePassword/CapacitorIosAutofillSavePassword.framework"
+  install_framework "${BUILT_PRODUCTS_DIR}/CapacitorLocalNotifications/CapacitorLocalNotifications.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorNativeSettings/CapacitorNativeSettings.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorNetwork/CapacitorNetwork.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorPreferences/CapacitorPreferences.framework"
@@ -216,6 +221,7 @@ if [[ "$CONFIGURATION" == "Release" ]]; then
   install_framework "${BUILT_PRODUCTS_DIR}/SentryCapacitor/SentryCapacitor.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/ZIPFoundation/ZIPFoundation.framework"
   install_framework "${PODS_ROOT}/../../shared/build/cocoapods/framework/shared.framework"
+  install_framework "${PODS_XCFRAMEWORKS_BUILD_DIR}/IONGeolocationLib/IONGeolocationLib.framework"
 fi
 if [ "${COCOAPODS_PARALLEL_CODE_SIGN}" == "true" ]; then
   wait
