@@ -411,75 +411,82 @@ export function AudioSettingsTab(props: SettingProps) {
 					</div>
 				</div>
 			</div>
-			<div class="space-y-2 rounded-lg border p-3 pb-0 shadow-sm">
-				<div class="flex items-center justify-between">
-					<label class="block text-sm text-gray-600">Audio Recording</label>
-					<p
-						class="text-sm text-gray-500"
-					>
-						<Switch>
-							<Match
-								when={audioStatus()?.status === "setting_up_long_recording" || audioStatus()?.status === "pending" || initiatingLongRecording()}
-							>
-								<span>Setting up...</span>
-							</Match>
-							<Match when={audioStatus()?.status === "long_recording" || audioStatus()?.status === "test_recording"}>
-								<span>Recording...</span>
-							</Match>
-							<Match when={audioStatus()?.status === "recording"}>
-								<span>Busy with video...</span>
-							</Match>
-						</Switch>
-					</p>
-				</div>
-				<div class="flex space-x-2">
-					<button
-						type="button"
-						disabled={
-							initiatingLongRecording() ||
-							audioStatus()?.status !== "ready"
-						}
-						class="col-span-1 rounded px-4 py-4 w-full text-sm transition bg-blue-500 text-white disabled:bg-gray-300 disabled:text-gray-500"
-						onClick={() => {
-							createTestRecording();
-						}}
-					>
-						10 Sec
-					</button>
-					<Show when={context.devices.get(id())?.hasLongRecordingSupport}>
+			<Show when={audioMode() !== "Disabled" && !audioMode.loading}>
+				<div class="space-y-2 rounded-lg border p-3 pb-0 shadow-sm">
+					<div class="flex items-center justify-between">
+						<label class="block text-sm text-gray-600">Audio Recording</label>
+						<p class="text-sm text-gray-500">
+							<Switch>
+								<Match
+									when={
+										audioStatus()?.status === "setting_up_long_recording" ||
+										audioStatus()?.status === "pending" ||
+										initiatingLongRecording()
+									}
+								>
+									<span>Setting up...</span>
+								</Match>
+								<Match
+									when={
+										audioStatus()?.status === "long_recording" ||
+										audioStatus()?.status === "test_recording"
+									}
+								>
+									<span>Recording...</span>
+								</Match>
+								<Match when={audioStatus()?.status === "recording"}>
+									<span>Busy with video...</span>
+								</Match>
+							</Switch>
+						</p>
+					</div>
+					<div class="flex space-x-2">
 						<button
 							type="button"
 							disabled={
-								initiatingLongRecording() ||
-								audioStatus()?.status !== "ready"
+								initiatingLongRecording() || audioStatus()?.status !== "ready"
 							}
 							class="col-span-1 rounded px-4 py-4 w-full text-sm transition bg-blue-500 text-white disabled:bg-gray-300 disabled:text-gray-500"
 							onClick={() => {
-								startLongRecording();
+								createTestRecording();
 							}}
 						>
-							5 min
+							10 Sec
 						</button>
-					</Show>
-				</div>
-				{/* Status/Result Display */}
-				<div class=" text-center text-sm">
-					{" "}
-					{/* Added min-height */}
-					<Show
-						when={longResult() && audioStatus()?.status !== "long_recording"}
-					>
-						<span
-							class={`${longResult() === "success" ? "text-green-600" : "text-red-600"}`}
+						<Show when={context.devices.get(id())?.hasLongRecordingSupport}>
+							<button
+								type="button"
+								disabled={
+									initiatingLongRecording() || audioStatus()?.status !== "ready"
+								}
+								class="col-span-1 rounded px-4 py-4 w-full text-sm transition bg-blue-500 text-white disabled:bg-gray-300 disabled:text-gray-500"
+								onClick={() => {
+									startLongRecording();
+								}}
+							>
+								5 min
+							</button>
+						</Show>
+					</div>
+					{/* Status/Result Display */}
+					<div class=" text-center text-sm">
+						{" "}
+						{/* Added min-height */}
+						<Show
+							when={longResult() && audioStatus()?.status !== "long_recording"}
 						>
-							{longResult() === "success"
-								? `Recording (${lastLongRecordingDuration()}s) finished.`
-								: `Recording (${lastLongRecordingDuration()}s) failed.`}
-						</span>
-					</Show>
+							<span
+								class={`${longResult() === "success" ? "text-green-600" : "text-red-600"}`}
+							>
+								{longResult() === "success"
+									? `Recording (${lastLongRecordingDuration()}s) finished.`
+									: `Recording (${lastLongRecordingDuration()}s) failed.`}
+							</span>
+						</Show>
+					</div>
 				</div>
-			</div>
-		</section >
+			</Show>
+		</section>
 	);
 }
 
@@ -2757,8 +2764,8 @@ export function GeneralSettingsTab(props: SettingProps) {
 			if (res) {
 				setLowPowerMode(
 					res.values.thermalRecorder?.UseLowPowerMode ??
-					res.defaults["thermal-recorder"]?.UseLowPowerMode ??
-					null,
+						res.defaults["thermal-recorder"]?.UseLowPowerMode ??
+						null,
 				);
 			}
 		} catch (error) {
@@ -2868,8 +2875,9 @@ export function GeneralSettingsTab(props: SettingProps) {
 							<div
 								class="transition-width m-1 h-4 rounded-full bg-blue-500 duration-500"
 								style={{
-									width: `${context.getDeviceUpdating(id())?.UpdateProgressPercentage
-										}%`,
+									width: `${
+										context.getDeviceUpdating(id())?.UpdateProgressPercentage
+									}%`,
 								}}
 							/>
 							<span class="absolute left-1/2 top-1 -translate-x-1/2 transform text-xs text-white">
