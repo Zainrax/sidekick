@@ -1417,7 +1417,7 @@ const locationSchema = z.object({
 	   altitude: numish.optional().default(0),
 	   // treat missing / 0 / NaN accuracy as “unknown” = 100 m
 	   accuracy: numish.optional().transform(v => (v && v > 0 ? v : 100)).default(100),
-	   timestamp: z.string().or(z.number()).transform(v => typeof v === "number" ? v.toString() : v),
+	   timestamp: z.string().or(z.number()).transform(v => typeof v === "number" ? Math.round(v).toString() : v),
 });
 
 	const LOCATION_ERROR =
@@ -1443,13 +1443,12 @@ const setDeviceToCurrLocation = async (deviceId: DeviceId) => {
 					   log.logWarning({
 							   message: LOCATION_ERROR,
 							   details: location.error.message,
-					   });
-					   return;
-			   }
-			debugger;
-			   // Ensure all fields are strings for DevicePlugin.setDeviceLocation
-			   const options = {
-					   url: device.url,
+			   });
+			   return;
+		   }
+		   // Ensure all fields are strings for DevicePlugin.setDeviceLocation
+		   const options = {
+			   url: device.url,
 					   latitude: location.data.latitude.toString(),
 					   longitude: location.data.longitude.toString(),
 					   altitude: location.data.altitude?.toString() ?? "0",
