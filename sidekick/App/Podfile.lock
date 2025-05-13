@@ -1,13 +1,13 @@
 PODS:
-  - Capacitor (6.2.1):
+  - Capacitor (7.2.0):
     - CapacitorCordova
-  - CapacitorApp (6.0.2):
+  - CapacitorApp (7.0.1):
     - Capacitor
-  - CapacitorBrowser (6.0.5):
+  - CapacitorBrowser (7.0.1):
     - Capacitor
-  - CapacitorCamera (6.1.2):
+  - CapacitorCamera (7.0.1):
     - Capacitor
-  - CapacitorClipboard (6.0.2):
+  - CapacitorClipboard (7.0.1):
     - Capacitor
   - CapacitorCommunityKeepAwake (5.0.1):
     - Capacitor
@@ -15,19 +15,25 @@ PODS:
     - Capacitor
     - SQLCipher
     - ZIPFoundation
-  - CapacitorCordova (6.2.1)
-  - CapacitorDialog (6.0.2):
+  - CapacitorCordova (7.2.0)
+  - CapacitorDialog (7.0.1):
     - Capacitor
-  - CapacitorFilesystem (6.0.3):
+  - CapacitorFilesystem (7.0.1):
     - Capacitor
-  - CapacitorGeolocation (6.1.0):
+  - CapacitorGeolocation (7.1.1):
+    - Capacitor
+    - IONGeolocationLib (~> 1.0)
+  - CapacitorIosAutofillSavePassword (5.0.0):
+    - Capacitor
+  - CapacitorLocalNotifications (7.0.1):
     - Capacitor
   - CapacitorNativeSettings (6.0.5):
     - Capacitor
-  - CapacitorNetwork (6.0.3):
+  - CapacitorNetwork (7.0.1):
     - Capacitor
-  - CapacitorPreferences (6.0.3):
+  - CapacitorPreferences (7.0.1):
     - Capacitor
+  - IONGeolocationLib (1.0.0)
   - Sentry/HybridSDK (8.48.0)
   - SentryCapacitor (1.4.0):
     - Capacitor
@@ -52,6 +58,8 @@ DEPENDENCIES:
   - "CapacitorDialog (from `../../node_modules/@capacitor/dialog`)"
   - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
   - "CapacitorGeolocation (from `../../node_modules/@capacitor/geolocation`)"
+  - CapacitorIosAutofillSavePassword (from `../../node_modules/capacitor-ios-autofill-save-password`)
+  - "CapacitorLocalNotifications (from `../../node_modules/@capacitor/local-notifications`)"
   - CapacitorNativeSettings (from `../../node_modules/capacitor-native-settings`)
   - "CapacitorNetwork (from `../../node_modules/@capacitor/network`)"
   - "CapacitorPreferences (from `../../node_modules/@capacitor/preferences`)"
@@ -60,6 +68,7 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
+    - IONGeolocationLib
     - Sentry
     - SQLCipher
     - ZIPFoundation
@@ -87,6 +96,10 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/filesystem"
   CapacitorGeolocation:
     :path: "../../node_modules/@capacitor/geolocation"
+  CapacitorIosAutofillSavePassword:
+    :path: "../../node_modules/capacitor-ios-autofill-save-password"
+  CapacitorLocalNotifications:
+    :path: "../../node_modules/@capacitor/local-notifications"
   CapacitorNativeSettings:
     :path: "../../node_modules/capacitor-native-settings"
   CapacitorNetwork:
@@ -99,26 +112,29 @@ EXTERNAL SOURCES:
     :path: "../shared"
 
 SPEC CHECKSUMS:
-  Capacitor: 1e0d0e7330dea9f983b50da737d8918abcf273f8
-  CapacitorApp: 2a8c3a0b0814322e5e6e15fe595f02c3808f0f8b
-  CapacitorBrowser: cba79e25007fbe9bdac8c0568060b21abbb8f453
-  CapacitorCamera: 9052bd3f464f135ba983feccd8ac1266272f0549
-  CapacitorClipboard: 55e0a514f1e97b1409d533266c119dcbff3e78c3
+  Capacitor: 106e7a4205f4618d582b886a975657c61179138d
+  CapacitorApp: d63334c052278caf5d81585d80b21905c6f93f39
+  CapacitorBrowser: 081852cf532acf77b9d2953f3a88fe5b9711fb06
+  CapacitorCamera: eb8687d8687fed853598ec9460d94bcd5e16babe
+  CapacitorClipboard: b98aead5dc7ec595547fc2c5d75bacd2ae3338bc
   CapacitorCommunityKeepAwake: e2ddd50812e3407f8dc3a2c28e97d66e9b59b2f5
   CapacitorCommunitySqlite: d0b543e12a06ee6fd0dc287c389e6b435ec4acdf
-  CapacitorCordova: 8d93e14982f440181be7304aa9559ca631d77fff
-  CapacitorDialog: e966e2261e1c74a8a502e610dd66b4f97ec6fcca
-  CapacitorFilesystem: fa3099b3c3aa43a1b51362d0c999301ab1a9a752
-  CapacitorGeolocation: d994ee64ee41909e2089e575c9d3a976007c2812
+  CapacitorCordova: 5967b9ba03915ef1d585469d6e31f31dc49be96f
+  CapacitorDialog: 9b934329026b2b0ffa56939bb06df3c67541a2ab
+  CapacitorFilesystem: 307f97c27a265edf8396a1c9c235592fd8572fe3
+  CapacitorGeolocation: 8f8ac02ceaeb203a4762f8dc4ff5119e3f7fa50a
+  CapacitorIosAutofillSavePassword: 6e7c37a13e6970bd31141371abb9e64eae882698
+  CapacitorLocalNotifications: 4ea60b9347eac60b37cb4daaf62d12060bb00972
   CapacitorNativeSettings: 60349f7d00b67d91e701ad1f80b31a8aabff5300
-  CapacitorNetwork: da96b5fff8d05b67f4658503aabb22f65bda2c0f
-  CapacitorPreferences: 9f9935bce493977183511362131a93f7b260191a
+  CapacitorNetwork: 07ec4c69c1bb696f41c23e00d31bda1bbb221bba
+  CapacitorPreferences: cbf154e5e5519b7f5ab33817a334dda1e98387f9
+  IONGeolocationLib: 81f33f88d025846946de2cf63b0c7628e7c6bc9d
   Sentry: 1ca8405451040482877dcd344dfa3ef80b646631
-  SentryCapacitor: 76bed93eb1c508a1aac9eddd273e7ff7b77b509b
+  SentryCapacitor: b364f83da8e94699cc1c40b9e2c0473bef631306
   shared: 655a369eaa8d440bae00b6d7208194db21051145
   SQLCipher: ba9d0076041ed767c5bd3d3f77098318d04a403c
   ZIPFoundation: b8c29ea7ae353b309bc810586181fd073cb3312c
 
-PODFILE CHECKSUM: 31a49c46f053b4ab3608d29df3d42eaa181c2f83
+PODFILE CHECKSUM: 991fcdb09e4de3bd0511281fe0ad1a4c49ca3e91
 
 COCOAPODS: 1.16.2
