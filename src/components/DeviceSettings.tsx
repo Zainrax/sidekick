@@ -66,7 +66,7 @@ import {
 } from "capacitor-native-settings";
 import type { Location } from "~/database/Entities/Location";
 import { Filesystem, Directory } from "@capacitor/filesystem";
-import { Capacitor } from "@capacitor/core";
+import { z } from "zod";
 type CameraCanvas = HTMLCanvasElement | undefined;
 const colours = ["#ff0000", "#00ff00", "#ffff00", "#80ffff"];
 type SettingProps = { deviceId: DeviceId };
@@ -1151,13 +1151,27 @@ export function LocationSettingsTab(props: SettingProps) {
 	);
 
 	// Location coordinates handling
-	const [locCoords, { refetch: refetchCoords }] = createResource(
-		() => [id(), shouldUpdateLocState()] as const,
-		async ([id]) => {
-			const res = await context.getLocationCoords(id);
-			return res.success ? res.data : null;
-		},
-	);
+// Accept both string and number for lat/lng/alt/accuracy, and transform to number
+const numish = z.union([z.string(), z.number()]).transform((v: string | number) => typeof v === "string" ? Number.parseFloat(v) : v);
+const locationSchema = z.object({
+	   latitude: numish,
+	   longitude: numish,
+	   altitude: numish.optional().default(0),
+	   accuracy: numish.optional().transform((v) => (v && v > 0 ? v : 100)).default(100),
+	   timestamp: z.string(),
+});
+const [locCoords, { refetch: refetchCoords }] = createResource(
+	   () => [id(), shouldUpdateLocState()] as const,
+	   async ([id]) => {
+			   const res = await context.getLocationCoords(id);
+			   if (res.success) {
+					   // Validate and normalize location fields for preview
+					   const parsed = locationSchema.safeParse(res.data);
+					   return parsed.success ? parsed.data : null;
+			   }
+			   return null;
+	   },
+);
 
 	const [isSyncing, setIsSyncing] = createSignal(false);
 	// Save location data and handle photo upload
@@ -1465,12 +1479,12 @@ export function LocationSettingsTab(props: SettingProps) {
 					</p>
 					<button
 						class="
-              flex items-center justify-center 
-              space-x-2 
-              rounded-md bg-blue-500 px-3 py-2 
-              text-xs text-white disabled:cursor-not-allowed
-              disabled:opacity-50 sm:text-sm
-            "
+			  flex items-center justify-center 
+			  space-x-2 
+			  rounded-md bg-blue-500 px-3 py-2 
+			  text-xs text-white disabled:cursor-not-allowed
+			  disabled:opacity-50 sm:text-sm
+			"
 						onClick={async () => {
 							await NativeSettings.open({
 								optionIOS: IOSSettings.LocationServices,
@@ -1514,13 +1528,13 @@ export function LocationSettingsTab(props: SettingProps) {
 						<div class="flex w-full flex-col items-center">
 							<button
 								class="
-                  my-2 flex items-center space-x-2 self-center 
-                  rounded-md bg-blue-500 
-                  px-3 py-2 
-                  text-xs 
-                  text-white disabled:cursor-not-allowed
-                  disabled:opacity-50 sm:text-sm
-                "
+				  my-2 flex items-center space-x-2 self-center 
+				  rounded-md bg-blue-500 
+				  px-3 py-2 
+				  text-xs 
+				  text-white disabled:cursor-not-allowed
+				  disabled:opacity-50 sm:text-sm
+				"
 								onClick={async () => {
 									try {
 										setSettingLocation(true);
@@ -1575,10 +1589,10 @@ export function LocationSettingsTab(props: SettingProps) {
 								<input
 									type="text"
 									class="
-                    w-full rounded-md bg-slate-50 
-                    px-2 py-1 
-                    text-xs sm:text-sm
-                  "
+					w-full rounded-md bg-slate-50 
+					px-2 py-1 
+					text-xs sm:text-sm
+				  "
 									placeholder={locationName()}
 									value={newName()}
 									onInput={(e) => setNewName(e.currentTarget.value)}
@@ -1595,12 +1609,12 @@ export function LocationSettingsTab(props: SettingProps) {
 											<img src={photoUrl()} class="h-full w-full rounded-md" />
 											<div
 												class="
-                          z-100 absolute inset-0 
-                          flex items-start justify-between 
-                          p-2
-                          opacity-80 
-                          transition-opacity group-hover:opacity-100
-                        "
+						  z-100 absolute inset-0 
+						  flex items-start justify-between 
+						  p-2
+						  opacity-80 
+						  transition-opacity group-hover:opacity-100
+						"
 											>
 												<button
 													onClick={addPhotoToDevice}
@@ -1621,10 +1635,10 @@ export function LocationSettingsTab(props: SettingProps) {
 										<button
 											onClick={addPhotoToDevice}
 											class="
-                        aspect-4/3 flex h-48 
-                        w-full flex-col items-center justify-center gap-2 
-                        text-blue-500 
-                      "
+						aspect-4/3 flex h-48 
+						w-full flex-col items-center justify-center gap-2 
+						text-blue-500 
+					  "
 										>
 											<TbCameraPlus size={36} />
 											<p class="text-xs text-gray-600 sm:text-sm">
@@ -2630,9 +2644,8 @@ export function GroupSelect(props: SettingProps) {
 				if (res.value) {
 					await user.logout();
 					return false;
-				} else {
-					return false;
 				}
+					return false;
 			}
 			return true;
 		} catch (e) {
@@ -2764,8 +2777,8 @@ export function GeneralSettingsTab(props: SettingProps) {
 			if (res) {
 				setLowPowerMode(
 					res.values.thermalRecorder?.UseLowPowerMode ??
-						res.defaults["thermal-recorder"]?.UseLowPowerMode ??
-						null,
+					res.defaults["thermal-recorder"]?.UseLowPowerMode ??
+					null,
 				);
 			}
 		} catch (error) {
@@ -2875,9 +2888,8 @@ export function GeneralSettingsTab(props: SettingProps) {
 							<div
 								class="transition-width m-1 h-4 rounded-full bg-blue-500 duration-500"
 								style={{
-									width: `${
-										context.getDeviceUpdating(id())?.UpdateProgressPercentage
-									}%`,
+									width: `${context.getDeviceUpdating(id())?.UpdateProgressPercentage
+										}%`,
 								}}
 							/>
 							<span class="absolute left-1/2 top-1 -translate-x-1/2 transform text-xs text-white">
@@ -2922,9 +2934,8 @@ export function DeviceSettingsModal() {
 		console.log("Current test Device", device());
 		if (device()?.hasAudioCapabilities) {
 			return [...items, "Audio"] as const;
-		} else {
-			return items;
 		}
+			return items;
 	};
 
 	// Other code remains the same...
@@ -2947,9 +2958,9 @@ export function DeviceSettingsModal() {
 		const numItems = navItems().length;
 		if (numItems <= 4) {
 			return "text-base";
-		} else if (numItems === 5) {
+		}if (numItems === 5) {
 			return "text-sm";
-		} else if (numItems >= 6) {
+		}if (numItems >= 6) {
 			return "text-xs";
 		}
 	});

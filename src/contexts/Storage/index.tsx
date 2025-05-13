@@ -89,6 +89,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 	const uploadItems = async (warn = true) => {
 		// Cancel reminders before starting upload
 		await cancelAllReminders();
+		setIsUploading(true);
 		try {
 			if (await KeepAwake.isSupported()) {
 				await KeepAwake.keepAwake();
@@ -96,17 +97,17 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 			await recording.uploadRecordings(warn);
 			await location.resyncLocations();
 			await deviceImages.syncPendingPhotos();
-			setIsUploading(false);
 			await event.uploadEvents();
-			if (await KeepAwake.isSupported()) {
-				await KeepAwake.allowSleep();
-			}
 		} catch (error) {
 			log.logError({
 				message: "Error during uploading events/recordings/locations",
 				error,
 			});
+		} finally {
 			setIsUploading(false);
+			if (await KeepAwake.isSupported()) {
+				await KeepAwake.allowSleep();
+			}
 		}
 	};
 

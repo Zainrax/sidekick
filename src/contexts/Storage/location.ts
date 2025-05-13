@@ -77,8 +77,9 @@ export const isWithinRange = (
 ) => {
   const [lat, lng] = prevLoc;
   const [latitude, longitude] = newLoc;
-  // We add `accuracy * 2` just as in your existing code
-  return isWithinRadius(lat, lng, latitude, longitude, range + accuracy * 2);
+  // If accuracy is <= 0 or NaN, substitute a safe default (100m)
+  const safeAccuracy = !accuracy || accuracy <= 0 || Number.isNaN(accuracy) ? 100 : accuracy;
+  return isWithinRadius(lat, lng, latitude, longitude, range + safeAccuracy * 2);
 };
 
 export function useLocationStorage() {
@@ -419,7 +420,7 @@ export function useLocationStorage() {
         needsRename: false,
       };
 
-      // NEW: Try to find existing station on the server with same group & near coords
+      // Try to find existing station on the server with same group & near coords
       const renameIfServerHasSameCoords = async () => {
         if (!user) return false;
         if (user.prod !== settings.isProd) return false;

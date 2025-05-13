@@ -32,6 +32,8 @@ import { useLogsContext } from "../LogsContext";
 import { useSearchParams } from "@solidjs/router";
 import { useUserContext } from "../User";
 import { Network } from "@capacitor/network";
+// Use a fixed threshold for location update checks (in meters)
+const UPDATE_DISTANCE_THRESHOLD_METERS = 25;
 
 const WifiNetwork = z
 	.object({
@@ -61,6 +63,7 @@ export const tc2ModemSchema = z
 		failedToFindSimCard: z.boolean().optional(),
 		modem: z
 			.object({
+				atReady: z.boolean(),
 				connectedTime: z.string(),
 				manufacturer: z.string(),
 				model: z.string(),
@@ -400,7 +403,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 			return res.status === 200 || res.status === 405;
 		} catch (error: unknown) {
 			// A 404 error means the endpoint doesn't exist
-			if (error?.status === 404) {
+			if (error instanceof Error && 'status' in error && error.status === 404) {
 				return false;
 			}
 			// Other errors might indicate network issues, but assume no support for safety
@@ -1406,68 +1409,79 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 		devicesDownloading.delete(deviceId);
 	};
 
-	const locationSchema = z.object({
-		latitude: z.number().transform((val) => val.toString()),
-		longitude: z.number().transform((val) => val.toString()),
-		altitude: z.number().transform((val) => val.toString()),
-		accuracy: z.number().transform((val) => Math.round(val).toString()),
-		timestamp: z.number().transform((val) => val.toString()),
-	});
+// Accept both string and number for lat/lng/alt/accuracy, and transform to number
+const numish = z.union([z.string(), z.number()]).transform(v => typeof v === "string" ? Number.parseFloat(v) : v);
+const locationSchema = z.object({
+	   latitude: numish,
+	   longitude: numish,
+	   altitude: numish.optional().default(0),
+	   // treat missing / 0 / NaN accuracy as “unknown” = 100 m
+	   accuracy: numish.optional().transform(v => (v && v > 0 ? v : 100)).default(100),
+	   timestamp: z.string().or(z.number()).transform(v => typeof v === "number" ? v.toString() : v),
+});
 
 	const LOCATION_ERROR =
 		"Please ensure location is enabled, and permissions are granted";
-	const setDeviceToCurrLocation = async (deviceId: DeviceId) => {
-		try {
-			const device = devices.get(deviceId);
-			if (!device || !device.isConnected) return;
-			let permission = await Geolocation.requestPermissions();
-			if (permission.location === "prompt-with-rationale") {
-				permission = await Geolocation.checkPermissions();
-			}
-			if (permission.location !== "granted") return;
-			locationBeingSet.add(device.id);
-			const { timestamp, coords } = await Geolocation.getCurrentPosition({
-				enableHighAccuracy: true,
-			});
-			const location = locationSchema.safeParse({ ...coords, timestamp });
-			if (!location.success) {
-				locationBeingSet.delete(device.id);
-				log.logWarning({
-					message: LOCATION_ERROR,
-					details: location.error.message,
-				});
-				return;
-			}
-			const options = {
-				url: device.url,
-				...location.data,
-			};
-			const res = await DevicePlugin.setDeviceLocation(options);
-			if (res.success) {
-				tryUpdateServerLocation(deviceId, {
-					lat: Number.parseFloat(location.data.latitude),
-					lng: Number.parseFloat(location.data.longitude),
-				});
-				devices.set(device.id, {
-					...device,
-					locationSet: true,
-				});
-				log.logSuccess({
-					message: `Successfully set location for ${device.name}.`,
-					timeout: 6000,
-				});
-			}
-			locationBeingSet.delete(device.id);
-		} catch (error) {
-			if (error instanceof Error) {
-				log.logWarning({
-					message: LOCATION_ERROR,
-					details: error.message,
-				});
-			}
-			locationBeingSet.delete(deviceId);
-		}
-	};
+const setDeviceToCurrLocation = async (deviceId: DeviceId) => {
+	   try {
+			   const device = devices.get(deviceId);
+			   if (!device || !device.isConnected) return;
+			   let permission = await Geolocation.requestPermissions();
+			   if (permission.location === "prompt-with-rationale") {
+					   permission = await Geolocation.checkPermissions();
+			   }
+			   if (permission.location !== "granted") return;
+			   locationBeingSet.add(device.id);
+			   const { timestamp, coords } = await Geolocation.getCurrentPosition({
+					   enableHighAccuracy: true,
+			   });
+			   // Clamp accuracy to a minimum of 5m so we never pass 0 down
+			   const safeCoords = { ...coords, accuracy: coords.accuracy && coords.accuracy > 5 ? coords.accuracy : 5 };
+			   const location = locationSchema.safeParse({ ...safeCoords, timestamp });
+			   if (!location.success) {
+					   locationBeingSet.delete(device.id);
+					   log.logWarning({
+							   message: LOCATION_ERROR,
+							   details: location.error.message,
+					   });
+					   return;
+			   }
+			debugger;
+			   // Ensure all fields are strings for DevicePlugin.setDeviceLocation
+			   const options = {
+					   url: device.url,
+					   latitude: location.data.latitude.toString(),
+					   longitude: location.data.longitude.toString(),
+					   altitude: location.data.altitude?.toString() ?? "0",
+					   accuracy: location.data.accuracy?.toString() ?? "100",
+					   timestamp: location.data.timestamp,
+			   };
+			   const res = await DevicePlugin.setDeviceLocation(options);
+			   if (res.success) {
+					   tryUpdateServerLocation(deviceId, {
+							   lat: Number(location.data.latitude),
+							   lng: Number(location.data.longitude),
+					   });
+					   devices.set(device.id, {
+							   ...device,
+							   locationSet: true,
+					   });
+					   log.logSuccess({
+							   message: `Successfully set location for ${device.name}.`,
+							   timeout: 6000,
+					   });
+			   }
+			   locationBeingSet.delete(device.id);
+	   } catch (error) {
+			   if (error instanceof Error) {
+					   log.logWarning({
+							   message: LOCATION_ERROR,
+							   details: error.message,
+					   });
+			   }
+			   locationBeingSet.delete(deviceId);
+	   }
+};
 
 	const tryUpdateServerLocation = async (
 		deviceId: string,
@@ -1493,59 +1507,61 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 		}
 	};
 
-	const getLocationCoords = async (
-		device: DeviceId,
-	): Result<DeviceCoords<number>> => {
-		try {
-			const deviceObj = devices.get(device);
+const getLocationCoords = async (
+	   device: DeviceId,
+): Result<DeviceCoords<number>> => {
+	   try {
+			   const deviceObj = devices.get(device);
 
-			if (!deviceObj || !deviceObj.isConnected) {
-				return {
-					success: false,
-					message: "Device is not connected",
-				};
-			}
+			   if (!deviceObj || !deviceObj.isConnected) {
+					   return {
+							   success: false,
+							   message: "Device is not connected",
+					   };
+			   }
 
-			const { url } = deviceObj;
+			   const { url } = deviceObj;
 
-			const locationSchema = z.object({
-				latitude: z.number(),
-				longitude: z.number(),
-				altitude: z.number(),
-				accuracy: z.number(),
-				timestamp: z.string(),
-			});
+			   // Use the same relaxed schema as above
+			   const numish = z.union([z.string(), z.number()]).transform(v => typeof v === "string" ? Number.parseFloat(v) : v);
+			   const locationSchema = z.object({
+					   latitude: numish,
+					   longitude: numish,
+					   altitude: numish.optional().default(0),
+					   accuracy: numish.optional().transform(v => (v && v > 0 ? v : 100)).default(100),
+					   timestamp: z.string(),
+			   });
 
-			const res = await DevicePlugin.getDeviceLocation({ url });
+			   const res = await DevicePlugin.getDeviceLocation({ url });
 
-			if (res.success) {
-				const location = locationSchema.safeParse(JSON.parse(res.data));
-				if (!location.success) {
-					return {
-						success: false,
-						message: location.error.message,
-					};
-				}
-				tryUpdateServerLocation(device, {
-					lat: location.data.latitude,
-					lng: location.data.longitude,
-				});
-				return {
-					success: true,
-					data: location.data,
-				};
-			}
-			return {
-				success: false,
-				message: "Could not get location",
-			};
-		} catch (error) {
-			return {
-				success: false,
-				message: "Could not get location",
-			};
-		}
-	};
+			   if (res.success) {
+					   const location = locationSchema.safeParse(JSON.parse(res.data));
+					   if (!location.success) {
+							   return {
+									   success: false,
+									   message: location.error.message,
+							   };
+					   }
+					   tryUpdateServerLocation(device, {
+							   lat: location.data.latitude,
+							   lng: location.data.longitude,
+					   });
+					   return {
+							   success: true,
+							   data: location.data,
+					   };
+			   }
+			   return {
+					   success: false,
+					   message: "Could not get location",
+			   };
+	   } catch (error) {
+			   return {
+					   success: false,
+					   message: "Could not get location",
+			   };
+	   }
+};
 
 	const getLocationByDevice = (deviceId: DeviceId) =>
 		createResource(
@@ -1613,67 +1629,72 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 	);
 
 	const [locationDisabled, setLocationDisabled] = createSignal(false);
-	const [devicesLocToUpdate, { refetch: refetchDeviceLocToUpdate }] =
-		createResource(
-			() => {
-				return [[...devices.values()], permission()] as const;
-			},
-			async ([devices, permission]) => {
-				try {
-					devices = devices.filter(({ isConnected }) => isConnected);
-					if (!devices || devices.length === 0 || !permission) return [];
-					if (permission === "denied") return [];
-					const pos = await Geolocation.getCurrentPosition({
-						enableHighAccuracy: true,
-					}).catch((e) => {
-						console.log("Error", e);
-						if (e instanceof Error && e.message === "location disabled") {
-							setLocationDisabled(true);
-						}
-						return null;
-					});
-					if (!pos) return [];
-					setLocationDisabled(false);
+const [devicesLocToUpdate, { refetch: refetchDeviceLocToUpdate }] =
+	   createResource(
+			   () => {
+					   // Add locationBeingSet to dependencies by spreading into a new Set
+					   return [[...devices.values()], permission(), new Set(locationBeingSet)] as const;
+			   },
+			   async ([deviceList, perm, currentlySettingLocations]) => {
+					   try {
+							   const devicesToFilter = deviceList.filter(({ isConnected }) => isConnected);
+							   if (!devicesToFilter || devicesToFilter.length === 0 || !perm) return [];
+							   if (perm === "denied") return [];
+							   const pos = await Geolocation.getCurrentPosition({
+									   enableHighAccuracy: true,
+							   }).catch((e) => {
+									   console.log("Error", e);
+									   if (e instanceof Error && e.message === "location disabled") {
+											   setLocationDisabled(true);
+									   }
+									   return null;
+							   });
+							   if (!pos) return [];
+							   setLocationDisabled(false);
 
-					const devicesToUpdate: string[] = [];
-					for (const device of devices) {
-						if (!device.isConnected) continue;
-						const locationRes = await getLocationCoords(device.id);
-						if (!locationRes.success) continue;
-						const loc = locationRes.data;
-						const newLoc: [number, number] = [
-							pos.coords.latitude,
-							pos.coords.longitude,
-						];
+							   const devicesToUpdate: string[] = [];
+							   for (const device of devicesToFilter) {
+									   if (!device.isConnected) continue;
+									   // Skip if location is currently being set for this device
+									   if (currentlySettingLocations.has(device.id)) {
+											   continue;
+									   }
+									   const locationRes = await getLocationCoords(device.id);
+									   if (!locationRes.success) continue;
+									   const loc = locationRes.data;
+									   const newLoc: [number, number] = [
+											   pos.coords.latitude,
+											   pos.coords.longitude,
+									   ];
 
-						const withinRange = isWithinRange(
-							[loc.latitude, loc.longitude],
-							newLoc,
-							pos.coords.accuracy,
-						);
-						if (!withinRange) {
-							devicesToUpdate.push(device.id);
-						}
-					}
-					return devicesToUpdate;
-				} catch (error) {
-					if (error instanceof Error) {
-						log.logWarning({
-							message:
-								"Could not update device locations. Check location permissions and try again.",
-							action: <GoToPermissions />,
-						});
-					} else if (typeof error === "string") {
-						log.logWarning({
-							message: "Could not update device locations",
-							details: error,
-						});
-					}
+									   const withinRange = isWithinRange(
+											   [loc.latitude, loc.longitude],
+											   newLoc,
+											   UPDATE_DISTANCE_THRESHOLD_METERS,
+									   );
+									   if (!withinRange) {
+											   devicesToUpdate.push(device.id);
+									   }
+							   }
+							   return devicesToUpdate;
+					   } catch (error) {
+							   if (error instanceof Error) {
+									   log.logWarning({
+											   message:
+													   "Could not update device locations. Check location permissions and try again.",
+											   action: <GoToPermissions />,
+									   });
+							   } else if (typeof error === "string") {
+									   log.logWarning({
+											   message: "Could not update device locations",
+											   details: error,
+									   });
+							   }
 
-					return [];
-				}
-			},
-		);
+							   return [];
+					   }
+			   },
+	   );
 
 	type DeviceLocationStatus =
 		| "loading"
@@ -1710,14 +1731,14 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 			const networks = WifiNetwork.array().parse(JSON.parse(res.data));
 			return networks
 				? networks
-						.filter((network) => network.SSID)
-						.reduce((acc, curr) => {
-							const found = acc.find((a) => a.SSID === curr.SSID);
-							if (!found) {
-								acc.push(curr);
-							}
-							return acc;
-						}, [] as WifiNetwork[])
+					.filter((network) => network.SSID)
+					.reduce((acc, curr) => {
+						const found = acc.find((a) => a.SSID === curr.SSID);
+						if (!found) {
+							acc.push(curr);
+						}
+						return acc;
+					}, [] as WifiNetwork[])
 				: [];
 		} catch (e) {
 			console.error(e);

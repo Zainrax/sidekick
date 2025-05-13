@@ -3,6 +3,7 @@ package nz.org.cacophony.sidekick
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -175,10 +176,14 @@ class NsdHelper(private val context: Context) {
                 Log.d(TAG, "Service found: ${service.serviceName}")
                 if (service.serviceType.contains(SERVICE_TYPE)) {
                     // Add to known services or update existing entry
-                    knownServices.computeIfAbsent(service.serviceName) {
-                        ServiceState(service)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        knownServices.computeIfAbsent(service.serviceName) {
+                            ServiceState(service)
+                        }
+                    } else if (knownServices[service.serviceName] == null) {
+                        knownServices[service.serviceName] = ServiceState(service)
                     }
-                    
+
                     // Queue for resolution only if not already resolving or resolved
                     knownServices[service.serviceName]?.let { state ->
                         if (!state.isCurrentlyResolving && !state.resolved) {
