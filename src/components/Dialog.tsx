@@ -31,7 +31,7 @@ function Dialog(props: DialogProps) {
           <div class="fixed inset-0 flex items-center justify-center">
             <div
               ref={el}
-              class="w-screen max-w-xs rounded-xl bg-white  p-4 shadow-lg"
+              class="w-full mx-4 max-w-xs rounded-xl bg-white  p-4 shadow-lg"
             >
               <div class="px-4 py-3">{props.children}</div>
             </div>

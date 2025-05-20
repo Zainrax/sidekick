@@ -958,7 +958,7 @@ function SetupWizard(): JSX.Element {
 
   return (
     <Show when={show()}>
-      <div class="fixed left-1/2 top-[70px] z-40 h-auto w-11/12 max-w-md -translate-x-1/2 transform rounded-xl border bg-white px-2 py-4 shadow-lg">
+      <div class="fixed left-1/2 top-[70px] z-40 h-auto w-full mx-4 max-w-md -translate-x-1/2 transform rounded-xl border bg-white px-2 py-4 shadow-lg">
         <Switch>
           <Match when={showHelp()}>
             <HelpSection onClose={toggleHelp} />
