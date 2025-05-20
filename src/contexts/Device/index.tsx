@@ -3,6 +3,7 @@ import {
 	type HttpResponse,
 	type PluginListenerHandle,
 	registerPlugin,
+	Capacitor, // Added Capacitor import
 } from "@capacitor/core";
 import { CapacitorHttp } from "@capacitor/core";
 import { Filesystem } from "@capacitor/filesystem";
@@ -1073,6 +1074,20 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 		}
 
 		try {
+			// Check for local network permissions before starting discovery
+			if (Capacitor.getPlatform() === "ios") {
+				const perm = await DevicePlugin.checkPermissions();
+				if (!perm.granted) {
+					console.warn(
+						"Local Network permission not granted. Device discovery will not start.",
+					);
+					// Optionally, notify the user or update a state here
+					// For now, just prevent discovery.
+					setIsDiscovering(false); // Ensure state reflects discovery is not active
+					return;
+				}
+			}
+
 			await DevicePlugin.discoverDevices();
 			setIsDiscovering(true);
 
@@ -2962,6 +2977,6 @@ const [devicesLocToUpdate, { refetch: refetchDeviceLocToUpdate }] =
 	};
 });
 
-// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+// biome-ignore lint/style/noNonNullAssertion: this should no fail if provider is used correctly
 const defineUseDevice = () => useDevice()!;
 export { defineUseDevice as useDevice, DeviceProvider };
