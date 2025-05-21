@@ -134,7 +134,20 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 					if (!json || Object.keys(json).length === 0) return null;
 
 					const user = UserSchema.parse(json);
-					return await tokenService.validateToken(user);
+					const validatedUser = await tokenService.validateToken(user);
+
+					if (validatedUser === null && !navigator.onLine) {
+						log.logWarning({
+							message:
+								"Token validation failed offline, retaining user session.",
+							details:
+								"User token might be expired, but keeping session active due to offline status.",
+							warn: true,
+						});
+						return user;
+					}
+
+					return validatedUser;
 				} catch (error) {
 					log.logError({
 						message: "User data validation failed",
@@ -241,7 +254,9 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 			if (
 				!authResult.success ||
 				!authResult.data.success ||
-				!authResult.data.userData
+				!authResult.data.userData ||
+				!authResult.data.token ||
+				!authResult.data.refreshToken
 			) {
 				log.logWarning({
 					message: "Authentication failed",
@@ -264,16 +279,16 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 				});
 				return {
 					_tag: "NeedsAgreement",
-					authToken: authResult.data.token!,
+					authToken: authResult.data.token, // Removed non-null assertion
 				};
 			}
 
 			// Create user object
 			const user: User = {
-				token: authResult.data.token!,
+				token: authResult.data.token, // Removed non-null assertion
 				id: authResult.data.userData.id.toString(),
 				email,
-				refreshToken: authResult.data.refreshToken!,
+				refreshToken: authResult.data.refreshToken, // Removed non-null assertion
 				expiry: authResult.data.expiry,
 				prod: isProd(),
 			};
