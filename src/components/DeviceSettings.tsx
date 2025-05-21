@@ -1050,10 +1050,7 @@ export function CameraSettingsTab(props: SettingProps) {
 				</div>
 				<Show when={isDefault() && !showCustom()}>
 					<p class="flex pt-2 text-sm text-gray-600">
-						<span class="inline-block">
-							<AiOutlineInfoCircle size={22} />
-						</span>
-						<span class="text-ellipsis px-2">
+						<span class="text-xs md:text-md px-2">
 							30 minutes before sunset and 30 minutes after sunrise based on the
 							device's location and seasonal timing.
 						</span>
@@ -2620,11 +2617,9 @@ export function GroupSelect(props: SettingProps) {
 		}
 	};
 
-	const [canChangeGroup] = createResource(async () => {
-		const wifiRes = await context.checkDeviceWifiInternetConnection(id());
-		const modemRes = await context.checkDeviceModemInternetConnection(id());
-		return wifiRes || modemRes;
-	});
+	const [canChangeGroup] = createResource(async () =>
+		context.deviceHasInternet(id()),
+	);
 
 	const message = () =>
 		canChangeGroup() === false
@@ -2708,20 +2703,18 @@ export function GeneralSettingsTab(props: SettingProps) {
 	// Implement safer interval checking with proper cleanup
 	let updateCheckTimer: number | undefined;
 
-	const [hasInternetConnection] = createResource<boolean>(async () => {
-		try {
-			const wifiRes = await context
-				.checkDeviceWifiInternetConnection(deviceIdState())
-				.catch(() => false);
-			const modemRes = await context
-				.checkDeviceModemInternetConnection(deviceIdState())
-				.catch(() => false);
-			return wifiRes || modemRes;
-		} catch (error) {
-			console.error("Error checking internet connection:", error);
-			return false;
-		}
-	});
+	const [hasInternetConnection] = createResource<boolean>(
+		async () => {
+			try {
+				return await context.deviceHasInternet(deviceIdState());
+			} catch (error) {
+				console.error("Error checking internet connection:", error);
+				return false;
+			}
+		},
+		{ initialValue: false }, // Add an initialValue to avoid undefined state
+	);
+
 	const scheduleUpdateCheck = () => {
 		// Clear any existing timer
 		if (updateCheckTimer) {
