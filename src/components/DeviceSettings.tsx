@@ -29,6 +29,7 @@ import {
 	FaSolidPlay,
 } from "solid-icons/fa";
 import { FiCloud, FiCloudOff, FiMapPin } from "solid-icons/fi";
+import { FiDownload } from "solid-icons/fi";
 import { ImCog, ImCross } from "solid-icons/im";
 import {
 	RiArrowsArrowDownSLine,
@@ -414,7 +415,7 @@ export function AudioSettingsTab(props: SettingProps) {
 			<Show when={audioMode() !== "Disabled" && !audioMode.loading}>
 				<div class="space-y-2 rounded-lg border p-3 pb-0 shadow-sm">
 					<div class="flex items-center justify-between">
-						<label class="block text-sm text-gray-600">Audio Recording</label>
+						<span class="block text-sm text-gray-600">Audio Recording</span>
 						<p class="text-sm text-gray-500">
 							<Switch>
 								<Match
@@ -1151,27 +1152,34 @@ export function LocationSettingsTab(props: SettingProps) {
 	);
 
 	// Location coordinates handling
-// Accept both string and number for lat/lng/alt/accuracy, and transform to number
-const numish = z.union([z.string(), z.number()]).transform((v: string | number) => typeof v === "string" ? Number.parseFloat(v) : v);
-const locationSchema = z.object({
-	   latitude: numish,
-	   longitude: numish,
-	   altitude: numish.optional().default(0),
-	   accuracy: numish.optional().transform((v) => (v && v > 0 ? v : 100)).default(100),
-	   timestamp: z.string(),
-});
-const [locCoords, { refetch: refetchCoords }] = createResource(
-	   () => [id(), shouldUpdateLocState()] as const,
-	   async ([id]) => {
-			   const res = await context.getLocationCoords(id);
-			   if (res.success) {
-					   // Validate and normalize location fields for preview
-					   const parsed = locationSchema.safeParse(res.data);
-					   return parsed.success ? parsed.data : null;
-			   }
-			   return null;
-	   },
-);
+	// Accept both string and number for lat/lng/alt/accuracy, and transform to number
+	const numish = z
+		.union([z.string(), z.number()])
+		.transform((v: string | number) =>
+			typeof v === "string" ? Number.parseFloat(v) : v,
+		);
+	const locationSchema = z.object({
+		latitude: numish,
+		longitude: numish,
+		altitude: numish.optional().default(0),
+		accuracy: numish
+			.optional()
+			.transform((v) => (v && v > 0 ? v : 100))
+			.default(100),
+		timestamp: z.string(),
+	});
+	const [locCoords, { refetch: refetchCoords }] = createResource(
+		() => [id(), shouldUpdateLocState()] as const,
+		async ([id]) => {
+			const res = await context.getLocationCoords(id);
+			if (res.success) {
+				// Validate and normalize location fields for preview
+				const parsed = locationSchema.safeParse(res.data);
+				return parsed.success ? parsed.data : null;
+			}
+			return null;
+		},
+	);
 
 	const [isSyncing, setIsSyncing] = createSignal(false);
 	// Save location data and handle photo upload
@@ -2645,7 +2653,7 @@ export function GroupSelect(props: SettingProps) {
 					await user.logout();
 					return false;
 				}
-					return false;
+				return false;
 			}
 			return true;
 		} catch (e) {
@@ -2777,8 +2785,8 @@ export function GeneralSettingsTab(props: SettingProps) {
 			if (res) {
 				setLowPowerMode(
 					res.values.thermalRecorder?.UseLowPowerMode ??
-					res.defaults["thermal-recorder"]?.UseLowPowerMode ??
-					null,
+						res.defaults["thermal-recorder"]?.UseLowPowerMode ??
+						null,
 				);
 			}
 		} catch (error) {
@@ -2888,8 +2896,9 @@ export function GeneralSettingsTab(props: SettingProps) {
 							<div
 								class="transition-width m-1 h-4 rounded-full bg-blue-500 duration-500"
 								style={{
-									width: `${context.getDeviceUpdating(id())?.UpdateProgressPercentage
-										}%`,
+									width: `${
+										context.getDeviceUpdating(id())?.UpdateProgressPercentage
+									}%`,
 								}}
 							/>
 							<span class="absolute left-1/2 top-1 -translate-x-1/2 transform text-xs text-white">
@@ -2926,6 +2935,7 @@ export function GeneralSettingsTab(props: SettingProps) {
 export function DeviceSettingsModal() {
 	const context = useDevice();
 	const user = useUserContext();
+	const storage = useStorage(); // Add useStorage
 	const [params, setParams] = useSearchParams();
 	const currTab = () => params.tab ?? "Camera";
 	const device = () => context.devices.get(params.deviceSettings);
@@ -2935,7 +2945,7 @@ export function DeviceSettingsModal() {
 		if (device()?.hasAudioCapabilities) {
 			return [...items, "Audio"] as const;
 		}
-			return items;
+		return items;
 	};
 
 	// Other code remains the same...
@@ -2958,9 +2968,11 @@ export function DeviceSettingsModal() {
 		const numItems = navItems().length;
 		if (numItems <= 4) {
 			return "text-base";
-		}if (numItems === 5) {
+		}
+		if (numItems === 5) {
 			return "text-sm";
-		}if (numItems >= 6) {
+		}
+		if (numItems >= 6) {
 			return "text-xs";
 		}
 	});
@@ -2980,6 +2992,21 @@ export function DeviceSettingsModal() {
 		console.log("Clearing Params");
 		setParams({ deviceSettings: null, tab: null });
 	};
+
+	const savedRecs = createMemo(() =>
+		storage
+			.savedRecordings()
+			.filter((rec) => rec.device === params.deviceSettings && !rec.isUploaded),
+	);
+	const deviceRecs = createMemo(
+		() => context.deviceRecordings.get(params.deviceSettings) ?? [],
+	);
+
+	const disabledDownload = createMemo(() => {
+		const hasRecsToDownload =
+			deviceRecs().length > 0 && deviceRecs().length !== savedRecs().length;
+		return !hasRecsToDownload;
+	});
 
 	createEffect(() => {
 		if (!context.devices.has(params.deviceSettings)) {
@@ -3010,13 +3037,41 @@ export function DeviceSettingsModal() {
 								>
 									<TbPlugConnectedX size={32} />
 								</Show>
-								<h1 class="pl-2 text-lg font-medium text-slate-600">
-									{deviceName()}
-								</h1>
+								<div class="flex flex-col">
+									<h1 class="pl-2 text-lg font-medium text-slate-600">
+										{deviceName()}
+									</h1>
+									<p class="pl-2 text-sm text-slate-700">
+										Recordings: {savedRecs().length}/{deviceRecs().length}
+									</p>
+								</div>
 							</div>
-							<button onClick={() => clearParams()} class="text-gray-500">
-								<ImCross size={12} />
-							</button>
+							<div class="flex items-center space-x-2">
+								<Show
+									when={!context.devicesDownloading.has(id())}
+									fallback={
+										<button
+											class="p-2 text-red-500"
+											onClick={() => context.stopSaveItems(id())}
+										>
+											<FaSolidStop size={28} />
+										</button>
+									}
+								>
+									<button
+										class={`${
+											disabledDownload() ? "text-slate-300" : "text-blue-500"
+										} p-2`}
+										disabled={disabledDownload()}
+										onClick={() => context.saveItems(id())}
+									>
+										<FiDownload size={28} />
+									</button>
+								</Show>
+								<button onClick={() => clearParams()} class="text-gray-500">
+									<ImCross size={12} />
+								</button>
+							</div>
 						</header>
 						<nav class={`flex w-full justify-between ${textSizeClass()}`}>
 							<For each={navItems()}>
