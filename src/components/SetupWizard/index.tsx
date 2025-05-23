@@ -563,7 +563,7 @@ function SetupWizard(): JSX.Element {
 			</defs>
 		</svg>
 	);
-	const devices = () => [...deviceContext.devices.values()];
+	const devices = createMemo(() => [...deviceContext.devices.values()]);
 
 	const ChooseDeviceStep = () => (
 		<>
@@ -631,50 +631,170 @@ function SetupWizard(): JSX.Element {
 			});
 		}
 	};
-	const FoundDevices = () => (
-		<div class="space-y-1 rounded-lg bg-gray-200 p-1">
-			<Show
-				when={!!devices()}
-				fallback={<div class="text-sm">No devices found...</div>}
-			>
-				<For each={devices().filter((device) => device.isConnected)}>
-					{(device) => (
-						<button
-							onClick={() => openDevice(device)}
-							class="flex w-full items-center justify-between rounded-md border-2 border-blue-400 bg-white p-2 text-xs text-blue-400 sm:text-sm"
-						>
-							<div class="flex items-center gap-x-2">
-								<BsCameraVideoFill /> <span>{device.name}</span>
+	const FoundDevices = () => {
+		const connectedDevices = createMemo(() =>
+			devices().filter((device) => device.isConnected),
+		);
+		const [highlightNew, setHighlightNew] = createSignal(true);
+
+		// Flash animation for new devices
+		createEffect(() => {
+			if (connectedDevices().length > 0) {
+				setHighlightNew(true);
+				const timeout = setTimeout(() => setHighlightNew(false), 3000);
+				return () => clearTimeout(timeout);
+			}
+		});
+
+		return (
+			<div class="space-y-1 rounded-lg bg-gray-200 p-1">
+				<Show
+					when={connectedDevices().length > 0}
+					fallback={
+						<div class="flex flex-col items-center py-8 text-gray-500">
+							<div class="mb-2">
+								<BsCameraVideoFill size={32} class="opacity-20" />
 							</div>
-							<Show
-								when={device.group === "new"}
-								fallback={
-									<RiArrowsArrowRightSLine size={20} class="sm:h-6 sm:w-6" />
-								}
+							<p class="text-sm font-medium">No devices found yet</p>
+							<p class="text-xs">Devices will appear here automatically</p>
+						</div>
+					}
+				>
+					<For each={connectedDevices()}>
+						{(device, index) => (
+							<button
+								onClick={() => openDevice(device)}
+								initial={{ opacity: 0, scale: 0.95 }}
+								animate={{ opacity: 1, scale: 1 }}
+								class={`flex w-full items-center justify-between rounded-md border-2 bg-white p-3 transition-all sm:p-4 ${
+									highlightNew() && device.group === "new"
+										? "animate-pulse border-green-500 shadow-lg"
+										: "border-blue-400"
+								}`}
 							>
-								<div class="flex items-center">
-									<span>Setup</span>
-									<RiArrowsArrowRightSLine size={20} class="sm:h-6 sm:w-6" />
+								<div class="flex items-center gap-x-3">
+									<div
+										class={`${highlightNew() && device.group === "new" ? "text-green-500" : "text-blue-400"}`}
+									>
+										<BsCameraVideoFill size={24} />
+									</div>
+									<div class="text-left">
+										<p class="font-semibold text-gray-800">{device.name}</p>
+										<Show when={device.group === "new"}>
+											<p class="text-xs text-green-600">
+												New device - tap to setup!
+											</p>
+										</Show>
+									</div>
 								</div>
-							</Show>
-						</button>
-					)}
-				</For>
-			</Show>
-		</div>
-	);
-	const SearchingDeviceStep = () => (
-		<>
-			<Title title="Searching For Device" />
-			<p class="text-center text-xs text-gray-800 sm:text-sm">
-				If your device does not show ensure your phone/tablet is connected to
-				the “bushnet” network in your WiFi settings, if not join the network
-				with password “feathers”
-			</p>
-			<FoundDevices />
-			<Additional />
-		</>
-	);
+								<Show
+									when={device.group === "new"}
+									fallback={
+										<div class="text-blue-400">
+											<RiArrowsArrowRightSLine
+												size={24}
+												class="sm:h-7 sm:w-7"
+											/>
+										</div>
+									}
+								>
+									<div class="flex items-center gap-x-1 rounded-full bg-green-500 px-3 py-1 text-white">
+										<span class="text-xs font-medium sm:text-sm">Setup</span>
+										<RiArrowsArrowRightSLine size={20} />
+									</div>
+								</Show>
+							</button>
+						)}
+					</For>
+				</Show>
+			</div>
+		);
+	};
+	const SearchingDeviceStep = () => {
+		const [scanTime, setScanTime] = createSignal(0);
+		const [showHelp, setShowHelp] = createSignal(false);
+		const [autoOpenTimer, setAutoOpenTimer] = createSignal<number | null>(null);
+		const [hasAutoOpened, setHasAutoOpened] = createSignal(false);
+
+		const connectedDevices = createMemo(() => devices().filter((d) => d.isConnected));
+
+		// Auto-show help after 10 seconds if no devices found
+		createEffect(() => {
+			if (
+				scanTime() > 10 &&
+				connectedDevices().length === 0
+			) {
+				setShowHelp(true);
+			}
+		});
+
+		// Auto-open single device after a delay
+		createEffect(() => {
+			const devices = connectedDevices();
+			
+			// If we have exactly one device and haven't auto-opened yet
+			if (devices.length === 1 && !hasAutoOpened()) {
+				// Start or continue the timer
+				if (autoOpenTimer() === null) {
+					setAutoOpenTimer(3); // 3 second countdown
+				}
+			} else if (devices.length !== 1) {
+				// Reset if we have 0 or more than 1 device
+				setAutoOpenTimer(null);
+			}
+		});
+
+		// Handle the countdown
+		createEffect(() => {
+			const timer = autoOpenTimer();
+			if (timer !== null && timer > 0) {
+				const timeout = setTimeout(() => {
+					setAutoOpenTimer(timer - 1);
+				}, 1000);
+				return () => clearTimeout(timeout);
+			} else if (timer === 0 && !hasAutoOpened()) {
+				// Timer reached 0, auto-open the device
+				const devices = connectedDevices();
+				if (devices.length === 1) {
+					setHasAutoOpened(true);
+					openDevice(devices[0]);
+				}
+			}
+		});
+
+		onMount(() => {
+			const interval = setInterval(() => setScanTime((prev) => prev + 1), 1000);
+			onCleanup(() => clearInterval(interval));
+		});
+
+		return (
+			<>
+				<Title title="Searching For Device" />
+				<p class="text-center text-xs text-gray-800 sm:text-sm">
+					If your device does not show ensure your phone/tablet is connected to
+					the “bushnet” network in your WiFi settings, if not join the network
+					with password “feathers”
+				</p>
+				<FoundDevices />
+				
+				{/* Auto-open countdown indicator */}
+				<Show when={autoOpenTimer() !== null && connectedDevices().length === 1}>
+					<Motion.div
+						initial={{ opacity: 0, y: -10 }}
+						animate={{ opacity: 1, y: 0 }}
+						class="mt-2 flex items-center justify-center"
+					>
+						<div class="flex items-center space-x-2 rounded-full bg-green-50 px-3 py-1.5 text-xs text-green-700 sm:text-sm">
+							<div class="h-2 w-2 animate-pulse rounded-full bg-green-500" />
+							<span>Opening device in {autoOpenTimer()}...</span>
+						</div>
+					</Motion.div>
+				</Show>
+				
+				<Additional />
+			</>
+		);
+	};
 
 	const StepProgressIndicator = (props: {
 		nextStep?: Steps;
