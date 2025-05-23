@@ -16,7 +16,7 @@ import "./root.css";
 import Login from "./login";
 import { HeaderProvider, useHeaderContext } from "./components/Header";
 import { DeviceProvider } from "./contexts/Device";
-import { StorageProvider } from "./contexts/Storage";
+import { StorageProvider, useStorage } from "./contexts/Storage";
 import NotificationPopup from "./components/NotificationPopup";
 import { BiSolidCopyAlt } from "solid-icons/bi";
 import { LogsProvider, useLogsContext } from "./contexts/LogsContext";
@@ -25,6 +25,8 @@ import ConsentPopup from "./components/ConsentPopup";
 import BackgroundLogo from "./components/BackgroundLogo";
 import { ImSpinner } from "solid-icons/im";
 import { withSentryErrorBoundary } from "@sentry/solid";
+import GroupAccessRequestPopup from "./components/GroupAccessRequestPopup";
+import FlyweightChatManager from "./components/FlyweightChatManager";
 
 const routes = [
 	{
@@ -172,6 +174,8 @@ export default function Root() {
 										<AppRoutes />
 										<NotificationPopup />
 										<ConsentPopup />
+										<GroupAccessRequestPopup />
+										<FlyweightChatManager />
 									</DeviceProvider>
 								</StorageProvider>
 							</UserProvider>

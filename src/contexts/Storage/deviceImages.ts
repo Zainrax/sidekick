@@ -164,6 +164,32 @@ export function useDeviceImagesStorage() {
 					existingImage.filePath,
 				);
 			}
+			// Check for authorization errors before processing
+			if (res.status === 403 || res.status === 401) {
+				// Check if this is a device access issue
+				const errorData = res.data as { messages?: string[]; message?: string };
+				const errorMessage = errorData.message || (errorData.messages && errorData.messages.join(", ")) || "";
+				
+				if (errorMessage.includes("Could not find a device") || 
+					errorMessage.includes("authorization") ||
+					errorMessage.includes("access")) {
+					
+					// Trigger device access request popup using deviceId
+					userContext.setUserNeedsGroupAccess({
+						deviceId: deviceId,
+						deviceName: "",
+						groupName: "",
+					});
+					
+					log.logWarning({
+						message: `Device access required for device ${deviceId}`,
+						details: `You need access to device ${deviceId} to upload images`,
+					});
+					
+					return false;
+				}
+			}
+
 			const insertRes = await insertDeviceReferenceImage(db)({
 				deviceId: Number.parseInt(deviceId),
 				filePath,
@@ -181,10 +207,17 @@ export function useDeviceImagesStorage() {
 					: { serverStatus: "pending-upload" }),
 			});
 
-			log.logSuccess({
-				message: "Successfully uploaded device photo",
-				details: JSON.stringify(insertRes),
-			});
+			if (res.status === 200) {
+				log.logSuccess({
+					message: "Successfully uploaded device photo",
+					details: JSON.stringify(insertRes),
+				});
+			} else {
+				log.logWarning({
+					message: "Device photo upload failed or pending",
+					details: `Status: ${res.status}, marked as pending upload`,
+				});
+			}
 
 			return res.status === 200;
 		} catch (error) {

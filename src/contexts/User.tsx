@@ -16,6 +16,7 @@ import { CapacitorHttp } from "@capacitor/core";
 import { useLogsContext } from "./LogsContext";
 import { Effect, Either } from "effect";
 import { createTokenService, type User, UserSchema } from "./TokenService";
+import { createStore } from "solid-js/store";
 
 // Response schema definitions
 export type UserAuthResponse = z.infer<typeof UserAuthResponseSchema>;
@@ -703,12 +704,103 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 		}
 	});
 
+	const [userNeedsGroupAccess, setUserNeedsGroupAccess] = createStore({
+		deviceId: "",
+		deviceName: "",
+		groupName: "",
+	});
+
+	// Request device access function - supports both deviceId and deviceName+groupName
+	async function requestDeviceAccess(
+		params: { deviceId: string } | { deviceName: string; groupName: string },
+		adminEmail?: string
+	): Promise<boolean> {
+		try {
+			const user = await getUser();
+			if (!user) {
+				log.logError({
+					message: "User not logged in",
+				});
+				return false;
+			}
+
+			// Build payload based on provided parameters
+			const payload: { 
+				deviceId?: string; 
+				deviceName?: string; 
+				groupName?: string; 
+				groupAdminEmail?: string;
+			} = {};
+
+			if ("deviceId" in params) {
+				if (!params.deviceId) {
+					log.logError({
+						message: "Device ID is required for access request",
+					});
+					return false;
+				}
+				payload.deviceId = params.deviceId;
+			} else {
+				if (!params.deviceName || !params.groupName) {
+					log.logError({
+						message: "Device name and group name are required for access request",
+					});
+					return false;
+				}
+				payload.deviceName = params.deviceName;
+				payload.groupName = params.groupName;
+			}
+
+			if (adminEmail) {
+				payload.groupAdminEmail = adminEmail;
+			}
+
+			const response = await CapacitorHttp.post({
+				url: `${getServerUrl()}/api/v1/users/request-device-access`,
+				headers: {
+					Authorization: user.token,
+					"Content-Type": "application/json",
+				},
+				data: payload,
+			});
+
+			if (response.status >= 200 && response.status < 300) {
+				const deviceInfo = "deviceId" in params ? 
+					`device ID ${params.deviceId}` : 
+					`device ${params.deviceName} in group ${params.groupName}`;
+				log.logSuccess({
+					message: "Device access request sent successfully",
+					details: `Request for ${deviceInfo} has been sent`,
+				});
+				return true;
+			} else {
+				const errorMessage =
+					(response.data as { message?: string })?.message ||
+					`HTTP Error: ${response.status}`;
+				log.logError({
+					message: "Failed to send device access request",
+					details: errorMessage,
+				});
+				return false;
+			}
+		} catch (err) {
+			log.logError({
+				message: "Exception during device access request",
+				error: err instanceof Error ? err : new Error(String(err)),
+			});
+			return false;
+		}
+	}
+
 	// Return context value
 	return {
 		data,
 		groups,
 		refetchGroups,
 		skippedLogin,
+		userNeedsGroupAccess,
+		setUserNeedsGroupAccess,
+		requestDeviceAccess,
 		getUser,
 		isProd,
 		login,

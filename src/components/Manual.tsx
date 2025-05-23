@@ -1,8 +1,13 @@
 import {
+	AndroidSettings,
+	IOSSettings,
+	NativeSettings,
+} from "capacitor-native-settings";
+import {
 	RiArrowsArrowLeftSLine,
 	RiArrowsArrowRightSLine,
 } from "solid-icons/ri";
-import { createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
+import { For, type JSX, Match, Show, Switch, createSignal } from "solid-js";
 import {
 	type ColorType,
 	type DeviceType,
@@ -11,11 +16,6 @@ import {
 	StartupProcess,
 	getStartupSteps,
 } from "./SetupWizard";
-import {
-	NativeSettings,
-	AndroidSettings,
-	IOSSettings,
-} from "capacitor-native-settings";
 
 export const getSteps = (deviceType: DeviceType): JSX.Element => {
 	return (
@@ -132,22 +132,6 @@ export default function Manual() {
 		{ id: "wifiConnection", label: "WiFi Connection" },
 	];
 
-	// Function to open the chat widget
-	const openFlyweightChat = () => {
-		const chatEvent = new CustomEvent("flyweightchatopen", {
-			detail: true, // Use true to explicitly open the chat
-		});
-		window.dispatchEvent(chatEvent);
-	};
-
-	// Function to close the chat widget
-	const closeFlyweightChat = () => {
-		const chatEvent = new CustomEvent("flyweightchatopen", {
-			detail: false, // Use false to explicitly close the chat
-		});
-		window.dispatchEvent(chatEvent);
-	};
-
 	const getInstructions = (method: string): JSX.Element => {
 		const [deviceType, setDeviceType] = createSignal<DeviceType>(
 			"DOC AI Cam / Bird Monitor",
@@ -175,20 +159,6 @@ export default function Manual() {
 
 							{getSteps(deviceType())}
 							<StartupProcess steps={getStartupSteps(deviceType())} />
-
-							{/* Your custom buttons to open/close the chat */}
-							<button
-								onClick={openFlyweightChat}
-								class="mt-4 w-full rounded bg-green-500 px-4 py-2 text-white"
-							>
-								Open AI Chat
-							</button>
-							<button
-								onClick={closeFlyweightChat}
-								class="mt-2 w-full rounded bg-red-500 px-4 py-2 text-white"
-							>
-								Close AI Chat
-							</button>
 						</>
 					</Match>
 					<Match when={method === "phoneHotspot"}>
@@ -250,19 +220,6 @@ export default function Manual() {
 							>
 								Hotspot Settings
 							</button>
-							{/* Your custom buttons to open/close the chat */}
-							<button
-								onClick={openFlyweightChat}
-								class="mt-4 w-full rounded bg-green-500 px-4 py-2 text-white"
-							>
-								Open AI Chat
-							</button>
-							<button
-								onClick={closeFlyweightChat}
-								class="mt-2 w-full rounded bg-red-500 px-4 py-2 text-white"
-							>
-								Close AI Chat
-							</button>
 						</>
 					</Match>
 					<Match when={method === "wifiConnection"}>
@@ -317,19 +274,6 @@ export default function Manual() {
 								class="mt-4 w-full rounded bg-blue-500 px-4 py-2 text-white"
 							>
 								WiFi Settings
-							</button>
-							{/* Your custom buttons to open/close the chat */}
-							<button
-								onClick={openFlyweightChat}
-								class="mt-4 w-full rounded bg-green-500 px-4 py-2 text-white"
-							>
-								Open AI Chat
-							</button>
-							<button
-								onClick={closeFlyweightChat}
-								class="mt-2 w-full rounded bg-red-500 px-4 py-2 text-white"
-							>
-								Close AI Chat
 							</button>
 						</>
 					</Match>

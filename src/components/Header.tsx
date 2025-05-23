@@ -7,27 +7,12 @@ import {
 	RiCommunicationChat1Line,
 } from "solid-icons/ri";
 import { type JSXElement, createEffect, createSignal, onMount } from "solid-js";
+import { toggleFlyweightChat } from "./FlyweightChatManager";
 
 type Header = string;
 type BackLink = string;
 type HeaderButton = () => JSXElement;
-// Centralized function to show/hide the chat container
 export const [HeaderProvider, useHeaderContext] = createContextProvider(() => {
-	// --- Dynamic Script Loading and Chat Event Handlers (Global) ---
-	const [isChatUIVisible, setIsChatUIVisible] = createSignal(false); // Controls our wrapper's visibility
-
-	// Function to dispatch the event to open/close the chat *service*
-	const controlFlyweightChatService = (show: boolean) => {
-		const chatEvent = new CustomEvent("flyweightchatopen", { detail: show });
-		window.dispatchEvent(chatEvent);
-	};
-
-	// Toggle visibility of our cropping container
-	const toggleChatVisibility = () => {
-		const newVisibility = !isChatUIVisible();
-		setIsChatUIVisible(newVisibility);
-		controlFlyweightChatService(newVisibility); // Tell the service to open/close its internal UI
-	};
 	const headerMap = new ReactiveMap<string, [Header, HeaderButton?, BackLink?]>(
 		[
 			["/", ["Devices"]],
@@ -43,7 +28,7 @@ export const [HeaderProvider, useHeaderContext] = createContextProvider(() => {
 					() => {
 						return (
 							<button
-								onClick={toggleChatVisibility}
+								onClick={() => toggleFlyweightChat(true)}
 								class="flex items-center justify-center rounded-full bg-blue-500 p-2 text-white shadow-md hover:bg-blue-600"
 								aria-label="Open Chat Assistant"
 							>
