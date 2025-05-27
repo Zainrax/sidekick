@@ -256,8 +256,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 				!authResult.success ||
 				!authResult.data.success ||
 				!authResult.data.userData ||
-				!authResult.data.token ||
-				!authResult.data.refreshToken
+				!authResult.data.token
 			) {
 				log.logWarning({
 					message: "Authentication failed",
@@ -289,7 +288,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 				token: authResult.data.token, // Removed non-null assertion
 				id: authResult.data.userData.id.toString(),
 				email,
-				refreshToken: authResult.data.refreshToken, // Removed non-null assertion
+				refreshToken: authResult.data.refreshToken || "", // Provide empty string as fallback
 				expiry: authResult.data.expiry,
 				prod: isProd(),
 			};
@@ -720,6 +719,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 			if (!user) {
 				log.logError({
 					message: "User not logged in",
+					error: new Error("User not authenticated"),
 				});
 				return false;
 			}
@@ -736,6 +736,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 				if (!params.deviceId) {
 					log.logError({
 						message: "Device ID is required for access request",
+						error: new Error("Missing device ID"),
 					});
 					return false;
 				}
@@ -744,6 +745,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 				if (!params.deviceName || !params.groupName) {
 					log.logError({
 						message: "Device name and group name are required for access request",
+						error: new Error("Missing device name or group name"),
 					});
 					return false;
 				}
@@ -779,6 +781,7 @@ const [UserProvider, useUserContext] = createContextProvider(() => {
 					`HTTP Error: ${response.status}`;
 				log.logError({
 					message: "Failed to send device access request",
+					error: new Error(errorMessage),
 					details: errorMessage,
 				});
 				return false;

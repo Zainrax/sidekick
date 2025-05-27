@@ -2778,8 +2778,8 @@ export function GeneralSettingsTab(props: SettingProps) {
 			if (res) {
 				setLowPowerMode(
 					res.values.thermalRecorder?.UseLowPowerMode ??
-						res.defaults["thermal-recorder"]?.UseLowPowerMode ??
-						null,
+					res.defaults["thermal-recorder"]?.UseLowPowerMode ??
+					null,
 				);
 			}
 		} catch (error) {
@@ -2889,9 +2889,8 @@ export function GeneralSettingsTab(props: SettingProps) {
 							<div
 								class="transition-width m-1 h-4 rounded-full bg-blue-500 duration-500"
 								style={{
-									width: `${
-										context.getDeviceUpdating(id())?.UpdateProgressPercentage
-									}%`,
+									width: `${context.getDeviceUpdating(id())?.UpdateProgressPercentage
+										}%`,
 								}}
 							/>
 							<span class="absolute left-1/2 top-1 -translate-x-1/2 transform text-xs text-white">
@@ -3052,9 +3051,8 @@ export function DeviceSettingsModal() {
 									}
 								>
 									<button
-										class={`${
-											disabledDownload() ? "text-slate-300" : "text-blue-500"
-										} p-2`}
+										class={`${disabledDownload() ? "text-slate-300" : "text-blue-500"
+											} p-2`}
 										disabled={disabledDownload()}
 										onClick={() => context.saveItems(id())}
 									>

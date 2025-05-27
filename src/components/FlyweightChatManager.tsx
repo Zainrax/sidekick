@@ -62,14 +62,27 @@ export default function FlyweightChatManager() {
 				style.textContent = `
 					/* IMPORTANT: These CSS selectors depend on Flyweight's current implementation:
 					 * - iframe element with data-testid="chat-overlay"
+					 * - iframe element with data-testid="popup-overlay"
+					 * - div element with id="chat-popup" for the popup button
 					 * - Inline styles containing "width: 50px" for button state
 					 * - Inline styles containing "width: 100%" for chat state
+					 * - Inline styles containing "width: 150px" for popup overlay
 					 * If Flyweight changes their HTML structure or attribute names,
 					 * these selectors will need to be updated.
 					 */
 					
+					/* Hide the chat popup button */
+					#chat-popup {
+						display: none !important;
+					}
+					
 					/* Hide the iframe when it's in button state (50x50) */
 					iframe[data-testid="chat-overlay"][style*="width: 50px"] {
+						display: none !important;
+					}
+					
+					/* Hide the popup overlay iframe (150x50) */
+					iframe[data-testid="popup-overlay"][style*="width: 150px"] {
 						display: none !important;
 					}
 					
@@ -81,6 +94,11 @@ export default function FlyweightChatManager() {
 					
 					/* Hide chat completely when not on manual page */
 					body:not(.flyweight-manual-page) iframe[data-testid="chat-overlay"] {
+						display: none !important;
+					}
+					
+					/* Hide popup overlay completely when not on manual page */
+					body:not(.flyweight-manual-page) iframe[data-testid="popup-overlay"] {
 						display: none !important;
 					}
 				`;
@@ -133,15 +151,28 @@ export default function FlyweightChatManager() {
 			}
 		};
 
-		// Watch for iframe to appear
-		const findAndObserveIframe = () => {
-			const iframe = document.querySelector('iframe[data-testid="chat-overlay"]') as HTMLIFrameElement;
-			if (iframe) {
+		// Watch for iframes to appear
+		const findAndObserveIframes = () => {
+			const chatIframe = document.querySelector('iframe[data-testid="chat-overlay"]') as HTMLIFrameElement;
+			const popupIframe = document.querySelector('iframe[data-testid="popup-overlay"]') as HTMLIFrameElement;
+			
+			let foundAny = false;
+			
+			if (chatIframe && !chatIframe.hasAttribute('data-observer-attached')) {
 				console.log("Found chat iframe");
-				setupIframeObserver(iframe);
-				return true;
+				setupIframeObserver(chatIframe);
+				chatIframe.setAttribute('data-observer-attached', 'true');
+				foundAny = true;
 			}
-			return false;
+			
+			if (popupIframe && !popupIframe.hasAttribute('data-observer-attached')) {
+				console.log("Found popup overlay iframe");
+				// For popup overlay, we don't need to observe style changes as it should always be hidden
+				popupIframe.setAttribute('data-observer-attached', 'true');
+				foundAny = true;
+			}
+			
+			return foundAny;
 		};
 
 		// Initialize styles
@@ -156,13 +187,11 @@ export default function FlyweightChatManager() {
 			}
 		});
 
-		// Look for iframe
-		if (!findAndObserveIframe()) {
-			// If not found, observe body for when it's added
+		// Look for iframes
+		if (!findAndObserveIframes()) {
+			// If not found, observe body for when they're added
 			const bodyObserver = new MutationObserver(() => {
-				if (findAndObserveIframe()) {
-					bodyObserver.disconnect();
-				}
+				findAndObserveIframes();
 			});
 			
 			bodyObserver.observe(document.body, {

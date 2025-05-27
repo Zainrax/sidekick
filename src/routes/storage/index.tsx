@@ -38,8 +38,15 @@ export default function Storage() {
     headerContext?.headerMap.set("/storage", [
       header[0],
       () => (
-        <button type="button" onClick={deleteSaved} class="text-red-400">
-          <FaRegularTrashCan size={28} />
+        <button 
+          type="button" 
+          onClick={deleteSaved} 
+          class="flex items-center gap-2 rounded-lg bg-red-500 px-3 py-2 text-white shadow-md transition-all hover:bg-red-600 hover:shadow-lg active:scale-95"
+          aria-label="Delete all saved items"
+        >
+          <FaRegularTrashCan size={20} />
+          <span class="hidden font-medium sm:inline">Clear Saved</span>
+          <span class="font-medium sm:hidden">Clear</span>
         </button>
       ),
     ]);

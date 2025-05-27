@@ -4,7 +4,7 @@ import { ReactiveMap } from "@solid-primitives/map";
 import { A, useLocation, useNavigate } from "@solidjs/router";
 import {
 	RiArrowsArrowLeftSLine,
-	RiCommunicationChat1Line,
+	RiCommunicationChat1Fill,
 } from "solid-icons/ri";
 import { type JSXElement, createEffect, createSignal, onMount } from "solid-js";
 import { toggleFlyweightChat } from "./FlyweightChatManager";
@@ -29,11 +29,12 @@ export const [HeaderProvider, useHeaderContext] = createContextProvider(() => {
 						return (
 							<button
 								onClick={() => toggleFlyweightChat(true)}
-								class="flex items-center justify-center rounded-full bg-blue-500 p-2 text-white shadow-md hover:bg-blue-600"
+								class="flex items-center gap-2 rounded-lg bg-blue-500 px-3 py-2 text-white shadow-md transition-all hover:bg-blue-600 hover:shadow-lg active:scale-95 sm:px-4"
 								aria-label="Open Chat Assistant"
 							>
-								<RiCommunicationChat1Line size={20} />
-								<p class="ml-1 hidden sm:inline">Help</p>
+								<RiCommunicationChat1Fill size={24} />
+								<span class="hidden font-medium sm:inline">Ask for Help</span>
+								<span class="font-medium sm:hidden">Help</span>
 							</button>
 						);
 					},
@@ -105,10 +106,10 @@ export const [HeaderProvider, useHeaderContext] = createContextProvider(() => {
 		}
 	});
 	const HeaderElement = () => (
-		<div class="pt-safe fixed top-0 z-30 flex w-screen items-center justify-between bg-white px-6 pb-3">
-			<div class="flex items-center justify-end">
+		<div class="pt-safe fixed top-0 z-30 flex w-screen items-center justify-between bg-white px-2 pb-3">
+			<div class="flex items-center">
 				<div class="flex w-6 items-center justify-center">{backNav()}</div>
-				<h2 class="ml-4 text-4xl font-bold text-gray-800">{header()}</h2>
+				<h2 class="text-4xl font-bold text-gray-800">{header()}</h2>
 			</div>
 			{HeaderButton()?.()}
 		</div>

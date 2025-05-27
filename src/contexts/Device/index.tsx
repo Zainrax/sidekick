@@ -885,7 +885,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 			message:
 				res.error ||
 				"Please try again, or connect to 'bushnet' with password 'feathers' in your wifi settings. Alternatively, set up a hotspot named 'bushnet' password: 'feathers'.",
-			warn: res.canRetry,
+			warn: false,
 		});
 		setApState("default");
 	};
@@ -1809,14 +1809,14 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 			const networks = WifiNetwork.array().parse(JSON.parse(res.data));
 			const processedNetworks = networks
 				? networks
-						.filter((network) => network.SSID)
-						.reduce((acc, curr) => {
-							const found = acc.find((a) => a.SSID === curr.SSID);
-							if (!found) {
-								acc.push(curr);
-							}
-							return acc;
-						}, [] as WifiNetwork[])
+					.filter((network) => network.SSID)
+					.reduce((acc, curr) => {
+						const found = acc.find((a) => a.SSID === curr.SSID);
+						if (!found) {
+							acc.push(curr);
+						}
+						return acc;
+					}, [] as WifiNetwork[])
 				: [];
 			availableWifiNetworksCache.set(deviceId, {
 				networks: processedNetworks,
