@@ -1,7 +1,7 @@
 import { KeepAwake } from "@capacitor-community/keep-awake";
 import { CapacitorSQLite, SQLiteConnection } from "@capacitor-community/sqlite";
 import { createContextProvider } from "@solid-primitives/context";
-import { createEffect, createSignal, on, onMount } from "solid-js";
+import { createEffect, createSignal, on, onMount, onCleanup } from "solid-js";
 import { openConnection } from "../../database";
 import { useEventStorage } from "./event";
 import { useLocationStorage } from "./location";
@@ -85,8 +85,56 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 			}
 		}
 	});
+	
+	// Set up network status listener
+	let networkListener: { remove: () => void } | null = null;
+	
+	onMount(async () => {
+		// Listen for network status changes
+		networkListener = await Network.addListener('networkStatusChange', async (status) => {
+			log.logSync({
+				message: `Network status changed: ${status.connectionType}`,
+				warn: false,
+			});
+			
+			// Check if WiFi is connected and we have items to upload
+			if (status.connected && status.connectionType === 'wifi' && hasItemsToUpload() && !isUploading()) {
+				log.logSync({
+					message: "WiFi connected, starting automatic upload",
+					warn: false,
+				});
+				await uploadItems(false);
+			}
+		});
+		
+		// Also check network status on mount in case WiFi is already connected
+		const currentStatus = await Network.getStatus();
+		if (currentStatus.connected && currentStatus.connectionType === 'wifi' && hasItemsToUpload() && !isUploading()) {
+			log.logSync({
+				message: "WiFi detected on startup, starting automatic upload",
+				warn: false,
+			});
+			await uploadItems(false);
+		}
+	});
+	
+	// Clean up listener on unmount
+	onCleanup(() => {
+		if (networkListener) {
+			networkListener.remove();
+		}
+	});
 
 	const uploadItems = async (warn = true) => {
+		// Prevent multiple concurrent uploads
+		if (isUploading()) {
+			log.logWarning({
+				message: "Upload already in progress",
+				warn: false,
+			});
+			return;
+		}
+		
 		// Cancel reminders before starting upload
 		await cancelAllReminders();
 		setIsUploading(true);
@@ -236,15 +284,9 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 					// If no items, cancel all reminders
 					await cancelAllReminders();
 				}
-
-				// Auto-upload on WiFi logic remains the same
-				const status = await Network.getStatus();
-				if (status.connectionType === "wifi" && hasItems) {
-					uploadItems(false);
-				}
 			} catch (error) {
 				log.logError({
-					message: "Error handling upload notification or auto-upload",
+					message: "Error handling upload notifications",
 					error,
 				});
 			}
