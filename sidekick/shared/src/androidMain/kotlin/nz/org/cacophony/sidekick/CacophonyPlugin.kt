@@ -11,16 +11,21 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import nz.org.cacophony.sidekick.cacophony.CacophonyInterface
 
 @CapacitorPlugin(name = "Cacophony")
-class CacophonyPlugin : Plugin() {
+class CacophonyPlugin : Plugin(), EventEmitter {
     lateinit var cacophony: CacophonyInterface
 
     override fun load() {
         cacophony = CacophonyInterface(context.applicationContext.filesDir.absolutePath)
     }
+    
+    // Implementation of EventEmitter interface
+    override fun emitEvent(eventName: String, data: JSObject) {
+        notifyListeners(eventName, data)
+    }
 
     @PluginMethod
     fun authenticateUser(call: PluginCall) {
-        cacophony.authenticateUser(pluginCall(call))
+        cacophony.authenticateUser(pluginCall(call, this))
     }
 
     @PluginMethod
@@ -140,7 +145,31 @@ class CacophonyPlugin : Plugin() {
             data.put("message", "Could not get app version")
             call.resolve(data)
         }
+    }
 
+    @PluginMethod
+    fun batchUploadRecordings(call: PluginCall) {
+        cacophony.batchUploadRecordings(pluginCall(call, this))
+    }
+
+    @PluginMethod
+    fun pauseUploadQueue(call: PluginCall) {
+        cacophony.pauseUploadQueue(pluginCall(call))
+    }
+
+    @PluginMethod
+    fun resumeUploadQueue(call: PluginCall) {
+        cacophony.resumeUploadQueue(pluginCall(call))
+    }
+
+    @PluginMethod
+    fun cancelUploadQueue(call: PluginCall) {
+        cacophony.cancelUploadQueue(pluginCall(call))
+    }
+
+    @PluginMethod
+    fun getUploadQueueStatus(call: PluginCall) {
+        cacophony.getUploadQueueStatus(pluginCall(call))
     }
 }
 

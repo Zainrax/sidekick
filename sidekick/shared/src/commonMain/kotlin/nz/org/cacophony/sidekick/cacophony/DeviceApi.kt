@@ -430,4 +430,64 @@ class DeviceApi(private val api: Api, val filePath: String) {
         return DeletedReference(localDeleted, serverDeleted)
     }
 
+    // Batch Upload Management
+    data class UploadQueueStatus(
+        val total: Int,
+        val pending: Int,
+        val uploading: Int,
+        val completed: Int,
+        val failed: Int,
+        val paused: Boolean
+    )
+
+    private val uploadQueues = mutableMapOf<String, BatchUploadQueue>()
+    
+    fun startBatchUpload(
+        token: Token,
+        recordings: List<CacophonyInterface.RecordingBatchItem>,
+        maxConcurrent: Int,
+        onProgress: (recordingId: String, progress: Int) -> Unit = { _, _ -> },
+        onCompleted: (recordingId: String, uploadId: String) -> Unit = { _, _ -> },
+        onFailed: (recordingId: String, error: String) -> Unit = { _, _ -> },
+        onStatusChanged: (status: UploadQueueStatus) -> Unit = { _ -> }
+    ) {
+        val queue = BatchUploadQueue(
+            token = token,
+            recordings = recordings.toMutableList(),
+            maxConcurrent = maxConcurrent,
+            api = api,
+            filePath = filePath,
+            onProgress = onProgress,
+            onCompleted = onCompleted,
+            onFailed = onFailed,
+            onStatusChanged = onStatusChanged
+        )
+        queue.start()
+    }
+
+    fun pauseUploadQueue(queueId: String) {
+        uploadQueues[queueId]?.pause()
+    }
+
+    fun resumeUploadQueue(queueId: String) {
+        uploadQueues[queueId]?.resume()
+    }
+
+    fun cancelUploadQueue(queueId: String) {
+        uploadQueues[queueId]?.cancel()
+        uploadQueues.remove(queueId)
+    }
+
+    fun getUploadQueueStatus(queueId: String): UploadQueueStatus {
+        val queue = uploadQueues[queueId]
+        return queue?.getStatus() ?: UploadQueueStatus(
+            total = 0,
+            pending = 0,
+            uploading = 0,
+            completed = 0,
+            failed = 0,
+            paused = false
+        )
+    }
+
 }

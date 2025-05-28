@@ -167,7 +167,23 @@ export default function Storage() {
         </ActionContainer>
       </Show>
 
-      <div class="pb-bar fixed inset-x-0 bottom-2 mx-auto flex justify-center">
+      <div class="pb-bar fixed inset-x-0 bottom-2 mx-auto flex flex-col items-center gap-2">
+        <Show when={storage.isUploading() && storage.uploadProgress()?.total > 0}>
+          <div class="flex w-full max-w-sm flex-col items-center rounded-lg bg-white px-4 py-2 shadow-lg">
+            <div class="flex w-full items-center justify-between text-sm text-gray-600">
+              <span>Uploading recordings...</span>
+              <span>
+                {storage.uploadProgress()?.current} / {storage.uploadProgress()?.total}
+              </span>
+            </div>
+            <div class="mt-1 h-2 w-full overflow-hidden rounded-full bg-gray-200">
+              <div
+                class="h-full bg-blue-500 transition-all duration-300"
+                style={`width: ${storage.uploadProgress()?.percentage || 0}%`}
+              />
+            </div>
+          </div>
+        </Show>
         <button
           class="flex items-center justify-center space-x-2 rounded-md bg-white px-4 py-4"
           onClick={toggleUpload}

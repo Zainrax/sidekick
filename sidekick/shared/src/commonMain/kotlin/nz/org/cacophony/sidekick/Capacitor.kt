@@ -15,6 +15,7 @@ interface PluginCall {
     fun getString(key: String): String?
     fun resolve(data: Map<String, Any>)
     fun reject(message: String)
+    fun notifyListeners(eventName: String, data: Map<String, Any>)
 }
 
 

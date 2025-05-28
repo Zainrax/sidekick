@@ -94,18 +94,27 @@ export function useEventStorage() {
 				};
 			}
 
-			// Group events by identical type and details, matching the Go implementation
 			const eventGroups: Record<string, { events: Event[]; times: string[] }> =
 				{};
 
 			for (const event of events) {
-				// Create a unique key based on event type and details
-				// This matches the Go implementation which groups by description
-				const descriptionObj = {
+				let detailsForGrouping: any;
+				try {
+					// Attempt to parse event.details
+					detailsForGrouping = JSON.parse(event.details);
+				} catch (e) {
+					console.warn(
+						`Event (key: ${event.key}, type: ${event.type}) details are not valid JSON. Using raw string for grouping. Error: ${e instanceof Error ? e.message : String(e)}. Details (first 100 chars): "${event.details.substring(0, 100)}..."`,
+					);
+					detailsForGrouping = event.details; // Fallback to the raw string
+				}
+
+				// Create a unique key based on event type and the (parsed or raw) details
+				const descriptionObjForGrouping = {
 					type: event.type,
-					details: JSON.parse(event.details),
+					details: detailsForGrouping,
 				};
-				const descriptionKey = JSON.stringify(descriptionObj);
+				const descriptionKey = JSON.stringify(descriptionObjForGrouping);
 
 				if (!eventGroups[descriptionKey]) {
 					eventGroups[descriptionKey] = {
@@ -118,23 +127,21 @@ export function useEventStorage() {
 				eventGroups[descriptionKey].times.push(event.timestamp);
 			}
 
-			// For each group, send one API request
 			const results = await Promise.all(
 				Object.entries(eventGroups).map(async ([descriptionKey, group]) => {
 					try {
-						const descriptionObj = JSON.parse(descriptionKey);
+						const descriptionObjParsed = JSON.parse(descriptionKey);
 
-						// Create payload matching the API format
 						const payload = {
 							description: {
-								type: descriptionObj.type,
-								details: descriptionObj.details,
+								type: descriptionObjParsed.type,
+								details: descriptionObjParsed.details,
 							},
 							dateTimes: group.times,
 						};
 
 						const response = await CapacitorHttp.post({
-							url: `${userContext.getServerUrl()}/api/v1/events/device/${device}`,
+							url: `${userContext.getServerUrl()}/api/v1/events/device/${device}`, // Reverted to use userContext
 							headers: {
 								Authorization: token,
 								"Content-Type": "application/json",
@@ -152,7 +159,8 @@ export function useEventStorage() {
 						return {
 							success: false,
 							message:
-								response.data?.message || `HTTP Error: ${response.status}`,
+								(typeof response.data === "object" && response.data?.message) ||
+								`HTTP Error: ${response.status}`,
 							uploadedKeys: [],
 						};
 					} catch (error) {
@@ -175,7 +183,8 @@ export function useEventStorage() {
 
 			return {
 				success: allUploaded,
-				message: allMessages,
+				message:
+					allMessages || "No events processed or all failed individually.",
 				uploadedKeys: allUploadedKeys,
 			};
 		} catch (error) {

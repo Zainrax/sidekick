@@ -1573,7 +1573,7 @@ export function LocationSettingsTab(props: SettingProps) {
 							<div class="mb-4 flex items-center space-x-2 rounded-lg border-2 border-blue-400 p-2">
 								<FiCloud size={18} class="text-blue-400" />
 								<p class="text-xs text-blue-400 sm:text-sm">
-									{isSyncing() ? "Saving changes..." : "Save to apply changes."}
+									{isSyncing() ? "Saving changes..." : "Ready to sync when internet connection available."}
 								</p>
 							</div>
 						</Show>

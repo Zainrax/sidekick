@@ -85,10 +85,10 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 			}
 		}
 	});
-	
+
 	// Set up network status listener
 	let networkListener: { remove: () => void } | null = null;
-	
+
 	onMount(async () => {
 		// Listen for network status changes
 		networkListener = await Network.addListener('networkStatusChange', async (status) => {
@@ -96,7 +96,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 				message: `Network status changed: ${status.connectionType}`,
 				warn: false,
 			});
-			
+
 			// Check if WiFi is connected and we have items to upload
 			if (status.connected && status.connectionType === 'wifi' && hasItemsToUpload() && !isUploading()) {
 				log.logSync({
@@ -106,24 +106,15 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 				await uploadItems(false);
 			}
 		});
-		
-		// Also check network status on mount in case WiFi is already connected
-		const currentStatus = await Network.getStatus();
-		if (currentStatus.connected && currentStatus.connectionType === 'wifi' && hasItemsToUpload() && !isUploading()) {
-			log.logSync({
-				message: "WiFi detected on startup, starting automatic upload",
-				warn: false,
-			});
-			await uploadItems(false);
-		}
+
+		// Clean up listener on unmount
+		onCleanup(() => {
+			if (networkListener) {
+				networkListener.remove();
+			}
+		});
 	});
-	
-	// Clean up listener on unmount
-	onCleanup(() => {
-		if (networkListener) {
-			networkListener.remove();
-		}
-	});
+
 
 	const uploadItems = async (warn = true) => {
 		// Prevent multiple concurrent uploads
@@ -134,7 +125,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 			});
 			return;
 		}
-		
+
 		// Cancel reminders before starting upload
 		await cancelAllReminders();
 		setIsUploading(true);
@@ -219,7 +210,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 			if (photosCount > 0) parts.push(`${photosCount} photos`);
 
 			if (parts.length > 0) {
-				uploadBody += parts.join(", ") + ".";
+				uploadBody += `${parts.join(", ")}.`;
 
 				// Schedule 1-hour reminder
 				notifications.push({
@@ -293,6 +284,22 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 		}),
 	);
 
+
+	// Check initial network status when storage is ready
+	createEffect(
+		on([hasItemsToUpload, isUploading], async ([hasItems, uploading]) => {
+			if (hasItems && !uploading) {
+				const currentStatus = await Network.getStatus();
+				if (currentStatus.connected && currentStatus.connectionType === 'wifi') {
+					log.logSync({
+						message: "WiFi detected, starting automatic upload",
+						warn: false,
+					});
+					await uploadItems(false);
+				}
+			}
+		})
+	);
 	return {
 		...recording,
 		...location,

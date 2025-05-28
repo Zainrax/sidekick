@@ -7,7 +7,11 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import org.json.JSONArray
 
-data class pluginCall(val call: com.getcapacitor.PluginCall): PluginCall {
+interface EventEmitter {
+    fun emitEvent(eventName: String, data: JSObject)
+}
+
+data class pluginCall(val call: com.getcapacitor.PluginCall, val eventEmitter: EventEmitter? = null): PluginCall {
     override fun setKeepAlive(keepAlive: Boolean) {
         call.setKeepAlive(keepAlive)
     }
@@ -38,5 +42,9 @@ data class pluginCall(val call: com.getcapacitor.PluginCall): PluginCall {
 
     override fun resolve(data: Map<String, Any>) {
         call.resolve(mapToJSObject(data))
+    }
+
+    override fun notifyListeners(eventName: String, data: Map<String, Any>) {
+        eventEmitter?.emitEvent(eventName, mapToJSObject(data))
     }
 }
