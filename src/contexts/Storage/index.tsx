@@ -18,6 +18,7 @@ import type {
 	CancelOptions,
 	LocalNotificationSchema,
 } from "@capacitor/local-notifications";
+import { debounce } from "@solid-primitives/scheduled";
 
 const DatabaseName = "Cacophony";
 
@@ -44,12 +45,12 @@ export const db = await openConnection(
 
 const [StorageProvider, useStorage] = createContextProvider(() => {
 	const [isUploading, setIsUploading] = createSignal(false);
+	const [autoUploadEnabled, setAutoUploadEnabled] = createSignal(true);
 	const recording = useRecordingStorage();
 	const location = useLocationStorage();
 	const deviceImages = useDeviceImagesStorage();
 	const event = useEventStorage();
 	const log = useLogsContext();
-
 	const cancelAllReminders = async () => {
 		try {
 			const cancelOptions: CancelOptions = {
@@ -98,7 +99,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 			});
 
 			// Check if WiFi is connected and we have items to upload
-			if (status.connected && status.connectionType === 'wifi' && hasItemsToUpload() && !isUploading()) {
+			if (status.connected && status.connectionType === 'wifi' && hasItemsToUpload() && !isUploading() && autoUploadEnabled()) {
 				log.logSync({
 					message: "WiFi connected, starting automatic upload",
 					warn: false,
@@ -152,6 +153,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 
 	const stopUploading = async () => {
 		setIsUploading(false);
+		setAutoUploadEnabled(false);
 		recording.stopUploading();
 		event.stopUploading();
 		// Cancel reminders when stopping upload
@@ -265,32 +267,38 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 			});
 		}
 	};
-
-	createEffect(
-		on(hasItemsToUpload, async (hasItems) => {
-			try {
-				if (hasItems) {
-					await scheduleUploadReminders();
-				} else {
-					// If no items, cancel all reminders
-					await cancelAllReminders();
-				}
-			} catch (error) {
-				log.logError({
-					message: "Error handling upload notifications",
-					error,
-				});
+	const scheduleLocationSyncReminder = async (hasItems: boolean) => {
+		try {
+			if (hasItems) {
+				await scheduleUploadReminders();
+			} else {
+				// If no items, cancel all reminders
+				await cancelAllReminders();
 			}
-		}),
+		} catch (error) {
+			log.logError({
+				message: "Error handling upload notifications",
+				error,
+			});
+		}
+	}
+	const throttleScheduleReminders = debounce(
+		scheduleLocationSyncReminder,
+		5000, // 1 second debounce
+	);
+	createEffect(
+		on(hasItemsToUpload, throttleScheduleReminders),
 	);
 
 
 	// Check initial network status when storage is ready
+	let hasTriedAutoUpload = false;
 	createEffect(
-		on([hasItemsToUpload, isUploading], async ([hasItems, uploading]) => {
-			if (hasItems && !uploading) {
+		on([hasItemsToUpload, isUploading, autoUploadEnabled], async ([hasItems, uploading, autoEnabled]) => {
+			if (hasItems && !uploading && autoEnabled) {
 				const currentStatus = await Network.getStatus();
-				if (currentStatus.connected && currentStatus.connectionType === 'wifi') {
+				if (currentStatus.connected && currentStatus.connectionType === 'wifi' && !hasTriedAutoUpload) {
+					hasTriedAutoUpload = true;
 					log.logSync({
 						message: "WiFi detected, starting automatic upload",
 						warn: false,

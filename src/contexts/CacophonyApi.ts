@@ -1,4 +1,4 @@
-import { registerPlugin, type PluginListenerHandle } from "@capacitor/core";
+import { registerPlugin } from "@capacitor/core";
 import { z } from "zod";
 import type { Result } from ".";
 
@@ -33,74 +33,6 @@ export interface CacophonyPlugin {
     device: string;
     filename: string;
   }): Result<{ recordingId: string; messages: string }>;
-  
-  // Batch upload methods
-  batchUploadRecordings(options: {
-    token: string;
-    recordings: Array<{
-      id: string;          // Recording ID from database
-      type: "thermalRaw" | "audio";
-      device: string;
-      filename: string;    // Just filename
-      filepath: string;    // Full native path
-    }>;
-    maxConcurrent?: number;  // Default: 3
-  }): Result<{ queueId: string }>;
-  
-  pauseUploadQueue(queueId: string): Result<void>;
-  resumeUploadQueue(queueId: string): Result<void>;
-  cancelUploadQueue(queueId: string): Result<void>;
-  
-  getUploadQueueStatus(queueId: string): Result<{
-    total: number;
-    pending: number;
-    uploading: number;
-    completed: number;
-    failed: number;
-    paused: boolean;
-  }>;
-  
-  // Event listeners for batch upload
-  addListener(
-    eventName: 'uploadProgress',
-    callback: (data: {
-      recordingId: string;
-      progress: number;
-      queueId: string;
-    }) => void
-  ): Promise<PluginListenerHandle>;
-  
-  addListener(
-    eventName: 'uploadCompleted',
-    callback: (data: {
-      recordingId: string;
-      uploadId: string;
-      queueId: string;
-    }) => void
-  ): Promise<PluginListenerHandle>;
-  
-  addListener(
-    eventName: 'uploadFailed',
-    callback: (data: {
-      recordingId: string;
-      error: string;
-      queueId: string;
-    }) => void
-  ): Promise<PluginListenerHandle>;
-  
-  addListener(
-    eventName: 'queueStatusChanged',
-    callback: (data: {
-      queueId: string;
-      total: number;
-      pending: number;
-      uploading: number;
-      completed: number;
-      failed: number;
-      paused: boolean;
-    }) => void
-  ): Promise<PluginListenerHandle>;
-  
   uploadEvent(options: {
     token: string;
     device: string;

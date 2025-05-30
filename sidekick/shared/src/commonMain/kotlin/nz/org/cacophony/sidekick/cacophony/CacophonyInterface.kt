@@ -5,7 +5,6 @@ import arrow.core.Either
 import kotlinx.serialization.Serializable
 import nz.org.cacophony.sidekick.*
 import okio.Path.Companion.toPath
-import kotlinx.datetime.Clock
 
 @Suppress("UNUSED")
 data class CacophonyInterface(val filePath: String) : CapacitorInterface {
@@ -374,101 +373,6 @@ data class CacophonyInterface(val filePath: String) : CapacitorInterface {
         call.validateCall<SetToCustomServer>("url").map { callVal ->
             api.setToCustom(callVal.url + "/api/v1")
             call.success()
-        }
-    }
-
-    @Serializable
-    data class RecordingBatchItem(
-        val id: String,
-        val type: String,
-        val device: String,
-        val filename: String,
-        val filepath: String
-    )
-
-    @Serializable
-    data class BatchUploadRequest(
-        val token: String,
-        val recordings: List<RecordingBatchItem>,
-        val maxConcurrent: Int = 3
-    )
-
-    fun batchUploadRecordings(call: PluginCall) = runCatch(call) {
-        call.validateCall<BatchUploadRequest>("token", "recordings").map { request ->
-            deviceApi.startBatchUpload(
-                token = request.token,
-                recordings = request.recordings,
-                maxConcurrent = request.maxConcurrent,
-                onProgress = { recordingId, progress ->
-                    call.notifyListeners("uploadProgress", mapOf(
-                        "recordingId" to recordingId,
-                        "progress" to progress,
-                    ))
-                },
-                onCompleted = { recordingId, uploadId ->
-                    call.notifyListeners("uploadCompleted", mapOf(
-                        "recordingId" to recordingId,
-                        "uploadId" to uploadId,
-                    ))
-                },
-                onFailed = { recordingId, error ->
-                    call.notifyListeners("uploadFailed", mapOf(
-                        "recordingId" to recordingId,
-                        "error" to error,
-                    ))
-                },
-                onStatusChanged = { status ->
-                    call.notifyListeners("queueStatusChanged", mapOf(
-                        "total" to status.total,
-                        "pending" to status.pending,
-                        "uploading" to status.uploading,
-                        "completed" to status.completed,
-                        "failed" to status.failed,
-                        "paused" to status.paused
-                    ))
-                }
-            )
-            call.success()
-        }
-    }
-
-    @Serializable
-    data class QueueRequest(val queueId: String)
-
-    fun pauseUploadQueue(call: PluginCall) = runCatch(call) {
-        call.validateCall<QueueRequest>("queueId").map { request ->
-            deviceApi.pauseUploadQueue(request.queueId)
-            call.success()
-        }
-    }
-
-    fun resumeUploadQueue(call: PluginCall) = runCatch(call) {
-        call.validateCall<QueueRequest>("queueId").map { request ->
-            deviceApi.resumeUploadQueue(request.queueId)
-            call.success()
-        }
-    }
-
-    fun cancelUploadQueue(call: PluginCall) = runCatch(call) {
-        call.validateCall<QueueRequest>("queueId").map { request ->
-            deviceApi.cancelUploadQueue(request.queueId)
-            call.success()
-        }
-    }
-
-    fun getUploadQueueStatus(call: PluginCall) = runCatch(call) {
-        call.validateCall<QueueRequest>("queueId").map { request ->
-            val status = deviceApi.getUploadQueueStatus(request.queueId)
-            call.success(
-                mapOf(
-                    "total" to status.total,
-                    "pending" to status.pending,
-                    "uploading" to status.uploading,
-                    "completed" to status.completed,
-                    "failed" to status.failed,
-                    "paused" to status.paused
-                )
-            )
         }
     }
 }

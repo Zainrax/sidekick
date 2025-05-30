@@ -22,11 +22,6 @@ public class CacophonyPlugin: CAPPlugin, CAPBridgedPlugin {
     CAPPluginMethod(name:"setToProductionServer", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"setToCustomServer", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"uploadRecording", returnType: CAPPluginReturnPromise),
-    CAPPluginMethod(name:"batchUploadRecordings", returnType: CAPPluginReturnPromise),
-    CAPPluginMethod(name:"pauseUploadQueue", returnType: CAPPluginReturnPromise),
-    CAPPluginMethod(name:"resumeUploadQueue", returnType: CAPPluginReturnPromise),
-    CAPPluginMethod(name:"cancelUploadQueue", returnType: CAPPluginReturnPromise),
-    CAPPluginMethod(name:"getUploadQueueStatus", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"getStationsForUser", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"updateStation", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name:"getReferenceImage", returnType: CAPPluginReturnPromise),
@@ -123,36 +118,6 @@ public class CacophonyPlugin: CAPPlugin, CAPBridgedPlugin {
             } else {
                 call.resolve(["data": "1.0.0", "success": true])
             }
-        }
-    }
-    
-    @objc func batchUploadRecordings(_ call: CAPPluginCall) {
-        DispatchQueue.global().async { [weak self] in
-            self?.cacophony.batchUploadRecordings(call: pluginCall(call: call))
-        }
-    }
-    
-    @objc func pauseUploadQueue(_ call: CAPPluginCall) {
-        DispatchQueue.global().async { [weak self] in
-            self?.cacophony.pauseUploadQueue(call: pluginCall(call: call))
-        }
-    }
-    
-    @objc func resumeUploadQueue(_ call: CAPPluginCall) {
-        DispatchQueue.global().async { [weak self] in
-            self?.cacophony.resumeUploadQueue(call: pluginCall(call: call))
-        }
-    }
-    
-    @objc func cancelUploadQueue(_ call: CAPPluginCall) {
-        DispatchQueue.global().async { [weak self] in
-            self?.cacophony.cancelUploadQueue(call: pluginCall(call: call))
-        }
-    }
-    
-    @objc func getUploadQueueStatus(_ call: CAPPluginCall) {
-        DispatchQueue.global().async { [weak self] in
-            self?.cacophony.getUploadQueueStatus(call: pluginCall(call: call))
         }
     }
 }

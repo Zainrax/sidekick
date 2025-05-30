@@ -20,7 +20,10 @@ data class pluginCall(val call: com.getcapacitor.PluginCall, val eventEmitter: E
         return call.getString(key)
     }
 
-
+    override fun getDataAsJsonString(): String? {
+        val jsObject = call.data
+        return jsObject?.toString()
+    }
 
     override fun reject(message: String) {
         call.reject(message)

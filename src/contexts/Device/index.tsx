@@ -1538,6 +1538,12 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 		deviceId: string,
 		location: { lat: number; lng: number },
 	) => {
+		// Skip server update if connected to device AP (no internet)
+		if (apState() === "connected") {
+			console.log("Skipping server location update - connected to device AP");
+			return;
+		}
+
 		try {
 			const updateData = { location };
 			const userData = user.data();

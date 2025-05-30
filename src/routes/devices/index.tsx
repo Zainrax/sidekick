@@ -29,7 +29,7 @@ import {
 import { Portal } from "solid-js/web";
 import ActionContainer from "~/components/ActionContainer";
 import BackgroundLogo from "~/components/BackgroundLogo";
-import { DeviceSettingsModal } from "~/components/DeviceSettings";
+import DeviceSettingsModal from "~/components/DeviceSettings";
 import { useHeaderContext } from "~/components/Header";
 import SetupWizard from "~/components/SetupWizard";
 import { type Device, useDevice } from "~/contexts/Device";
@@ -167,19 +167,17 @@ function DeviceDetails(props: DeviceDetailsProps) {
               Recordings Saved: {savedRecs().length}/{deviceRecs().length}{" "}
             </p>
           </div>
-          <Show when={user.dev()}>
-            <div class="mt-2 flex w-full items-center space-x-2 text-slate-700">
-              <AiOutlineUnorderedList size={20} />
-              <p class="text-sm">
-                Events Saved:{" "}
-                {
-                  storage.savedEvents().filter((val) => val.device === props.id)
-                    .length
-                }
-                /{context.deviceEventKeys.get(props.id)?.length ?? 0}{" "}
-              </p>
-            </div>
-          </Show>
+          <div class="mt-2 flex w-full items-center space-x-2 text-slate-700">
+            <AiOutlineUnorderedList size={20} />
+            <p class="text-sm">
+              Events Saved:{" "}
+              {
+                storage.savedEvents().filter((val) => val.device === props.id)
+                  .length
+              }
+              /{context.deviceEventKeys.get(props.id)?.length ?? 0}{" "}
+            </p>
+          </div>
         </div>
         <Show
           when={props.isConnected}
@@ -368,7 +366,7 @@ function Devices() {
           onClick={async () => {
             // Prevent clicks during loading states
             if (["loadingConnect", "loadingDisconnect"].includes(context.apState())) return;
-            
+
             console.log(
               "AP button clicked, current state:",
               context.apState()
@@ -415,7 +413,7 @@ function Devices() {
             "bg-blue-500 text-white hover:bg-blue-600 hover:shadow-lg":
               context.apState() === "default" ||
               context.apState() === "disconnected",
-            "bg-orange-500 text-white hover:bg-orange-600 hover:shadow-lg": 
+            "bg-orange-500 text-white hover:bg-orange-600 hover:shadow-lg":
               context.apState() === "connected",
             "bg-blue-400 text-white cursor-wait":
               context.apState() === "loadingConnect",

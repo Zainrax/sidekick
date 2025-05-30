@@ -38,9 +38,9 @@ export default function Storage() {
     headerContext?.headerMap.set("/storage", [
       header[0],
       () => (
-        <button 
-          type="button" 
-          onClick={deleteSaved} 
+        <button
+          type="button"
+          onClick={deleteSaved}
           class="flex items-center gap-2 rounded-lg bg-red-500 px-3 py-2 text-white shadow-md transition-all hover:bg-red-600 hover:shadow-lg active:scale-95"
           aria-label="Delete all saved items"
         >
@@ -94,18 +94,16 @@ export default function Storage() {
           </span>
         </A>
       </ActionContainer>
-      <Show when={user.dev()}>
-        <ActionContainer icon={ImNotification} header="Events">
-          <p class="flex items-center text-gray-800">
-            <span class="w-28">
-              Saved: {storage.unuploadedEvents().filter(isProd).length}{" "}
-            </span>
-            <span class="ml-2">
-              Uploaded: {storage.uploadedEvents().filter(isProd).length}
-            </span>
-          </p>
-        </ActionContainer>
-      </Show>
+      <ActionContainer icon={ImNotification} header="Events">
+        <p class="flex items-center text-gray-800">
+          <span class="w-28">
+            Saved: {storage.unuploadedEvents().filter(isProd).length}{" "}
+          </span>
+          <span class="ml-2">
+            Uploaded: {storage.uploadedEvents().filter(isProd).length}
+          </span>
+        </p>
+      </ActionContainer>
       <Show when={!user.isProd()}>
         <ActionContainer
           icon={BsCameraVideoFill}
@@ -167,23 +165,7 @@ export default function Storage() {
         </ActionContainer>
       </Show>
 
-      <div class="pb-bar fixed inset-x-0 bottom-2 mx-auto flex flex-col items-center gap-2">
-        <Show when={storage.isUploading() && storage.uploadProgress()?.total > 0}>
-          <div class="flex w-full max-w-sm flex-col items-center rounded-lg bg-white px-4 py-2 shadow-lg">
-            <div class="flex w-full items-center justify-between text-sm text-gray-600">
-              <span>Uploading recordings...</span>
-              <span>
-                {storage.uploadProgress()?.current} / {storage.uploadProgress()?.total}
-              </span>
-            </div>
-            <div class="mt-1 h-2 w-full overflow-hidden rounded-full bg-gray-200">
-              <div
-                class="h-full bg-blue-500 transition-all duration-300"
-                style={`width: ${storage.uploadProgress()?.percentage || 0}%`}
-              />
-            </div>
-          </div>
-        </Show>
+      <div class="pb-bar fixed inset-x-0 bottom-2 mx-auto flex justify-center">
         <button
           class="flex items-center justify-center space-x-2 rounded-md bg-white px-4 py-4"
           onClick={toggleUpload}
