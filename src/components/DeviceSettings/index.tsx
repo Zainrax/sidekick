@@ -122,7 +122,7 @@ export default function DeviceSettingsModal() {
         <Show when={show()}>
             {(id) => {
                 return (
-                    <div class="fixed left-1/2 top-[70px] z-40 h-auto w-11/12 -translate-x-1/2 transform rounded-xl border bg-white shadow-lg">
+                    <div class="fixed left-1/2 top-[70px] z-40 h-auto w-11/12 -translate-x-1/2 transform rounded-xl border bg-white shadow-lg ">
                         <header class="flex justify-between px-4">
                             <div class="flex items-center py-4">
                                 <Show
@@ -182,25 +182,27 @@ export default function DeviceSettingsModal() {
                                 )}
                             </For>
                         </nav>
-                        <Switch>
-                            <Match when={currTab() === "General"}>
-                                <GeneralSettingsTab deviceId={id()} />
-                            </Match>
-                            <Match when={currTab() === "Network"}>
-                                <WifiSettingsTab deviceId={id()} />
-                            </Match>
-                            <Match when={currTab() === "Location"}>
-                                <LocationSettingsTab deviceId={id()} />
-                            </Match>
-                            <Match when={currTab() === "Camera"}>
-                                <CameraSettingsTab deviceId={id()} />
-                            </Match>
-                            <Match
-                                when={currTab() === "Audio" && device()?.hasAudioCapabilities}
-                            >
-                                <AudioSettingsTab deviceId={id()} />
-                            </Match>
-                        </Switch>
+                        <div class="max-h-[70vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                            <Switch>
+                                <Match when={currTab() === "General"}>
+                                    <GeneralSettingsTab deviceId={id()} />
+                                </Match>
+                                <Match when={currTab() === "Network"}>
+                                    <WifiSettingsTab deviceId={id()} />
+                                </Match>
+                                <Match when={currTab() === "Location"}>
+                                    <LocationSettingsTab deviceId={id()} />
+                                </Match>
+                                <Match when={currTab() === "Camera"}>
+                                    <CameraSettingsTab deviceId={id()} />
+                                </Match>
+                                <Match
+                                    when={currTab() === "Audio" && device()?.hasAudioCapabilities}
+                                >
+                                    <AudioSettingsTab deviceId={id()} />
+                                </Match>
+                            </Switch>
+                        </div>
                     </div>
                 );
             }}

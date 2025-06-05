@@ -66,10 +66,11 @@ export function WifiSettingsTab(props: SettingProps) {
 		async () => context.getCurrentWifiNetwork(device()?.id ?? ""),
 	);
 
-	const [turnedOnModem] = createResource(async () => {
-		const res = await context.turnOnModem(id());
-		return res;
-	});
+	// Modem is now turned on automatically when device is discovered
+	// const [turnedOnModem] = createResource(async () => {
+	// 	const res = await context.turnOnModem(id());
+	// 	return res;
+	// });
 
 	const [savedWifi, { refetch: refetchSavedWifi }] = createResource(
 		async () => {
@@ -222,17 +223,23 @@ export function WifiSettingsTab(props: SettingProps) {
 		});
 	});
 
-	// Interval check for current wifi
+	// Interval check for current wifi and background refresh
 	onMount(() => {
 		const interval = setInterval(() => {
 			if (!initialLoad()) return;
+
+			// Background refresh of network data (stale-while-revalidate)
+			// This updates caches with fresh data while UI continues showing cached data
+			context.backgroundRefreshNetworkData(id());
+
+			// Still refetch SolidJS resources to trigger reactivity when cache updates
 			if (!wifiNetworks.loading) {
 				refetchWifiNetowrks();
 			}
 			if (!currentWifi.loading) {
 				refetchSavedWifi();
 			}
-			if (modem() === null) {
+			if (!modem.loading) {
 				refetchModem();
 			}
 			if (!currentWifi.loading) {
@@ -290,7 +297,7 @@ export function WifiSettingsTab(props: SettingProps) {
 		}
 
 		// If currSignal is available, use it
-		if (currSignal !== null && currSignal !== undefined) {
+		if (signalStrength === null && currSignal !== null && currSignal !== undefined) {
 			signalStrength = currSignal;
 		}
 
@@ -318,7 +325,7 @@ export function WifiSettingsTab(props: SettingProps) {
 	const [modemConnectedToInternet] = createResource(
 		() => [modemSignalStrength()],
 		async ([currModem]) => {
-			if (!currModem) return "no-modem";
+			if (!currModem) return "disconnected";
 			const res = await context.checkDeviceModemInternetConnection(id());
 			return res ? "connected" : "disconnected";
 		},
@@ -403,8 +410,7 @@ export function WifiSettingsTab(props: SettingProps) {
 
 	createEffect(() => {
 		console.log(
-			"Loading Wifi",
-			wifiNetworks.loading,
+			"Loading Wifi && Modem",
 			wifiNetworks(),
 			initialLoad(),
 		);
@@ -414,6 +420,7 @@ export function WifiSettingsTab(props: SettingProps) {
 		(showPassword() && password().length < 8) || connecting() === ssid;
 	const hasApn = () => modem()?.modem?.apn !== undefined;
 	const [isForgetting, setIsForgetting] = createSignal<boolean>(false);
+
 	return (
 		<div class="flex w-full flex-col space-y-2 px-2 py-2">
 			<Show
@@ -427,17 +434,6 @@ export function WifiSettingsTab(props: SettingProps) {
 								setOpenedModem(true);
 							}}
 						>
-							<Show
-								when={
-									!noSim() &&
-									modemConnectedToInternet() === "disconnected" &&
-									hasApn()
-								}
-							>
-								<div class="absolute left-[40%] top-[-0.1em] rounded-sm bg-yellow-400">
-									<p class="px-2 py-1 text-sm">Set Modem APN</p>
-								</div>
-							</Show>
 							<FieldWrapper
 								type="custom"
 								title={
@@ -445,8 +441,6 @@ export function WifiSettingsTab(props: SettingProps) {
 										<div
 											classList={{
 												"bg-yellow-300": modemConnectedToInternet.loading,
-												"bg-gray-400":
-													modemConnectedToInternet() === "no-modem",
 												"bg-green-500":
 													modemConnectedToInternet() === "connected",
 												"bg-red-500":
@@ -466,6 +460,9 @@ export function WifiSettingsTab(props: SettingProps) {
 										<Match when={noSim()}>
 											<p>No Sim Card</p>
 										</Match>
+										<Match when={modem()?.simCard?.simCardStatus === "finding"}>
+											<p>Checking Sim</p>
+										</Match>
 										<Match
 											when={modem.loading || modemConnectedToInternet.loading}
 										>
@@ -473,8 +470,7 @@ export function WifiSettingsTab(props: SettingProps) {
 										</Match>
 										<Match
 											when={
-												modem()?.failedToFindModem ||
-												modemConnectedToInternet() === "no-modem"
+												modem()?.failedToFindModem
 											}
 										>
 											<p>No Modem Connection</p>

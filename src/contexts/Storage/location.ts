@@ -1,4 +1,4 @@
-import { createMemo, createResource, onMount } from "solid-js";
+import { createMemo, createResource, createSignal, onMount } from "solid-js";
 import {
 	type Location,
 	LocationSchema,
@@ -92,6 +92,7 @@ export const isWithinRange = (
 export function useLocationStorage() {
 	const log = useLogsContext();
 	const userContext = useUserContext();
+	const [shouldUpload, setShouldUpload] = createSignal(true);
 
 	const message =
 		"Could not get locations. Please check your internet connection and that you are logged in.";
@@ -186,6 +187,7 @@ export function useLocationStorage() {
 			await Promise.all(
 				locations.map(async (location) => {
 					if (!user || location.isProd !== user?.prod) return location;
+					if (!shouldUpload()) return location; // Check if upload was cancelled
 					if (location.needsCreation) {
 						const res = await createLocation(
 							{
@@ -196,7 +198,7 @@ export function useLocationStorage() {
 						);
 						return res;
 					}
-					if (location.updateName) {
+					if (location.updateName && shouldUpload()) { // Check before syncing
 						let name = location.updateName;
 						// Make sure the name is unique
 						while (locations.some((loc) => loc.name === name)) {
@@ -567,13 +569,23 @@ export function useLocationStorage() {
 		}
 	});
 
+	const resyncLocations = async () => {
+		setShouldUpload(true);
+		await refetch();
+	};
+
+	const stopUploading = () => {
+		setShouldUpload(false);
+	};
+
 	return {
 		savedLocations,
 		saveLocation,
 		createLocation,
 		deleteSyncLocations,
-		resyncLocations: refetch,
+		resyncLocations,
 		updateLocationName,
 		hasItemsToUpload,
+		stopUploading,
 	};
 }

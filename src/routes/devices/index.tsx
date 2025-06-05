@@ -690,7 +690,7 @@ function Devices() {
               class="flex rounded-md bg-white px-4 py-4"
               onClick={findDevice}
             >
-              <div class="text-blue-500">
+              <div class="text-blue-500 pr-1">
                 <ImSearch size={28} />
               </div>
               <p>Find Device</p>

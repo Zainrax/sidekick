@@ -339,6 +339,14 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 		DeviceId,
 		{ networks: string[] | null; timestamp: number }
 	>();
+	const wifiInternetConnectionCache = new ReactiveMap<
+		DeviceId,
+		{ connected: boolean; timestamp: number }
+	>();
+	const modemInternetConnectionCache = new ReactiveMap<
+		DeviceId,
+		{ connected: boolean; timestamp: number }
+	>();
 	const NETWORK_DATA_CACHE_DURATION_MS = 20 * 1000; // 20 seconds
 
 	const setCurrRecs = async (device: ConnectedDevice) =>
@@ -770,26 +778,41 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 			clearUploaded(connectedDevice),
 			turnOnModem(connectedDevice.id),
 			deviceHasInternet(connectedDevice.id), // Proactively populate internet connection cache
+			preloadNetworkData(connectedDevice.id), // Proactively populate WiFi and modem data cache
 		]);
 	};
 
-	const handleServiceLost = (lostDevice: { endpoint: string }) => {
+	const handleServiceLost = async (lostDevice: { endpoint: string }) => {
 		const device = [...devices.values()].find(
 			(d) => d.endpoint === lostDevice.endpoint && d.isConnected,
 		);
 
 		if (device) {
-			devices.set(device.id, {
-				...device,
-				isConnected: false,
-			});
-			internetConnectionCache.delete(device.id); // Clear cache entry
+			// Check both URL and host connections before disconnecting
+			const [urlReachable, hostReachable] = await Promise.all([
+				verifyDeviceConnection(device.url),
+				verifyDeviceConnection(`http://${device.host}`),
+			]);
 
-			log.logEvent("device_lost", {
-				name: device.name,
-				saltId: device.saltId,
-				group: device.group,
-			});
+			// Only disconnect if both connection methods fail
+			if (!urlReachable && !hostReachable) {
+				devices.set(device.id, {
+					...device,
+					isConnected: false,
+				});
+				internetConnectionCache.delete(device.id); // Clear cache entry
+				wifiInternetConnectionCache.delete(device.id); // Clear WiFi internet cache
+				modemInternetConnectionCache.delete(device.id); // Clear modem internet cache
+
+				log.logEvent("device_lost", {
+					name: device.name,
+					saltId: device.saltId,
+					group: device.group,
+				});
+			} else {
+				// Device is still reachable via one of the methods
+				console.log(`Device ${device.name} reported as lost but still reachable via ${urlReachable ? 'URL' : 'host'}`);
+			}
 		}
 	};
 
@@ -1083,16 +1106,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 		return false;
 	};
 
-	async function checkExistingDevices() {
-		const devicesToCheck = [...devices.values()];
-		const batchSize = 3;
-
-		for (let i = 0; i < devicesToCheck.length; i += batchSize) {
-			const batch = devicesToCheck.slice(i, i + batchSize);
-			await Promise.all(batch.map((device) => checkDeviceConnection(device)));
-		}
-	}
-
 	const startDiscovery = async () => {
 		if (isDiscovering()) {
 			console.log("Discovery already in progress");
@@ -1157,14 +1170,6 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 			await new Promise((resolve) => setTimeout(resolve, 200));
 
 			await startDiscovery();
-
-			// After discovery, also check existing devices' connections
-			const connectedDevices = [...devices.values()].filter(
-				(d) => d.isConnected,
-			);
-			for (const device of connectedDevices) {
-				// Keep checking existing device connections
-			}
 		} catch (e) {
 			console.error(e);
 		} finally {
@@ -1782,6 +1787,88 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 		return updateDevice;
 	};
 
+	const preloadNetworkData = async (deviceId: DeviceId) => {
+		// Proactively fetch and cache WiFi networks, current WiFi, saved networks, modem data, and internet connectivity
+		// This prevents the UI from showing loading states when the user opens network settings
+		try {
+			await Promise.allSettled([
+				getWifiNetworks(deviceId),
+				getCurrentWifiNetwork(deviceId),
+				getSavedWifiNetworks(deviceId),
+				getModem(deviceId),
+				checkDeviceWifiInternetConnection(deviceId),
+				checkDeviceModemInternetConnection(deviceId),
+			]);
+		} catch (error) {
+			console.error("Error preloading network data:", error);
+		}
+	};
+
+	const backgroundRefreshNetworkData = async (deviceId: DeviceId) => {
+		// Background refresh without invalidating cache - "stale-while-revalidate" pattern
+		// UI continues showing cached data while fresh data loads in background
+		try {
+			const device = devices.get(deviceId);
+			if (!device || !device.isConnected) return;
+
+			// Make fresh API calls that will update cache if data has changed
+			// These will bypass cache timeouts but won't clear existing cache first
+			const { url } = device;
+			
+			// Fetch fresh data in parallel
+			await Promise.allSettled([
+				// Force fresh network data by making direct API calls
+				CapacitorHttp.get({ url: `${url}/api/network/wifi`, headers, webFetchExtra: { credentials: "include" } })
+					.then(res => res.status === 200 ? WifiNetwork.array().parse(JSON.parse(res.data)) : [])
+					.then(networks => {
+						const processedNetworks = networks
+							.filter(network => network.SSID)
+							.reduce((acc, curr) => {
+								const found = acc.find(a => a.SSID === curr.SSID);
+								if (!found) acc.push(curr);
+								return acc;
+							}, [] as WifiNetwork[]);
+						availableWifiNetworksCache.set(deviceId, { networks: processedNetworks, timestamp: Date.now() });
+					})
+					.catch(() => {}),
+
+				// Fresh current WiFi status
+				CapacitorHttp.get({ url: `${url}/api/network/wifi/current`, headers, webFetchExtra: { credentials: "include" } })
+					.then(res => res.status === 200 ? z.object({ SSID: z.string() }).parse(JSON.parse(res.data)) : null)
+					.then(network => currentWifiNetworkCache.set(deviceId, { network, timestamp: Date.now() }))
+					.catch(() => {}),
+
+				// Fresh modem data
+				CapacitorHttp.get({ url: `${url}/api/modem`, headers, webFetchExtra: { credentials: "include" } })
+					.then(res => res.status === 200 ? tc2ModemSchema.parse(res.data) : null)
+					.then(modem => modemDetailsCache.set(deviceId, { modem, timestamp: Date.now() }))
+					.catch(() => {}),
+
+				// Fresh WiFi internet connectivity
+				CapacitorHttp.get({ url: `${url}/api/wifi-check`, headers, webFetchExtra: { credentials: "include" } })
+					.then(res => {
+						let connected = false;
+						if (res.status === 200) {
+							const parsedData = JSON.parse(res.data);
+							if (typeof parsedData.connected === "boolean") {
+								connected = parsedData.connected;
+							}
+						}
+						wifiInternetConnectionCache.set(deviceId, { connected, timestamp: Date.now() });
+					})
+					.catch(() => {}),
+
+				// Fresh modem internet connectivity
+				CapacitorHttp.get({ url: `${url}/api/modem-check`, headers, webFetchExtra: { credentials: "include" } })
+					.then(res => res.status === 200 ? JSON.parse(res.data).connected : false)
+					.then(connected => modemInternetConnectionCache.set(deviceId, { connected, timestamp: Date.now() }))
+					.catch(() => {}),
+			]);
+		} catch (error) {
+			console.error("Error in background network refresh:", error);
+		}
+	};
+
 	const getWifiNetworks = async (
 		deviceId: DeviceId,
 	): Promise<WifiNetwork[] | null> => {
@@ -1939,6 +2026,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 			if (success) {
 				internetConnectionCache.delete(deviceId);
 				modemDetailsCache.delete(deviceId); // APN affects modem behavior
+				modemInternetConnectionCache.delete(deviceId); // Invalidate modem internet cache
 			}
 			return success;
 		} catch (error) {
@@ -2048,6 +2136,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 			const success = res.status === 200;
 			if (success) {
 				internetConnectionCache.delete(deviceId); // Invalidate cache
+				wifiInternetConnectionCache.delete(deviceId); // Invalidate WiFi internet cache
 			}
 			return success;
 		} catch (error) {
@@ -2136,6 +2225,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 
 			if (connected) {
 				internetConnectionCache.delete(deviceId); // Invalidate cache
+				wifiInternetConnectionCache.delete(deviceId); // Invalidate WiFi internet cache
 			}
 			return connected;
 		} catch (error) {
@@ -2149,9 +2239,22 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 	});
 
 	const checkDeviceWifiInternetConnection = async (deviceId: DeviceId) => {
+		const cached = wifiInternetConnectionCache.get(deviceId);
+		if (
+			cached &&
+			Date.now() - cached.timestamp < NETWORK_DATA_CACHE_DURATION_MS
+		) {
+			return cached.connected;
+		}
 		try {
 			const device = devices.get(deviceId);
-			if (!device || !device.isConnected) return false;
+			if (!device || !device.isConnected) {
+				wifiInternetConnectionCache.set(deviceId, {
+					connected: false,
+					timestamp: Date.now(),
+				});
+				return false;
+			}
 			const { url } = device;
 			const res = await CapacitorHttp.get({
 				url: `${url}/api/wifi-check`,
@@ -2160,28 +2263,49 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 					credentials: "include",
 				},
 			});
+			let connected = false;
 			if (res.status === 200) {
 				// Check if 'connected' field exists, default to false if not (for older TC2s)
 				const parsedData = JSON.parse(res.data);
 				if (typeof parsedData.connected === "boolean") {
-					return ConnectionRes.parse(parsedData).connected;
+					connected = ConnectionRes.parse(parsedData).connected;
 				}
 				// If 'connected' field is missing, assume false for internet check
-				return false;
 			}
 			// For any other status, including 404 (endpoint not found),
 			// we cannot confirm internet via this WiFi check.
-			return false;
+			wifiInternetConnectionCache.set(deviceId, {
+				connected,
+				timestamp: Date.now(),
+			});
+			return connected;
 		} catch (error) {
 			console.error("Error in checkDeviceWifiInternetConnection:", error);
+			wifiInternetConnectionCache.set(deviceId, {
+				connected: false,
+				timestamp: Date.now(),
+			});
 			return false;
 		}
 	};
 
 	const checkDeviceModemInternetConnection = async (deviceId: DeviceId) => {
+		const cached = modemInternetConnectionCache.get(deviceId);
+		if (
+			cached &&
+			Date.now() - cached.timestamp < NETWORK_DATA_CACHE_DURATION_MS
+		) {
+			return cached.connected;
+		}
 		try {
 			const device = devices.get(deviceId);
-			if (!device || !device.isConnected) return false;
+			if (!device || !device.isConnected) {
+				modemInternetConnectionCache.set(deviceId, {
+					connected: false,
+					timestamp: Date.now(),
+				});
+				return false;
+			}
 			const { url } = device;
 			const res = await CapacitorHttp.get({
 				url: `${url}/api/modem-check`,
@@ -2190,9 +2314,18 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 					credentials: "include",
 				},
 			});
-			return ConnectionRes.parse(JSON.parse(res.data)).connected;
+			const connected = ConnectionRes.parse(JSON.parse(res.data)).connected;
+			modemInternetConnectionCache.set(deviceId, {
+				connected,
+				timestamp: Date.now(),
+			});
+			return connected;
 		} catch (error) {
 			console.error("Connection Error:", error);
+			modemInternetConnectionCache.set(deviceId, {
+				connected: false,
+				timestamp: Date.now(),
+			});
 			return false;
 		}
 	};
@@ -2241,6 +2374,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 			if (res.success) {
 				internetConnectionCache.delete(deviceId);
 				modemDetailsCache.delete(deviceId); // Modem state changed
+				modemInternetConnectionCache.delete(deviceId); // Invalidate modem internet cache
 			}
 			return res.success;
 		} catch (error) {
@@ -3188,6 +3322,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 		saveAPN,
 		getBattery,
 		devicesConnectingToWifi,
+		backgroundRefreshNetworkData,
 	};
 });
 

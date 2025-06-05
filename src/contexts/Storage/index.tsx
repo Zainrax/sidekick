@@ -1,7 +1,7 @@
 import { KeepAwake } from "@capacitor-community/keep-awake";
 import { CapacitorSQLite, SQLiteConnection } from "@capacitor-community/sqlite";
 import { createContextProvider } from "@solid-primitives/context";
-import { createEffect, createSignal, on, onMount, onCleanup } from "solid-js";
+import { createEffect, createSignal, on, onMount, onCleanup, createMemo } from "solid-js";
 import { openConnection } from "../../database";
 import { useEventStorage } from "./event";
 import { useLocationStorage } from "./location";
@@ -53,6 +53,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 	const log = useLogsContext();
 	const cancelAllReminders = async () => {
 		try {
+			debugger;
 			const cancelOptions: CancelOptions = {
 				notifications: ALL_REMINDER_IDS.map((id) => ({ id })),
 			};
@@ -104,7 +105,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 					message: "WiFi connected, starting automatic upload",
 					warn: false,
 				});
-				await uploadItems(false);
+				await uploadItems(false, false); // warn=false, isManual=false
 			}
 		});
 
@@ -117,7 +118,8 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 	});
 
 
-	const uploadItems = async (warn = true) => {
+	const uploadItems = async (warn = true, isManual = true) => {
+
 		// Prevent multiple concurrent uploads
 		if (isUploading()) {
 			log.logWarning({
@@ -127,17 +129,25 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 			return;
 		}
 
-		// Cancel reminders before starting upload
-		await cancelAllReminders();
+		// If this is a manual upload, re-enable auto-upload
+		if (isManual) {
+			setAutoUploadEnabled(true);
+		}
+
 		setIsUploading(true);
+
 		try {
+			// Cancel reminders before starting upload
+			await cancelAllReminders();
 			if (await KeepAwake.isSupported()) {
 				await KeepAwake.keepAwake();
 			}
+
+			// Start the uploads - they will check shouldUpload() regularly
+			await event.uploadEvents();
 			await recording.uploadRecordings(warn);
 			await location.resyncLocations();
 			await deviceImages.syncPendingPhotos();
-			await event.uploadEvents();
 		} catch (error) {
 			log.logError({
 				message: "Error during uploading events/recordings/locations",
@@ -152,22 +162,33 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 	};
 
 	const stopUploading = async () => {
-		setIsUploading(false);
-		setAutoUploadEnabled(false);
+		// First stop the individual upload processes
 		recording.stopUploading();
 		event.stopUploading();
+		location.stopUploading();
+		deviceImages.stopUploading();
+
+		// Then update the upload state
+		setIsUploading(false);
+
+		// Disable auto-upload to prevent new uploads from starting
+		setAutoUploadEnabled(false);
+
 		// Cancel reminders when stopping upload
 		await cancelAllReminders();
+
+		// Wait a bit to ensure any pending operations see the updated flags
+		await new Promise(resolve => setTimeout(resolve, 100));
 	};
 
-	const hasItemsToUpload = () => {
+	const hasItemsToUpload = createMemo(() => {
 		return (
 			recording.hasItemsToUpload() ||
 			event.hasItemsToUpload() ||
 			location.hasItemsToUpload() ||
 			deviceImages.hasItemsToUpload()
 		);
-	};
+	});
 
 	// Helper function to schedule notifications
 	const scheduleUploadReminders = async () => {
@@ -303,7 +324,7 @@ const [StorageProvider, useStorage] = createContextProvider(() => {
 						message: "WiFi detected, starting automatic upload",
 						warn: false,
 					});
-					await uploadItems(false);
+					await uploadItems(false, false); // warn=false, isManual=false
 				}
 			}
 		})

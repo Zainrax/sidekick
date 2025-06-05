@@ -9,6 +9,7 @@ import {
 	createResource,
 	createSignal,
 	onMount,
+	onCleanup,
 } from "solid-js";
 import {
 	FaSolidSpinner,
@@ -453,6 +454,13 @@ export function LocationSettingsTab(props: SettingProps) {
 	onMount(async () => {
 		await context.refetchDeviceLocToUpdate();
 	});
+	onCleanup(async () => {
+		console.log("Cleaning up LocationSettingsTab");
+		// make sure to save any unsaved changes
+		if (hasChangesToUpload() || hasPendingChanges()) {
+			await saveLocationSettings();
+		}
+	});
 
 	return (
 		<section class="mx-auto w-full max-w-md p-2 sm:p-4">
@@ -611,6 +619,10 @@ export function LocationSettingsTab(props: SettingProps) {
 									placeholder={locationName()}
 									value={newName()}
 									onInput={(e) => setNewName(e.currentTarget.value)}
+									onSubmit={(e) => {
+										e.preventDefault();
+										saveLocationSettings();
+									}}
 								/>
 							</FieldWrapper>
 							<div class="relative rounded-md bg-slate-100">

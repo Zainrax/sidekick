@@ -320,7 +320,7 @@ export function GeneralSettingsTab(props: SettingProps) {
 
 			<Show when={device()?.lastUpdated}>
 				{(lastUpdated) => (
-					<p class="flex gap-x-2 px-2">
+					<p class="flex gap-x-2 px-2 text-sm">
 						<span class="text-gray-500">Last Updated:</span>
 						<span>{lastUpdated().toLocaleString()}</span>
 					</p>
