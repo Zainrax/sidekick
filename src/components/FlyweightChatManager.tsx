@@ -64,9 +64,9 @@ export default function FlyweightChatManager() {
 					 * - iframe element with data-testid="chat-overlay"
 					 * - iframe element with data-testid="popup-overlay"
 					 * - div element with id="chat-popup" for the popup button
-					 * - Inline styles containing "width: 50px" for button state
-					 * - Inline styles containing "width: 100%" for chat state
-					 * - Inline styles containing "width: 150px" for popup overlay
+					 * - Adds class .flyweight-chat-button-state when chat is minimized (button state)
+					 * - Adds class .flyweight-chat-open-state when chat is maximized (open state)
+					 * - The popup overlay (iframe[data-testid="popup-overlay"]) is hidden via its style (e.g., [style*="width: 150px"])
 					 * If Flyweight changes their HTML structure or attribute names,
 					 * these selectors will need to be updated.
 					 */
@@ -77,7 +77,7 @@ export default function FlyweightChatManager() {
 					}
 					
 					/* Hide the iframe when it's in button state (50x50) */
-					iframe[data-testid="chat-overlay"][style*="width: 50px"] {
+					iframe[data-testid="chat-overlay"].flyweight-chat-button-state {
 						display: none !important;
 					}
 					
@@ -87,7 +87,7 @@ export default function FlyweightChatManager() {
 					}
 					
 					/* When on manual page and chat is open, constrain the iframe */
-					body.flyweight-manual-page iframe[data-testid="chat-overlay"][style*="width: 100%"] {
+					body.flyweight-manual-page iframe[data-testid="chat-overlay"].flyweight-chat-open-state {
 						top: calc(4.5rem + env(safe-area-inset-top, 0px) - 75px) !important;
 						height: calc(100% - (4.5rem + env(safe-area-inset-top, 0px)) - (5rem + env(safe-area-inset-bottom, 0px)) + 75px) !important;
 					}
@@ -109,69 +109,100 @@ export default function FlyweightChatManager() {
 		// Setup iframe observer
 		const setupIframeObserver = (iframe: HTMLIFrameElement) => {
 			console.log("Setting up iframe observer");
-			
+
 			// IMPORTANT: This implementation relies on Flyweight's current iframe behavior:
-			// - Button state: width: 50px, height: 50px
-			// - Chat state: width: 100%, height: 100%
-			// If Flyweight updates their implementation and changes these dimensions or
-			// switches to a different approach (e.g., transform: scale, display: none, etc.),
-			// this observer logic will need to be updated accordingly.
-			// Monitor console logs to detect if the state detection stops working properly.
-			
-			// Create observer for style changes
+			// - Button state: Inferred if iframe width is small (e.g., < 100px). Class '.flyweight-chat-button-state' is added.
+			// - Chat state: Inferred if iframe width is '100%' or large pixel value. Class '.flyweight-chat-open-state' is added.
+			// If Flyweight's method of indicating state via inline styles changes significantly,
+			// this logic will need updating. The component now relies on these dynamically added classes.
+			// Monitor console logs for warnings about ambiguous states.
+
+			const getStyleProperty = (styleString: string, propertyName: string): string | null => {
+				if (!styleString) return null;
+				const regex = new RegExp(`${propertyName}\s*:\s*([^;!]+)`);
+				const match = styleString.match(regex);
+				return match ? match[1].trim() : null;
+			};
+
+			const updateChatStateBasedOnStyle = (currentIframe: HTMLIFrameElement) => {
+				const style = currentIframe.getAttribute('style') || '';
+				const widthStr = getStyleProperty(style, 'width');
+
+				let isButtonState = false;
+				let isChatState = false;
+
+				if (widthStr) {
+					if (widthStr.endsWith('px')) {
+						const pxWidth = Number.parseInt(widthStr, 10);
+						if (!Number.isNaN(pxWidth)) {
+							if (pxWidth < 100) { // Threshold for button state
+								isButtonState = true;
+							} else { // Assumed large pixel width is also chat/open state
+								isChatState = true;
+							}
+						}
+					} else if (widthStr === '100%') {
+						isChatState = true;
+					}
+				}
+
+				if (!isChatState && !isButtonState) {
+					console.warn(`Flyweight chat iframe style width ("${widthStr}") is ambiguous. Defaulting to button state visuals.`);
+					isButtonState = true; // Default to button state if unclear
+				}
+
+				if (isButtonState) {
+					// console.log("Iframe determined to be in button state.");
+					if (!currentIframe.classList.contains('flyweight-chat-button-state')) {
+						currentIframe.classList.add('flyweight-chat-button-state');
+						currentIframe.classList.remove('flyweight-chat-open-state');
+					}
+					setIsChatVisible(false);
+				} else if (isChatState) {
+					// console.log("Iframe determined to be in chat state.");
+					if (!currentIframe.classList.contains('flyweight-chat-open-state')) {
+						currentIframe.classList.add('flyweight-chat-open-state');
+						currentIframe.classList.remove('flyweight-chat-button-state');
+					}
+					setIsChatVisible(true);
+				}
+			};
+
 			iframeObserver = new MutationObserver((mutations) => {
 				for (const mutation of mutations) {
 					if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-						const style = iframe.getAttribute('style') || '';
-						
-						// Check if it's in button state (50x50) or chat state (100%)
-						if (style.includes('width: 50px') && style.includes('height: 50px')) {
-							console.log("Iframe is in button state - hiding");
-							setIsChatVisible(false);
-						} else if (style.includes('width: 100%') && style.includes('height: 100%')) {
-							console.log("Iframe is in chat state - showing");
-							setIsChatVisible(true);
-						}
+						updateChatStateBasedOnStyle(iframe);
 					}
-				}
+				};
 			});
-			
-			// Start observing
-			iframeObserver.observe(iframe, {
-				attributes: true,
-				attributeFilter: ['style']
-			});
-			
+
+			iframeObserver.observe(iframe, { attributes: true, attributeFilter: ['style'] });
+
 			// Check initial state
-			const currentStyle = iframe.getAttribute('style') || '';
-			if (currentStyle.includes('width: 50px')) {
-				setIsChatVisible(false);
-			} else if (currentStyle.includes('width: 100%')) {
-				setIsChatVisible(true);
-			}
+			updateChatStateBasedOnStyle(iframe);
 		};
 
 		// Watch for iframes to appear
 		const findAndObserveIframes = () => {
 			const chatIframe = document.querySelector('iframe[data-testid="chat-overlay"]') as HTMLIFrameElement;
 			const popupIframe = document.querySelector('iframe[data-testid="popup-overlay"]') as HTMLIFrameElement;
-			
+
 			let foundAny = false;
-			
+
 			if (chatIframe && !chatIframe.hasAttribute('data-observer-attached')) {
 				console.log("Found chat iframe");
 				setupIframeObserver(chatIframe);
 				chatIframe.setAttribute('data-observer-attached', 'true');
 				foundAny = true;
 			}
-			
+
 			if (popupIframe && !popupIframe.hasAttribute('data-observer-attached')) {
 				console.log("Found popup overlay iframe");
 				// For popup overlay, we don't need to observe style changes as it should always be hidden
 				popupIframe.setAttribute('data-observer-attached', 'true');
 				foundAny = true;
 			}
-			
+
 			return foundAny;
 		};
 
@@ -193,12 +224,12 @@ export default function FlyweightChatManager() {
 			const bodyObserver = new MutationObserver(() => {
 				findAndObserveIframes();
 			});
-			
+
 			bodyObserver.observe(document.body, {
 				childList: true,
 				subtree: true
 			});
-			
+
 			onCleanup(() => {
 				bodyObserver.disconnect();
 			});

@@ -13,7 +13,7 @@
 		padding-bottom: calc(env(safe-area-inset-bottom) + 1em);
 	}
 	.pt-safe {
-		padding-top: calc(env(safe-area-inset-top));
+		padding-top: calc(env(safe-area-inset-top) + 1em);
 	}
 	.pl-safe {
 		padding-left: calc(env(safe-area-inset-left));

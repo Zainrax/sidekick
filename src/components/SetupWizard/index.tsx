@@ -107,11 +107,10 @@ export const DeviceTypeToggle = (props: {
 
 export const DeviceTypeButton = (props: DeviceTypeButtonProps): JSX.Element => (
 	<button
-		class={`rounded px-4 py-2 text-sm sm:text-base ${
-			props.isSelected
+		class={`rounded px-4 py-2 text-sm sm:text-base ${props.isSelected
 				? "bg-white outline outline-2 outline-green-500"
 				: "bg-gray-200"
-		}`}
+			}`}
 		onClick={props.onClick}
 	>
 		{props.children}
@@ -276,9 +275,6 @@ function SetupWizard(): JSX.Element {
 		deviceType: null,
 	});
 	const connectionStatus = () => deviceContext.apState();
-	createEffect(() => {
-		console.log("AP CONNECTION", connectionStatus());
-	});
 	type Steps =
 		| "directConnect"
 		| "chooseDevice"
@@ -312,7 +308,6 @@ function SetupWizard(): JSX.Element {
 		</button>
 	);
 	createEffect(() => {
-		console.log("CONNECTION", connectionStatus());
 		if (
 			connectionStatus() === "connected" &&
 			(currentStep() === "directConnect" || currentStep() === "chooseDevice")
@@ -666,11 +661,10 @@ function SetupWizard(): JSX.Element {
 								onClick={() => openDevice(device)}
 								initial={{ opacity: 0, scale: 0.95 }}
 								animate={{ opacity: 1, scale: 1 }}
-								class={`flex w-full items-center justify-between rounded-md border-2 bg-white p-3 transition-all sm:p-4 ${
-									highlightNew() && device.group === "new"
+								class={`flex w-full items-center justify-between rounded-md border-2 bg-white p-3 transition-all sm:p-4 ${highlightNew() && device.group === "new"
 										? "animate-pulse border-green-500 shadow-lg"
 										: "border-blue-400"
-								}`}
+									}`}
 							>
 								<div class="flex items-center gap-x-3">
 									<div
@@ -731,7 +725,7 @@ function SetupWizard(): JSX.Element {
 		// Auto-open single device after a delay
 		createEffect(() => {
 			const devices = connectedDevices();
-			
+
 			// If we have exactly one device and haven't auto-opened yet
 			if (devices.length === 1 && !hasAutoOpened()) {
 				// Start or continue the timer
@@ -776,7 +770,7 @@ function SetupWizard(): JSX.Element {
 					with password “feathers”
 				</p>
 				<FoundDevices />
-				
+
 				{/* Auto-open countdown indicator */}
 				<Show when={autoOpenTimer() !== null && connectedDevices().length === 1}>
 					<Motion.div
@@ -790,7 +784,7 @@ function SetupWizard(): JSX.Element {
 						</div>
 					</Motion.div>
 				</Show>
-				
+
 				<Additional />
 			</>
 		);
@@ -981,8 +975,8 @@ function SetupWizard(): JSX.Element {
 				}
 				setLowPowerMode(
 					res.values.thermalRecorder?.UseLowPowerMode ??
-						res.defaults["thermal-recorder"]?.UseLowPowerMode ??
-						null,
+					res.defaults["thermal-recorder"]?.UseLowPowerMode ??
+					null,
 				);
 			},
 		),
