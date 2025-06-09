@@ -2654,7 +2654,7 @@ const [DeviceProvider, useDevice] = createContextProvider(() => {
 				},
 			});
 			return res.status === 200
-				? AudioModeResSchema.parse(JSON.parse(res.data))["audio-mode"]
+				? AudioRecordingResSchema.parse(JSON.parse(res.data))["audio-mode"]
 				: null;
 		} catch (error) {
 			console.error(error);

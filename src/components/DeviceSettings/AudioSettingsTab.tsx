@@ -13,11 +13,7 @@ import {
 	onCleanup,
 	onMount,
 } from "solid-js";
-import {
-	FaSolidSpinner,
-	FaSolidPlay,
-	FaSolidClock,
-} from "solid-icons/fa";
+import { FaSolidSpinner, FaSolidPlay, FaSolidClock } from "solid-icons/fa";
 import { FiCloudOff } from "solid-icons/fi";
 import { RiArrowsArrowDownSLine } from "solid-icons/ri";
 import FieldWrapper from "~/components/Field";
@@ -155,39 +151,47 @@ export function AudioSettingsTab(props: SettingProps) {
 		return value;
 	};
 
-	// new audio settings state
+	// --- Audio Seed Settings ---
 	const [audioSettings, { refetch: refetchAudioSettings }] = createResource(
 		id,
 		async (id) => context.getAudioRecordingSettings(id),
 	);
-	createEffect(() => {
-		console.log("Audio Settings: ", audioSettings());
-	});
-	const [seedValue, setSeed] = createSignal<string>(
-		audioSettings()?.seed ?? "",
+	const [seedValue, setSeed] = createSignal("");
+	createEffect(
+		on(audioSettings, (settings) => {
+			setSeed(settings?.seed ?? "");
+		}),
 	);
+
+	const [seedSaving, setSeedSaving] = createSignal(false);
+	const saveSeed = async () => {
+		const currentMode = audioMode();
+		if (!currentMode || seedSaving()) return;
+
+		setSeedSaving(true);
+		await context.setAudioRecordingSettings(id(), currentMode, seedValue());
+		await refetchAudioSettings();
+		setSeedSaving(false);
+	};
+
 	// add debounce effect to auto-save after typing stops
 	let seedSaveTimeout: ReturnType<typeof setTimeout>;
 	const setSeedValue = (value: string) => {
 		setSeed(value);
 		clearTimeout(seedSaveTimeout);
 		seedSaveTimeout = setTimeout(() => {
-			if (seedValue() !== audioSettings()?.seed) {
+			// Do not save if the value is the same or if settings are still loading
+			if (!audioSettings.loading && value !== audioSettings()?.seed) {
 				saveSeed();
 			}
-		}, 1000);
+		}, 5000);
 	};
-	const [seedSaving, setSeedSaving] = createSignal(false);
-	const saveSeed = async () => {
-		setSeedSaving(true);
-		await context.setAudioRecordingSettings(
-			id(),
-			audioMode() || "Disabled",
-			seedValue(),
-		);
-		await refetchAudioSettings();
-		setSeedSaving(false);
-	};
+
+	onMount(() => {
+		onCleanup(async () => {
+			await saveSeed();
+		});
+	});
 
 	// --- Long Recording Controls ---
 	const [selectedDuration, setSelectedDuration] = createSignal<number | null>(
@@ -283,6 +287,18 @@ export function AudioSettingsTab(props: SettingProps) {
 						<option value="AudioOrThermal">Audio or Thermal</option>
 					</select>
 					<RiArrowsArrowDownSLine size={32} />
+				</div>
+			</FieldWrapper>
+			<FieldWrapper type="custom" title="Audio Seed">
+				<div class="flex w-full items-center">
+					<input
+						type="number"
+						class="h-full w-full appearance-none bg-white pl-2"
+						value={seedValue()}
+						onInput={(e) => setSeedValue(e.currentTarget.value)}
+						placeholder={audioSettings.loading ? "Loading..." : "Enter seed"}
+						disabled={audioSettings.loading || seedSaving()}
+					/>
 				</div>
 			</FieldWrapper>
 			<div>
@@ -442,3 +458,4 @@ export function AudioSettingsTab(props: SettingProps) {
 		</section>
 	);
 }
+
