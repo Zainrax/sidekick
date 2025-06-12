@@ -126,3 +126,4 @@ keystore.properties
 .aider*
 .env
 .env
+.env.*

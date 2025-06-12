@@ -1151,27 +1151,27 @@ export function LocationSettingsTab(props: SettingProps) {
 	);
 
 	// Location coordinates handling
-// Accept both string and number for lat/lng/alt/accuracy, and transform to number
-const numish = z.union([z.string(), z.number()]).transform((v: string | number) => typeof v === "string" ? Number.parseFloat(v) : v);
-const locationSchema = z.object({
-	   latitude: numish,
-	   longitude: numish,
-	   altitude: numish.optional().default(0),
-	   accuracy: numish.optional().transform((v) => (v && v > 0 ? v : 100)).default(100),
-	   timestamp: z.string(),
-});
-const [locCoords, { refetch: refetchCoords }] = createResource(
-	   () => [id(), shouldUpdateLocState()] as const,
-	   async ([id]) => {
-			   const res = await context.getLocationCoords(id);
-			   if (res.success) {
-					   // Validate and normalize location fields for preview
-					   const parsed = locationSchema.safeParse(res.data);
-					   return parsed.success ? parsed.data : null;
-			   }
-			   return null;
-	   },
-);
+	// Accept both string and number for lat/lng/alt/accuracy, and transform to number
+	const numish = z.union([z.string(), z.number()]).transform((v: string | number) => typeof v === "string" ? Number.parseFloat(v) : v);
+	const locationSchema = z.object({
+		latitude: numish,
+		longitude: numish,
+		altitude: numish.optional().default(0),
+		accuracy: numish.optional().transform((v) => (v && v > 0 ? v : 100)).default(100),
+		timestamp: z.string(),
+	});
+	const [locCoords, { refetch: refetchCoords }] = createResource(
+		() => [id(), shouldUpdateLocState()] as const,
+		async ([id]) => {
+			const res = await context.getLocationCoords(id);
+			if (res.success) {
+				// Validate and normalize location fields for preview
+				const parsed = locationSchema.safeParse(res.data);
+				return parsed.success ? parsed.data : null;
+			}
+			return null;
+		},
+	);
 
 	const [isSyncing, setIsSyncing] = createSignal(false);
 	// Save location data and handle photo upload
@@ -1323,17 +1323,16 @@ const [locCoords, { refetch: refetchCoords }] = createResource(
 							const base64Data = await blobToBase64(blob);
 							const fileName = `cropped_${Date.now()}.jpg`;
 
-							// Write the file to the device (using a temporary location)
 							await Filesystem.writeFile({
 								path: fileName,
 								data: base64Data,
-								directory: Directory.Cache, // or Directory.Data if you prefer
+								directory: Directory.Data,
 							});
 
 							// Grab the URI so we can later upload
 							const fileUri = await Filesystem.getUri({
 								path: fileName,
-								directory: Directory.Cache,
+								directory: Directory.Data,
 							});
 
 							// Create an object URL for quick previews in the app (optional)
@@ -2645,7 +2644,7 @@ export function GroupSelect(props: SettingProps) {
 					await user.logout();
 					return false;
 				}
-					return false;
+				return false;
 			}
 			return true;
 		} catch (e) {
@@ -2935,7 +2934,7 @@ export function DeviceSettingsModal() {
 		if (device()?.hasAudioCapabilities) {
 			return [...items, "Audio"] as const;
 		}
-			return items;
+		return items;
 	};
 
 	// Other code remains the same...
@@ -2958,9 +2957,9 @@ export function DeviceSettingsModal() {
 		const numItems = navItems().length;
 		if (numItems <= 4) {
 			return "text-base";
-		}if (numItems === 5) {
+		} if (numItems === 5) {
 			return "text-sm";
-		}if (numItems >= 6) {
+		} if (numItems >= 6) {
 			return "text-xs";
 		}
 	});
